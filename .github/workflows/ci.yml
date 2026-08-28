@@ -39,13 +39,17 @@ jobs:
       - name: Validate repository versions
         shell: pwsh
         run: |
-          [xml]$props = Get-Content -LiteralPath Directory.Build.props -Raw
+          [xml]$props = Get-Content -LiteralPath Directory.Build.props -Raw -Encoding UTF8
           $projectVersion = [string]$props.Project.PropertyGroup.ProjectVersion
           $packageVersion = (Get-Content -LiteralPath frontend/package.json -Raw | ConvertFrom-Json).version
           $lockVersion = (Get-Content -LiteralPath frontend/package-lock.json -Raw | ConvertFrom-Json).version
           if ($projectVersion -ne $packageVersion -or $projectVersion -ne $lockVersion) {
             throw "Version mismatch: project=$projectVersion package=$packageVersion lock=$lockVersion"
           }
+
+      - name: Prepare plugin dependencies
+        shell: pwsh
+        run: ./.github/scripts/prepare-plugin-dependencies.ps1
 
       - name: Build plugin
         run: dotnet build src/FMMatchLens.Plugin/FMMatchLens.Plugin.csproj --configuration Release

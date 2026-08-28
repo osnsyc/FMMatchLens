@@ -47,7 +47,7 @@ jobs:
         env:
           REQUESTED_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          [xml]$props = Get-Content -LiteralPath Directory.Build.props -Raw
+          [xml]$props = Get-Content -LiteralPath Directory.Build.props -Raw -Encoding UTF8
           $version = [string]$props.Project.PropertyGroup.ProjectVersion
           $packageVersion = (Get-Content -LiteralPath frontend/package.json -Raw | ConvertFrom-Json).version
           $lockVersion = (Get-Content -LiteralPath frontend/package-lock.json -Raw | ConvertFrom-Json).version
@@ -60,6 +60,10 @@ jobs:
           }
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=$expectedTag" >> $env:GITHUB_OUTPUT
+
+      - name: Prepare plugin dependencies
+        shell: pwsh
+        run: ./.github/scripts/prepare-plugin-dependencies.ps1
 
       - name: Build plugin
         run: dotnet build src/FMMatchLens.Plugin/FMMatchLens.Plugin.csproj --configuration Release
