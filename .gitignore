@@ -1,0 +1,37 @@
+# Build output
+bin/
+obj/
+dist/
+coverage/
+artifacts/
+TestResults/
+*.tsbuildinfo
+
+# Dependencies
+node_modules/
+packages/
+.pnpm-store/
+
+# IDE / OS
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+Thumbs.db
+.DS_Store
+.env
+.env.*
+!.env.example
+*.secrets.json
+
+# Runtime logs / exports
+logs/
+exports/
+*.log
+
+# Custom
+
+tools/
+dev/
+src/FMMatchLens.Plugin/lib/

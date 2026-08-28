@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and validate
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Validate repository versions
+        shell: pwsh
+        run: |
+          [xml]$props = Get-Content -LiteralPath Directory.Build.props -Raw
+          $projectVersion = [string]$props.Project.PropertyGroup.ProjectVersion
+          $packageVersion = (Get-Content -LiteralPath frontend/package.json -Raw | ConvertFrom-Json).version
+          $lockVersion = (Get-Content -LiteralPath frontend/package-lock.json -Raw | ConvertFrom-Json).version
+          if ($projectVersion -ne $packageVersion -or $projectVersion -ne $lockVersion) {
+            throw "Version mismatch: project=$projectVersion package=$packageVersion lock=$lockVersion"
+          }
+
+      - name: Build plugin
+        run: dotnet build src/FMMatchLens.Plugin/FMMatchLens.Plugin.csproj --configuration Release
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Upload build outputs
+        uses: actions/upload-artifact@v7
+        with:
+          name: fmmatchlens-ci-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            src/FMMatchLens.Plugin/bin/Release/net6.0/FMMatchLens.Plugin.dll
+            frontend/dist/
