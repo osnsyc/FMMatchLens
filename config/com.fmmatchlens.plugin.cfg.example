@@ -1,0 +1,15 @@
+## FMMatchLens plugin configuration example
+## Copy the values you want to change into:
+## BepInEx/config/com.fmmatchlens.plugin.cfg
+
+[Logging]
+
+## release: key lifecycle events, warnings, and errors only
+## debug: includes detailed hook and frame diagnostics
+Mode = release
+
+[Graphics]
+
+## Root directory of Football Manager graphics packs and config.xml files.
+## Replace <username> with your Windows account name.
+GraphicsPath = C:\Users\<username>\Documents\Sports Interactive\Football Manager 26\graphics

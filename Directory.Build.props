@@ -1,0 +1,70 @@
+<Project>
+  <PropertyGroup>
+    <!-- Repository-wide metadata: update values here instead of hard-coding them in source files. -->
+    <ProductName>FMMatchLens</ProductName>
+    <ProjectVersion>0.1.0</ProjectVersion>
+    <PluginId>com.fmmatchlens.plugin</PluginId>
+    <GameName>Football Manager</GameName>
+    <GameVersion>26.x</GameVersion>
+    <Authors>osnsyc</Authors>
+    <MaintainerEmail>osnsyc@gmail.com</MaintainerEmail>
+    <ProjectUrl>https://github.com/osnsyc/FMMatchLens</ProjectUrl>
+    <GitHubProjectUrl>$(ProjectUrl)</GitHubProjectUrl>
+    <AuthorBlogUrl>https://osnsyc.top/</AuthorBlogUrl>
+    <KoFiUrl>https://ko-fi.com/osnsyc</KoFiUrl>
+    <KoFiLabel>Support on Ko-fi</KoFiLabel>
+    <RepositoryUrl>https://github.com/osnsyc/FMMatchLens.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <ProjectDescription>Football Manager 2026 本地比赛数据采集、存档与可视化分析工具。</ProjectDescription>
+    <ApiPort>16726</ApiPort>
+    <GameMatchTickHookOffset>0x3E08AD0</GameMatchTickHookOffset>
+    <BepInExBuildVersion>6.0.0-be.785+6abdba4</BepInExBuildVersion>
+    <BepInExBuildUrl>https://builds.bepinex.dev/projects/bepinex_be/785/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.785%2B6abdba4.zip</BepInExBuildUrl>
+    <BepInExBuildSha256>2A7CBF74D26ABE4765C3E662DB1721B923BAC39849EBFEF2CA5DC7DE7E2D9B7F</BepInExBuildSha256>
+
+    <Version>$(ProjectVersion)</Version>
+    <VersionPrefix>$(ProjectVersion)</VersionPrefix>
+    <AssemblyVersion>$(ProjectVersion).0</AssemblyVersion>
+    <FileVersion>$(ProjectVersion).0</FileVersion>
+    <InformationalVersion>$(ProjectVersion)</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <Product>$(ProductName)</Product>
+    <Title>$(ProductName)</Title>
+    <Company>$(Authors)</Company>
+    <Description>$(ProjectDescription)</Description>
+    <PackageId>FMMatchLens.Plugin</PackageId>
+    <PackageTags>football-manager;fm26;bepinex;match-analysis</PackageTags>
+    <PackageProjectUrl>$(ProjectUrl)</PackageProjectUrl>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <Copyright>Copyright © 2026 $(Authors)</Copyright>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>Game</_Parameter1>
+      <_Parameter2>$(GameName)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>GameVersion</_Parameter1>
+      <_Parameter2>$(GameVersion)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>MaintainerEmail</_Parameter1>
+      <_Parameter2>$(MaintainerEmail)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>ProjectUrl</_Parameter1>
+      <_Parameter2>$(ProjectUrl)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>AuthorBlogUrl</_Parameter1>
+      <_Parameter2>$(AuthorBlogUrl)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>KoFiUrl</_Parameter1>
+      <_Parameter2>$(KoFiUrl)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+</Project>

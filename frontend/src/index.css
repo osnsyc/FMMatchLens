@@ -1,0 +1,1103 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource-variable/inter";
+
+@custom-variant data-open {
+  &:where([data-state="open"], [data-open]:not([data-open="false"])) {
+    @slot;
+  }
+}
+
+@custom-variant data-closed {
+  &:where([data-state="closed"], [data-closed]:not([data-closed="false"])) {
+    @slot;
+  }
+}
+
+@custom-variant data-checked {
+  &:where([data-state="checked"], [data-checked]:not([data-checked="false"])) {
+    @slot;
+  }
+}
+
+@custom-variant data-unchecked {
+  &:where([data-state="unchecked"], [data-unchecked]:not([data-unchecked="false"])) {
+    @slot;
+  }
+}
+
+@custom-variant data-disabled {
+  &:where([data-disabled="true"], [data-disabled]:not([data-disabled="false"])) {
+    @slot;
+  }
+}
+
+@custom-variant data-active {
+  &:where([data-state="active"], [data-active]:not([data-active="false"])) {
+    @slot;
+  }
+}
+
+@custom-variant data-horizontal {
+  &:where([data-orientation="horizontal"]) {
+    @slot;
+  }
+}
+
+@custom-variant data-vertical {
+  &:where([data-orientation="vertical"]) {
+    @slot;
+  }
+}
+
+@font-face {
+  font-family: "FMUniverse";
+  src: url("../public/fonts/FMUniverse-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "ABCSocial";
+  src: url("../public/fonts/ABCSocial-Bold.woff") format("woff");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: "FMUniverse", var(--font-sans);
+  --font-sans: "ABCSocial", "Inter Variable", sans-serif;
+
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* =========================================================
+   FM26 palette
+   ========================================================= */
+
+:root {
+  --fm-midnight: #0a0f1e;
+  --fm-twilight: #6e0fd7;
+  --fm-horizon: #af78ff;
+  --fm-cloud: #d2c8f5;
+  --fm-air: #e6e6fa;
+
+  --fm-pink: #e664ff;
+  --fm-red: #ff4164;
+  --fm-orange: #ff5a28;
+
+  --background: oklch(0.975 0.015 290);
+  --foreground: oklch(0.18 0.03 285);
+
+  --card: oklch(0.99 0.008 290 / 96%);
+  --card-foreground: oklch(0.18 0.03 285);
+
+  --popover: oklch(0.99 0.01 290);
+  --popover-foreground: oklch(0.18 0.03 285);
+
+  --primary: #6e0fd7;
+  --primary-foreground: #ffffff;
+
+  --secondary: oklch(0.94 0.035 290);
+  --secondary-foreground: oklch(0.25 0.07 290);
+
+  --muted: oklch(0.95 0.018 290);
+  --muted-foreground: oklch(0.5 0.035 285);
+
+  --accent: oklch(0.93 0.05 300);
+  --accent-foreground: #6e0fd7;
+
+  --destructive: #ff4164;
+
+  --border: oklch(0.84 0.04 290 / 70%);
+  --input: oklch(0.87 0.04 290);
+  --ring: #af78ff;
+
+  --chart-1: #6e0fd7;
+  --chart-2: #af78ff;
+  --chart-3: #e664ff;
+  --chart-4: #ff4164;
+  --chart-5: #ff5a28;
+
+  --radius: 0.7rem;
+
+  --sidebar: oklch(0.965 0.018 290);
+  --sidebar-foreground: oklch(0.18 0.03 285);
+
+  --sidebar-primary: #6e0fd7;
+  --sidebar-primary-foreground: #ffffff;
+
+  --sidebar-accent: oklch(0.92 0.05 295);
+  --sidebar-accent-foreground: #6e0fd7;
+
+  --sidebar-border: oklch(0.84 0.04 290 / 70%);
+  --sidebar-ring: #af78ff;
+
+  --panel-highlight: rgb(175 120 255 / 24%);
+  --panel-glow: rgb(110 15 215 / 10%);
+  --panel-inner: rgb(255 255 255 / 60%);
+  --grid-line: rgb(110 15 215 / 4%);
+
+  --fm-highlight-gradient:
+    linear-gradient(90deg,
+      #af78ff 0%,
+      #e664ff 42%,
+      #ff4164 72%,
+      #ff5a28 100%);
+}
+
+/* =========================================================
+   FM26 dark theme
+   ========================================================= */
+
+.dark {
+  --background: #090d1a;
+  --foreground: #e6e6fa;
+
+  /* Keep cards visibly lighter than the page background. */
+  --card: #141426;
+  --card-foreground: #e6e6fa;
+
+  --popover: #19182e;
+  --popover-foreground: #e6e6fa;
+
+  --primary: #af78ff;
+  --primary-foreground: #0a0f1e;
+
+  --secondary: #211f38;
+  --secondary-foreground: #e6e6fa;
+
+  --muted: #1d1c31;
+  --muted-foreground: #aaa3c2;
+
+  --accent: #292044;
+  --accent-foreground: #ffffff;
+
+  --destructive: #ff4164;
+
+  /* Make borders distinct without turning them into bright purple outlines. */
+  --border: rgb(190 175 225 / 24%);
+  --input: rgb(190 175 225 / 22%);
+  --ring: #af78ff;
+
+  --chart-1: #af78ff;
+  --chart-2: #e664ff;
+  --chart-3: #ff4164;
+  --chart-4: #ff5a28;
+  --chart-5: #d2c8f5;
+
+  --panel-highlight: rgb(230 100 255 / 30%);
+  --panel-glow: rgb(110 15 215 / 14%);
+  --panel-inner: rgb(255 255 255 / 2.5%);
+  --grid-line: rgb(175 120 255 / 3%);
+}
+
+/* =========================================================
+   Base
+   ========================================================= */
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply font-sans;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+
+    min-height: 100vh;
+
+    font-feature-settings:
+      "cv02",
+      "cv03",
+      "cv04",
+      "cv11";
+
+    text-rendering: optimizeLegibility;
+  }
+
+  /*
+   * FM26-style dark base atmosphere.
+   */
+  .dark body {
+    background:
+      radial-gradient(circle at 72% 8%,
+        rgb(110 15 215 / 9%),
+        transparent 31rem),
+      radial-gradient(circle at 12% 80%,
+        rgb(230 100 255 / 4%),
+        transparent 30rem),
+      linear-gradient(135deg,
+        #0a0f1e 0%,
+        #111128 55%,
+        #180d2c 100%);
+
+    background-attachment: fixed;
+  }
+
+  /*
+   * Subtle background grid.
+   */
+  body::before {
+    content: "";
+
+    position: fixed;
+    inset: 0;
+
+    z-index: -1;
+    pointer-events: none;
+
+    background-image:
+      linear-gradient(to right,
+        var(--grid-line) 1px,
+        transparent 1px),
+      linear-gradient(to bottom,
+        var(--grid-line) 1px,
+        transparent 1px);
+
+    background-size: 36px 36px;
+
+    mask-image:
+      linear-gradient(to bottom,
+        black,
+        transparent 92%);
+  }
+
+  ::selection {
+    color: #ffffff;
+    background: #6e0fd7;
+  }
+}
+
+/* =========================================================
+   Cards
+   ========================================================= */
+
+@layer components {
+  body.player-profile-open [data-player-profile-blur-target] {
+    filter: blur(5px);
+    opacity: 0.58;
+    transition: filter 160ms ease, opacity 160ms ease;
+  }
+
+  [data-player-profile-blur-target] {
+    transition: filter 160ms ease, opacity 160ms ease;
+  }
+
+  [data-slot="card"] {
+    position: relative;
+
+    background:
+      linear-gradient(145deg,
+        rgb(175 120 255 / 3%),
+        transparent 35%),
+      var(--card);
+
+    /*
+   * First edge layer: a clear, low-saturation purple-gray border.
+   */
+    border: 1px solid var(--border);
+
+    /*
+   * Second edge layer: inner highlights and outer shadows.
+   */
+    box-shadow:
+      /* Top-edge highlight */
+      inset 0 1px 0 rgb(255 255 255 / 5%),
+
+      /* Subtle bottom shadow */
+      inset 0 -1px 0 rgb(0 0 0 / 18%),
+
+      /* Outer outline */
+      0 0 0 1px rgb(0 0 0 / 20%),
+
+      /* Separate the card from the background */
+      0 4px 12px rgb(0 0 0 / 22%),
+
+      /* FM purple ambient glow */
+      0 0 18px rgb(110 15 215 / 3%);
+
+    transition:
+      border-color 180ms ease,
+      box-shadow 180ms ease;
+  }
+
+  /*
+   * Characteristic FM purple top edge.
+   */
+  [data-slot="card"]::before {
+    content: "";
+
+    position: absolute;
+
+    top: -1px;
+    left: 7%;
+
+    width: 52%;
+    height: 1px;
+
+    z-index: 1;
+    pointer-events: none;
+
+    background:
+      linear-gradient(90deg,
+        transparent,
+        rgb(175 120 255 / 48%),
+        rgb(230 100 255 / 22%),
+        transparent);
+
+    opacity: 0.8;
+  }
+
+  [data-slot="card"]:hover {
+    border-color:
+      rgb(175 120 255 / 32%);
+
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 4%),
+      0 0 0 1px rgb(175 120 255 / 7%),
+      0 0 22px rgb(110 15 215 / 9%),
+      0 10px 30px rgb(0 0 0 / 22%);
+  }
+
+  /*
+   * FM26 magenta identification marker
+   */
+  [data-slot="card-title"] {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    letter-spacing: -0.01em;
+  }
+
+  [data-slot="card-title"]::before {
+    content: "";
+
+    width: 3px;
+    height: 0.9rem;
+
+    flex: none;
+
+    border-radius: 999px;
+
+    background:
+      linear-gradient(to bottom,
+        #e664ff,
+        #6e0fd7);
+
+    box-shadow:
+      0 0 9px rgb(230 100 255 / 34%);
+  }
+
+  /* =======================================================
+     Popovers / menu / tooltip
+     ======================================================= */
+
+  [data-slot="popover-content"],
+  [data-slot="dropdown-menu-content"],
+  [data-slot="menubar-content"],
+  [data-slot="select-content"],
+  [data-slot="tooltip-content"] {
+    background:
+      linear-gradient(145deg,
+        rgb(175 120 255 / 5%),
+        transparent 45%),
+      var(--popover);
+
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+
+    border-color:
+      rgb(175 120 255 / 20%);
+
+    box-shadow:
+      0 16px 38px rgb(0 0 0 / 36%),
+      0 0 24px rgb(110 15 215 / 10%);
+  }
+
+  /* =========================================================
+   FM26 Tabs / NativeTabs / Menubar
+   ========================================================= */
+
+  /* ---------------------------------------------------------
+   NativeTabs / shadcn Tabs - outer list
+   --------------------------------------------------------- */
+
+  [data-slot="tabs-list"],
+  [role="tablist"] {
+    position: relative;
+
+    display: flex;
+    align-items: center;
+
+    gap: 1px;
+
+    padding: 2px;
+
+    border: 1px solid rgb(190 175 225 / 16%);
+    border-radius: calc(var(--radius) * 0.65);
+
+    background:
+      linear-gradient(180deg,
+        rgb(255 255 255 / 2.5%),
+        transparent),
+      rgb(8 11 25 / 48%);
+
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 3%),
+      inset 0 -1px 0 rgb(0 0 0 / 22%),
+      0 1px 3px rgb(0 0 0 / 18%);
+
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+
+  /* ---------------------------------------------------------
+   Individual NativeTab / Tabs trigger
+   --------------------------------------------------------- */
+
+  [data-slot="tabs-trigger"],
+  [role="tab"] {
+    position: relative;
+
+    border: 1px solid transparent;
+
+    color: var(--muted-foreground);
+
+    font-weight: 500;
+
+    background: transparent;
+
+    transition:
+      color 150ms ease,
+      background-color 150ms ease,
+      border-color 150ms ease,
+      box-shadow 150ms ease;
+  }
+
+
+  /* Hover - subtle only */
+  [data-slot="tabs-trigger"]:hover,
+  [role="tab"]:hover {
+    color: var(--foreground);
+
+    background:
+      rgb(175 120 255 / 7%);
+  }
+
+
+  /* ---------------------------------------------------------
+   NativeTabs active state
+   --------------------------------------------------------- */
+
+  [data-slot="tabs-trigger"][data-state="active"],
+  [data-slot="tabs-trigger"][data-active],
+  [role="tab"][data-state="active"],
+  [role="tab"][aria-selected="true"] {
+    color: #ffffff;
+
+    border-color:
+      rgb(175 120 255 / 24%);
+
+    background:
+      linear-gradient(135deg,
+        rgb(110 15 215 / 62%),
+        rgb(132 35 218 / 48%));
+
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 10%),
+      inset 0 -1px 0 rgb(0 0 0 / 16%),
+      0 0 0 1px rgb(110 15 215 / 8%),
+      0 1px 3px rgb(0 0 0 / 16%),
+      0 0 8px rgb(110 15 215 / 10%);
+  }
+
+
+  /*
+ * Small FM26 highlight line at the bottom of active tab.
+ */
+  [data-slot="tabs-trigger"][data-state="active"]::after,
+  [data-slot="tabs-trigger"][data-active]::after,
+  [role="tab"][data-state="active"]::after,
+  [role="tab"][aria-selected="true"]::after {
+    content: "";
+
+    position: absolute;
+
+    left: 28%;
+    right: 28%;
+    bottom: -1px;
+
+    height: 1px;
+
+    border-radius: 999px;
+
+    background:
+      linear-gradient(90deg,
+        transparent,
+        #e664ff,
+        #af78ff,
+        transparent);
+
+    box-shadow:
+      0 0 5px rgb(230 100 255 / 35%);
+
+    pointer-events: none;
+  }
+
+
+  /* Keyboard focus */
+  [data-slot="tabs-trigger"]:focus-visible,
+  [role="tab"]:focus-visible {
+    outline: none;
+
+    box-shadow:
+      0 0 0 1px #af78ff,
+      0 0 0 3px rgb(175 120 255 / 14%);
+  }
+
+
+  /* Disabled */
+  [data-slot="tabs-trigger"]:disabled,
+  [role="tab"][aria-disabled="true"] {
+    opacity: 0.4;
+
+    cursor: not-allowed;
+  }
+
+
+  /* =========================================================
+   Menubar
+   ========================================================= */
+
+  /* ---------------------------------------------------------
+   Menubar root
+   --------------------------------------------------------- */
+
+  [data-slot="menubar"] {
+    display: flex;
+    align-items: center;
+
+    gap: 1px;
+
+    padding: 2px;
+
+    border: 1px solid rgb(190 175 225 / 16%);
+    border-radius: calc(var(--radius) * 0.65);
+
+    background:
+      linear-gradient(180deg,
+        rgb(255 255 255 / 2.5%),
+        transparent),
+      rgb(8 11 25 / 48%);
+
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 3%),
+      inset 0 -1px 0 rgb(0 0 0 / 22%),
+      0 1px 3px rgb(0 0 0 / 18%);
+
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+
+  /* ---------------------------------------------------------
+   Menubar trigger
+   --------------------------------------------------------- */
+
+  [data-slot="menubar-trigger"] {
+    position: relative;
+
+    border: 1px solid transparent;
+    border-radius: calc(var(--radius) * 0.55);
+
+    color: var(--muted-foreground);
+
+    font-weight: 500;
+
+    background: transparent;
+
+    transition:
+      color 150ms ease,
+      background-color 150ms ease,
+      border-color 150ms ease,
+      box-shadow 150ms ease;
+  }
+
+
+  [data-slot="menubar-trigger"]:hover {
+    color: var(--foreground);
+
+    background:
+      rgb(175 120 255 / 8%);
+  }
+
+
+  /*
+ * Base UI / shadcn Menubar sets data-state=open
+ * while its dropdown is displayed.
+ */
+  [data-slot="menubar-trigger"][data-state="open"],
+  [data-slot="menubar-trigger"][aria-expanded="true"] {
+    color: #ffffff;
+
+    border-color:
+      rgb(175 120 255 / 28%);
+
+    background:
+      linear-gradient(135deg,
+        rgb(110 15 215 / 62%),
+        rgb(133 36 220 / 48%));
+
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 9%),
+      inset 0 -1px 0 rgb(0 0 0 / 15%),
+      0 0 8px rgb(110 15 215 / 10%);
+  }
+
+
+  /*
+ * Your TacticalBoard also manually gives the selected group
+ * bg-muted, so keep that state visually compatible.
+ */
+  [data-slot="menubar-trigger"][data-selected="true"]:not([aria-expanded="true"]) {
+    color: var(--foreground);
+
+    border-color:
+      rgb(175 120 255 / 16%);
+
+    background:
+      rgb(175 120 255 / 9%);
+  }
+
+
+  /* Focus */
+  [data-slot="menubar-trigger"]:focus-visible {
+    outline: none;
+
+    box-shadow:
+      0 0 0 1px #af78ff,
+      0 0 0 3px rgb(175 120 255 / 12%);
+  }
+
+
+  /* =========================================================
+   Menubar dropdown
+   ========================================================= */
+
+  [data-slot="menubar-content"] {
+    min-width: 8rem;
+
+    padding: 2px;
+
+    border: 1px solid rgb(190 175 225 / 22%);
+    border-radius: calc(var(--radius) * 0.8);
+
+    color: var(--popover-foreground);
+
+    background:
+      linear-gradient(145deg,
+        rgb(175 120 255 / 6%),
+        transparent 46%),
+      #19182e;
+
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 4%),
+      0 0 0 1px rgb(0 0 0 / 20%),
+      0 9px 24px rgb(0 0 0 / 38%),
+      0 0 18px rgb(110 15 215 / 8%);
+
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+
+
+  /* ---------------------------------------------------------
+   Group
+   --------------------------------------------------------- */
+
+  [data-slot="menubar-group"] {
+    padding: 0;
+  }
+
+
+  /* ---------------------------------------------------------
+   Label
+   --------------------------------------------------------- */
+
+  [data-slot="menubar-label"] {
+    min-height: 22px;
+
+    padding: 3px 6px;
+
+    color: var(--muted-foreground);
+
+    font-size: 10px;
+    font-weight: 600;
+
+    letter-spacing: 0.015em;
+  }
+
+
+  /* ---------------------------------------------------------
+   Separator
+   --------------------------------------------------------- */
+
+  [data-slot="menubar-separator"] {
+    height: 1px;
+
+    margin: 2px 4px;
+
+    background:
+      linear-gradient(90deg,
+        transparent,
+        rgb(190 175 225 / 20%),
+        transparent);
+  }
+
+
+  /* =========================================================
+   Menubar items
+   ========================================================= */
+
+  [data-slot="menubar-item"],
+  [data-slot="menubar-checkbox-item"],
+  [data-slot="menubar-radio-item"] {
+    position: relative;
+
+    min-height: 24px;
+
+    margin: 0;
+
+    border: 1px solid transparent;
+    border-radius: calc(var(--radius) * 0.45);
+
+    color: var(--muted-foreground);
+
+    font-size: 11px;
+
+    transition:
+      color 130ms ease,
+      background-color 130ms ease,
+      border-color 130ms ease;
+  }
+
+  [data-slot="menubar-item"]:hover,
+  [data-slot="menubar-checkbox-item"]:hover,
+  [data-slot="menubar-radio-item"]:hover,
+  [data-slot="menubar-item"][data-highlighted],
+  [data-slot="menubar-checkbox-item"][data-highlighted],
+  [data-slot="menubar-radio-item"][data-highlighted] {
+    color: var(--foreground);
+
+    border-color:
+      rgb(175 120 255 / 10%);
+
+    background:
+      linear-gradient(90deg,
+        rgb(110 15 215 / 18%),
+        rgb(175 120 255 / 7%));
+
+    outline: none;
+  }
+
+
+  /* ---------------------------------------------------------
+   Checked items
+   --------------------------------------------------------- */
+
+  [data-slot="menubar-checkbox-item"][data-state="checked"],
+  [data-slot="menubar-radio-item"][data-state="checked"] {
+    color: var(--foreground);
+
+    background:
+      rgb(110 15 215 / 10%);
+  }
+
+
+  /*
+ * Checkbox / radio indicator itself.
+ */
+  [data-slot="menubar-checkbox-item"][data-state="checked"] svg,
+  [data-slot="menubar-radio-item"][data-state="checked"] svg {
+    color: #af78ff;
+
+    filter:
+      drop-shadow(0 0 3px rgb(175 120 255 / 35%));
+  }
+
+
+  /* ---------------------------------------------------------
+   Disabled menu items
+   --------------------------------------------------------- */
+
+  [data-slot="menubar-item"][data-disabled],
+  [data-slot="menubar-checkbox-item"][data-disabled],
+  [data-slot="menubar-radio-item"][data-disabled] {
+    opacity: 0.38;
+
+    pointer-events: none;
+  }
+
+
+  /* =========================================================
+   Menubar shortcuts
+   ========================================================= */
+
+  [data-slot="menubar-shortcut"] {
+    color: var(--muted-foreground);
+
+    font-size: 10px;
+
+    opacity: 0.65;
+  }
+
+  /* =======================================================
+     Interactive rows
+     ======================================================= */
+
+  [data-slot="dropdown-menu-item"],
+  [data-slot="dropdown-menu-checkbox-item"],
+  [data-slot="dropdown-menu-radio-item"],
+  [data-slot="select-item"] {
+    color: var(--muted-foreground);
+    transition: color 120ms ease, background-color 120ms ease;
+  }
+
+  [data-slot="dropdown-menu-item"]:hover,
+  [data-slot="dropdown-menu-item"][data-highlighted],
+  [data-slot="dropdown-menu-checkbox-item"][data-highlighted],
+  [data-slot="dropdown-menu-radio-item"][data-highlighted],
+  [data-slot="select-item"][data-highlighted] {
+    color: var(--foreground);
+    background: linear-gradient(90deg, rgb(110 15 215 / 18%), rgb(175 120 255 / 7%));
+  }
+
+  [data-slot="dropdown-menu-checkbox-item"][data-state="checked"],
+  [data-slot="dropdown-menu-radio-item"][data-state="checked"],
+  [data-slot="select-item"][data-selected] {
+    color: var(--foreground);
+    background: rgb(110 15 215 / 10%);
+  }
+
+  /* Tactical pitch uses both container axes, so changing a panel split never
+     lets the fixed 148:100 canvas overflow behind the card clipping boundary. */
+  .tactical-pitch-viewport {
+    container-type: size;
+  }
+
+  .tactical-pitch {
+    width: 100%;
+    max-width: 100%;
+    aspect-ratio: 148 / 100;
+  }
+
+  @supports (width: 1cqw) {
+    .tactical-pitch {
+      width: min(100cqw, calc(100cqh * 1.48));
+      height: min(100cqh, calc(100cqw / 1.48));
+    }
+  }
+
+  /* =======================================================
+     Switch
+     ======================================================= */
+
+  [data-slot="switch"][data-state="checked"] {
+    background: #6e0fd7;
+
+    box-shadow:
+      0 0 12px rgb(110 15 215 / 24%);
+  }
+
+  /* =======================================================
+     Recharts
+     ======================================================= */
+
+  .recharts-cartesian-grid-horizontal line,
+  .recharts-cartesian-grid-vertical line {
+    stroke:
+      rgb(210 200 245 / 9%);
+  }
+
+  .recharts-cartesian-axis-tick-value {
+    fill: var(--muted-foreground);
+
+    font-size: 11px;
+  }
+
+  /*
+   * Keep actual team colors.
+   * Only add a subtle glow.
+   */
+  .recharts-line-curve {
+    filter:
+      drop-shadow(0 0 2px rgb(175 120 255 / 10%));
+  }
+
+  /* =======================================================
+     Progress / sliders
+     ======================================================= */
+
+  [data-slot="progress-indicator"],
+  [data-slot="slider-range"] {
+    background:
+      linear-gradient(90deg,
+        #6e0fd7,
+        #af78ff);
+  }
+
+  [data-slot="slider-thumb"] {
+    border-color: #af78ff;
+
+    box-shadow:
+      0 0 10px rgb(175 120 255 / 24%);
+  }
+}
+
+/* =========================================================
+   Utilities
+   ========================================================= */
+
+@layer utilities {
+  @keyframes squad-status-pan {
+    0%, 12%, 100% {
+      transform: translateX(0);
+    }
+
+    45%, 58% {
+      transform: translateX(var(--squad-status-overflow));
+    }
+  }
+
+  .squad-status-strip[data-overflow="true"] .squad-status-strip-track {
+    animation: squad-status-pan 9s ease-in-out infinite;
+  }
+
+  .squad-status-strip:hover .squad-status-strip-track,
+  .squad-status-strip:focus-within .squad-status-strip-track {
+    animation-play-state: paused;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .squad-status-strip[data-overflow="true"] .squad-status-strip-track {
+      animation: none;
+    }
+  }
+
+  .scrollbar-hidden {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hidden::-webkit-scrollbar,
+  .scrollbar-hidden *::-webkit-scrollbar {
+    display: none;
+  }
+
+  .scrollbar-hidden [data-slot="scroll-area-scrollbar"],
+  .scrollbar-hidden [data-slot="scroll-area-corner"] {
+    display: none;
+  }
+
+  /*
+   * FM26 utilities
+   */
+  .fm-gradient {
+    background:
+      linear-gradient(90deg,
+        #af78ff,
+        #e664ff,
+        #ff4164,
+        #ff5a28);
+  }
+
+  .fm-gradient-text {
+    color: transparent;
+
+    background:
+      linear-gradient(90deg,
+        #af78ff,
+        #e664ff,
+        #ff4164);
+
+    background-clip: text;
+    -webkit-background-clip: text;
+  }
+
+  .fm-glow {
+    box-shadow:
+      0 0 20px rgb(110 15 215 / 18%);
+  }
+
+  .fm-highlight-glow {
+    box-shadow:
+      0 0 18px rgb(230 100 255 / 20%);
+  }
+
+  .font-fm-universe {
+    font-family: "FMUniverse", var(--font-sans);
+    font-weight: 400;
+  }
+
+  .font-abc-social {
+    font-family: "ABCSocial", "Inter Variable", sans-serif;
+    font-weight: 700;
+  }
+}

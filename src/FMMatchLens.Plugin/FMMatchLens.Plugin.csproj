@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>FMMatchLens.Plugin</AssemblyName>
+    <RootNamespace>FMMatchLens.Plugin</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      BepInEx/IL2CPP references are intentionally local file references.
+      Copy the required DLLs from the target BepInEx installation into ./lib
+      before building on a machine with the .NET SDK installed.
+    -->
+    <Reference Include="BepInEx.Core">
+      <HintPath>lib/BepInEx.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="BepInEx.Unity.IL2CPP">
+      <HintPath>lib/BepInEx.Unity.IL2CPP.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MonoMod.RuntimeDetour">
+      <HintPath>lib/MonoMod.RuntimeDetour.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MonoMod.Utils">
+      <HintPath>lib/MonoMod.Utils.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="GenerateProjectMetadata" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <GeneratedProjectMetadataFile>$(IntermediateOutputPath)ProjectMetadata.g.cs</GeneratedProjectMetadataFile>
+    </PropertyGroup>
+    <ItemGroup>
+      <ProjectMetadataLine Include="// &lt;auto-generated /&gt;" />
+      <ProjectMetadataLine Include="namespace FMMatchLens.Plugin%3B" />
+      <ProjectMetadataLine Include="internal static class ProjectMetadata" />
+      <ProjectMetadataLine Include="{" />
+      <ProjectMetadataLine Include="    public const string Name = &quot;$(ProductName)&quot;%3B" />
+      <ProjectMetadataLine Include="    public const string Version = &quot;$(ProjectVersion)&quot;%3B" />
+      <ProjectMetadataLine Include="    public const string PluginId = &quot;$(PluginId)&quot;%3B" />
+      <ProjectMetadataLine Include="    public const string GameName = &quot;$(GameName)&quot;%3B" />
+      <ProjectMetadataLine Include="    public const string GameVersion = &quot;$(GameVersion)&quot;%3B" />
+      <ProjectMetadataLine Include="    public const string Author = &quot;$(Authors)&quot;%3B" />
+      <ProjectMetadataLine Include="    public const string Email = &quot;$(MaintainerEmail)&quot;%3B" />
+      <ProjectMetadataLine Include="    public const string ProjectUrl = &quot;$(ProjectUrl)&quot;%3B" />
+      <ProjectMetadataLine Include="    public const string AuthorBlogUrl = &quot;$(AuthorBlogUrl)&quot;%3B" />
+      <ProjectMetadataLine Include="    public const string KoFiUrl = &quot;$(KoFiUrl)&quot;%3B" />
+      <ProjectMetadataLine Include="    public const int ApiPort = $(ApiPort)%3B" />
+      <ProjectMetadataLine Include="    public const int GameMatchTickHookOffset = $(GameMatchTickHookOffset)%3B" />
+      <ProjectMetadataLine Include="}" />
+      <Compile Include="$(GeneratedProjectMetadataFile)" Visible="false" />
+    </ItemGroup>
+    <WriteLinesToFile
+      File="$(GeneratedProjectMetadataFile)"
+      Lines="@(ProjectMetadataLine)"
+      Overwrite="true"
+      Encoding="UTF-8" />
+  </Target>
+</Project>

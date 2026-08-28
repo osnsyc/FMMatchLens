@@ -1,0 +1,132 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to release (for example v0.1.0)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Validate tag and versions
+        id: metadata
+        shell: pwsh
+        env:
+          REQUESTED_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          [xml]$props = Get-Content -LiteralPath Directory.Build.props -Raw -Encoding UTF8
+          $version = [string]$props.Project.PropertyGroup.ProjectVersion
+          $packageVersion = node -p "require('./frontend/package.json').version"
+          $lockVersion = node -p "require('./frontend/package-lock.json').version"
+          $expectedTag = "v$version"
+          if ($env:REQUESTED_TAG -ne $expectedTag) {
+            throw "Tag $env:REQUESTED_TAG does not match project version $expectedTag"
+          }
+          if ($version -ne $packageVersion -or $version -ne $lockVersion) {
+            throw "Version mismatch: project=$version package=$packageVersion lock=$lockVersion"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=$expectedTag" >> $env:GITHUB_OUTPUT
+
+      - name: Prepare plugin dependencies
+        shell: pwsh
+        run: ./.github/scripts/prepare-plugin-dependencies.ps1
+
+      - name: Build plugin
+        run: dotnet build src/FMMatchLens.Plugin/FMMatchLens.Plugin.csproj --configuration Release
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Validate frontend
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Package release assets
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          $releaseRoot = Join-Path $env:RUNNER_TEMP "fmmatchlens-release"
+          $pluginStage = Join-Path $releaseRoot "plugin"
+          $dashboardStage = Join-Path $releaseRoot "dashboard"
+          $pluginDirectory = Join-Path $pluginStage "BepInEx/plugins/FMMatchLens"
+          $configDirectory = Join-Path $pluginStage "BepInEx/config"
+          New-Item -ItemType Directory -Force -Path $pluginDirectory, $configDirectory, $dashboardStage, artifacts | Out-Null
+
+          Copy-Item -LiteralPath src/FMMatchLens.Plugin/bin/Release/net6.0/FMMatchLens.Plugin.dll -Destination $pluginDirectory
+          Copy-Item -LiteralPath config/com.fmmatchlens.plugin.cfg.example -Destination $configDirectory
+          Copy-Item -LiteralPath README.md, README.zh-cn.md, CHANGELOG.md -Destination $pluginStage
+          Copy-Item -Path frontend/dist/* -Destination $dashboardStage -Recurse
+          Copy-Item -LiteralPath README.md, README.zh-cn.md, CHANGELOG.md -Destination $dashboardStage
+
+          Compress-Archive -Path (Join-Path $pluginStage "*") -DestinationPath "artifacts/FMMatchLens-plugin-v$env:VERSION.zip"
+          Compress-Archive -Path (Join-Path $dashboardStage "*") -DestinationPath "artifacts/FMMatchLens-dashboard-v$env:VERSION.zip"
+          Get-FileHash artifacts/*.zip -Algorithm SHA256 | ForEach-Object {
+            "$($_.Hash.ToLower())  $([System.IO.Path]::GetFileName($_.Path))"
+          } | Set-Content -LiteralPath "artifacts/SHA256SUMS.txt" -Encoding utf8
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: fmmatchlens-release-${{ steps.metadata.outputs.version }}
+          if-no-files-found: error
+          retention-days: 30
+          path: artifacts/
+
+      - name: Create GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.tag }}
+          VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          $arguments = @(
+            "release", "create", $env:RELEASE_TAG,
+            "artifacts/FMMatchLens-plugin-v$env:VERSION.zip",
+            "artifacts/FMMatchLens-dashboard-v$env:VERSION.zip",
+            "artifacts/SHA256SUMS.txt",
+            "--verify-tag",
+            "--generate-notes",
+            "--title", "FMMatchLens $env:RELEASE_TAG"
+          )
+          if ($env:VERSION.Contains("-")) { $arguments += "--prerelease" }
+          gh @arguments

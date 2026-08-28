@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a reproducible plugin, API, archive, or dashboard problem
+title: "[Bug]: "
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: Thank you for the report. Remove usernames, personal paths, and other sensitive information from logs.
+  - type: input
+    id: plugin-version
+    attributes:
+      label: FMMatchLens version
+      placeholder: For example, 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: game-version
+    attributes:
+      label: Football Manager version
+      placeholder: Enter the full game build version
+    validations:
+      required: true
+  - type: input
+    id: bep-version
+    attributes:
+      label: BepInEx version
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem description
+      description: Describe the actual and expected results.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start ...
+        2. Open ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Reproduce in debug mode and paste only the relevant excerpts.
+      render: text
+  - type: textarea
+    id: environment
+    attributes:
+      label: Additional environment information
+      description: Windows version, other plugins, graphics packs, or anything else that may be relevant.
