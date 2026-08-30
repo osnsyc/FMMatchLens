@@ -38,19 +38,31 @@ internal sealed class GraphicsAssetIndex
         var timer = Stopwatch.StartNew();
         if (string.IsNullOrWhiteSpace(_graphicsRoot) || !Directory.Exists(_graphicsRoot))
         {
-            PluginLogger.Warning($"Graphics directory does not exist: {_graphicsRoot}");
+            PluginLogger.Warning(
+                $"Graphics index skipped because the directory does not exist: {_graphicsRoot} " +
+                $"({timer.ElapsedMilliseconds:N0} ms).");
             return;
         }
 
+        PluginLogger.Info($"Graphics index build started for '{_graphicsRoot}'.");
+        var cacheLoadTimer = Stopwatch.StartNew();
         var previous = LoadCache();
         var rootLastWriteTime = Directory.GetLastWriteTimeUtc(_graphicsRoot).ToString("O", CultureInfo.InvariantCulture);
         var reusedDiscovery = previous.GraphicsRootLastWriteTimeUtc == rootLastWriteTime
             && previous.Configs.Keys.All(File.Exists);
+        cacheLoadTimer.Stop();
+        PluginLogger.Info($"Graphics index cache checked in {cacheLoadTimer.ElapsedMilliseconds:N0} ms.");
+        var discoveryTimer = Stopwatch.StartNew();
         var configPaths = (reusedDiscovery
                 ? previous.Configs.Keys
                 : DiscoverConfigFiles(_graphicsRoot))
             .OrderBy(path => Path.GetRelativePath(_graphicsRoot, path), StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        discoveryTimer.Stop();
+        PluginLogger.Info(
+            $"Graphics config discovery {(reusedDiscovery ? "restored" : "completed")}: " +
+            $"{configPaths.Length:N0} configs in {discoveryTimer.ElapsedMilliseconds:N0} ms.");
+        var indexingTimer = Stopwatch.StartNew();
         var nextConfigs = new Dictionary<string, CachedConfig>(StringComparer.OrdinalIgnoreCase);
         var assets = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var reused = 0;
@@ -96,8 +108,14 @@ internal sealed class GraphicsAssetIndex
             }
         }
 
+        indexingTimer.Stop();
+        PluginLogger.Info(
+            $"Graphics configs indexed: {assets.Count:N0} assets " +
+            $"({reused:N0} cached, {reparsed:N0} parsed) in {indexingTimer.ElapsedMilliseconds:N0} ms.");
         _assets = assets;
         ConfigCount = configPaths.Length;
+        var cacheWriteTimer = Stopwatch.StartNew();
+        var wroteCache = false;
         if (!reusedDiscovery || reparsed > 0 || previous.Configs.Count != nextConfigs.Count)
         {
             SaveCache(new GraphicsIndexCache
@@ -106,11 +124,17 @@ internal sealed class GraphicsAssetIndex
                 GraphicsRootLastWriteTimeUtc = rootLastWriteTime,
                 Configs = nextConfigs
             });
+            wroteCache = true;
         }
+        cacheWriteTimer.Stop();
         PluginLogger.Info(
             $"Graphics index ready: {AssetCount:N0} assets from {ConfigCount:N0} configs " +
             $"({reused:N0} cached, {reparsed:N0} parsed, discovery {(reusedDiscovery ? "cached" : "scanned")}) " +
-            $"in {timer.ElapsedMilliseconds:N0} ms.");
+            $"in {timer.ElapsedMilliseconds:N0} ms " +
+            $"(cache load {cacheLoadTimer.ElapsedMilliseconds:N0} ms, " +
+            $"discovery {discoveryTimer.ElapsedMilliseconds:N0} ms, " +
+            $"indexing {indexingTimer.ElapsedMilliseconds:N0} ms, " +
+            $"cache write {(wroteCache ? $"{cacheWriteTimer.ElapsedMilliseconds:N0} ms" : "skipped")}).");
     }
 
     public bool TryResolve(string entityType, uint uid, string imageType, out string path)
@@ -124,8 +148,31 @@ internal sealed class GraphicsAssetIndex
 
         try
         {
-            path = Path.GetFullPath(cachedPath);
-            return IsUnderGraphicsRoot(path) && File.Exists(path);
+            var candidate = Path.GetFullPath(cachedPath);
+            if (!IsUnderGraphicsRoot(candidate))
+            {
+                path = string.Empty;
+                return false;
+            }
+
+            if (Path.HasExtension(candidate))
+            {
+                path = candidate;
+                return File.Exists(path);
+            }
+
+            foreach (var extension in SupportedExtensions)
+            {
+                var withExtension = candidate + extension;
+                if (File.Exists(withExtension))
+                {
+                    path = withExtension;
+                    return true;
+                }
+            }
+
+            path = string.Empty;
+            return false;
         }
         catch
         {
@@ -182,23 +229,12 @@ internal sealed class GraphicsAssetIndex
             return false;
         }
 
-        if (Path.HasExtension(candidate) && File.Exists(candidate))
-        {
-            sourcePath = candidate;
-            return true;
-        }
-
-        foreach (var extension in SupportedExtensions)
-        {
-            var withExtension = candidate + extension;
-            if (File.Exists(withExtension))
-            {
-                sourcePath = withExtension;
-                return true;
-            }
-        }
-
-        return false;
+        // Do not probe the filesystem while indexing. Large face packs can contain
+        // more than a million mappings, so checking every source blocks BepInEx's
+        // startup thread. Extension discovery and existence validation are deferred
+        // until the individual asset is requested by TryResolve.
+        sourcePath = candidate;
+        return true;
     }
 
     private bool IsUnderGraphicsRoot(string path)
