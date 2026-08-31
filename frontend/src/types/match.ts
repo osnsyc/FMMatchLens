@@ -10,6 +10,7 @@ export type MatchEvent = {
   id: string
   type: MatchEventType
   minute: number
+  tick?: number
   team?: TeamSide
   playerId?: number
 }
@@ -214,7 +215,8 @@ export type PlayerTacticalAssignment = {
 }
 
 export type MatchSnapshot = {
-  clock: { minute: number; second: number }
+  clock: { minute: number; second: number; elapsedMinute: number; elapsedSecond: number; elapsedTick: number }
+  period: number
   score: { home: number; away: number }
   home: { uid?: number; clubUid?: number; name: string; color?: string; logoPath?: string; logoUrl?: string; formation?: string; stats: TeamStats }
   away: { uid?: number; clubUid?: number; name: string; color?: string; logoPath?: string; logoUrl?: string; formation?: string; stats: TeamStats }

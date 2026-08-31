@@ -55,7 +55,7 @@ export function ScoreHeader({ match }: { match: MatchSnapshot }) {
             {match.score.home}<span className="mx-1 text-muted-foreground">-</span>{match.score.away}
           </div>
           <div className="mt-1 text-[10px] font-medium tabular-nums text-muted-foreground">
-            {match.clock.minute}:{String(match.clock.second).padStart(2, "0")}
+            {formatMatchClock(match)}
           </div>
         </div>
         {match.away.logoUrl ? (
@@ -83,6 +83,19 @@ export function ScoreHeader({ match }: { match: MatchSnapshot }) {
     </header>
     </TooltipProvider>
   )
+}
+
+function formatMatchClock(match: MatchSnapshot) {
+  const displaySeconds = match.clock.minute * 60 + match.clock.second
+  const plannedSeconds = (match.period >= 2 ? 90 : 45) * 60
+  if (displaySeconds <= plannedSeconds) {
+    return `${match.clock.minute}:${String(match.clock.second).padStart(2, "0")}`
+  }
+
+  const extraSeconds = displaySeconds - plannedSeconds
+  const extraMinutes = Math.floor(extraSeconds / 60)
+  const extraRemainder = extraSeconds % 60
+  return `${plannedSeconds / 60}(+${extraMinutes}:${String(extraRemainder).padStart(2, "0")})`
 }
 
 function TeamName({ name, uid, color, align }: { name: string; uid?: number; color: string; align: "left" | "right" }) {

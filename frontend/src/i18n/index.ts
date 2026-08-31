@@ -321,7 +321,7 @@ const resources = {
         liveMatch: "Live match",
         local: "Local",
         refresh: "Refresh",
-        openArchive: "Open archive",
+        openArchive: "Open",
         openArchiveHint: "Click to select or drop a .fmlens file",
         play: "Play replay",
         pause: "Pause replay",

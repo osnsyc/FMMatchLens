@@ -251,7 +251,7 @@ class LiveDerivations {
       for (let count = 0; count < goalDelta; count += 1) {
         this.events.push({
           id: `${frame.matchId}-player-${player.playerId}-goal-${player.goals - goalDelta + count + 1}-${frame.tick}`,
-          type: "goal", minute: frameMinute(frame), team: player.team, playerId: player.playerId,
+          type: "goal", minute: frameMinute(frame), tick: frame.tick, team: player.team, playerId: player.playerId,
         })
         if (player.team === "home") identifiedHomeGoals += 1
         else identifiedAwayGoals += 1
@@ -259,13 +259,13 @@ class LiveDerivations {
       for (let count = 0; count < assistDelta; count += 1) {
         this.events.push({
           id: `${frame.matchId}-player-${player.playerId}-assist-${player.assists - assistDelta + count + 1}-${frame.tick}`,
-          type: "assist_candidate", minute: frameMinute(frame), team: player.team, playerId: player.playerId,
+          type: "assist_candidate", minute: frameMinute(frame), tick: frame.tick, team: player.team, playerId: player.playerId,
         })
       }
       for (let count = 0; count < redDelta; count += 1) {
         this.events.push({
           id: `${frame.matchId}-player-${player.playerId}-red-${frame.tick}-${count}`,
-          type: "red_card", minute: frameMinute(frame), team: player.team, playerId: player.playerId,
+          type: "red_card", minute: frameMinute(frame), tick: frame.tick, team: player.team, playerId: player.playerId,
         })
       }
     }
@@ -574,7 +574,14 @@ export function toMatchSnapshot(
   const awayClubUid = metadata?.away.clubUid
 
   return {
-    clock: { minute, second },
+    clock: {
+      minute,
+      second,
+      elapsedMinute: Math.floor(Math.max(0, frame.tick) / 240),
+      elapsedSecond: Math.floor(Math.max(0, frame.tick) / 4) % 60,
+      elapsedTick: Math.max(0, frame.tick),
+    },
+    period: frame.period,
     score: { home: frame.home.goals, away: frame.away.goals },
     home: {
       uid: metadata?.home.uid,
@@ -715,6 +722,7 @@ export function buildMatchEvents(
             id: `${frame.matchId}-player-${player.playerId}-goal-${player.goals - goalDelta + count + 1}-${frame.tick}`,
             type: "goal",
             minute,
+            tick: frame.tick,
             team: player.team,
             playerId: player.playerId,
           })
@@ -727,6 +735,7 @@ export function buildMatchEvents(
             id: `${frame.matchId}-player-${player.playerId}-assist-${player.assists - assistDelta + count + 1}-${frame.tick}`,
             type: "assist_candidate",
             minute,
+            tick: frame.tick,
             team: player.team,
             playerId: player.playerId,
           })
@@ -737,6 +746,7 @@ export function buildMatchEvents(
             id: `${frame.matchId}-player-${player.playerId}-red-${frame.tick}-${count}`,
             type: "red_card",
             minute,
+            tick: frame.tick,
             team: player.team,
             playerId: player.playerId,
           })
@@ -994,6 +1004,7 @@ function appendUnidentifiedGoals(
       id: `${frame.matchId}-${team}-unknown-goal-${frame.tick}-${index}`,
       type: "goal",
       minute: frameMinute(frame),
+      tick: frame.tick,
       team,
     })
   }

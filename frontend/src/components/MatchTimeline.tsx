@@ -14,6 +14,13 @@ import {
 import { parseLocalArchive, type ParsedLocalArchive } from "@/api/localArchive"
 import { metadataAtTick } from "@/api/archiveMetadata"
 import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
 import {
   Tooltip,
@@ -70,9 +77,11 @@ type TimelineEvent = {
   id: string
   type: TimelineEventKind
   minute: number
+  tick?: number
   team: TeamSide
   label: string
-  details: string[]
+  primaryPeople: string[]
+  secondaryPeople: string[]
   occurrences: number
 }
 
@@ -181,17 +190,30 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
   useEffect(() => {
     if (!playing || frames.length === 0) return
 
-    const timer = window.setInterval(() => {
-      setFrameIndex((current) => {
-        if (current >= frames.length - 1) {
-          setPlaying(false)
-          return current
-        }
-        return current + 1
-      })
-    }, Math.max(16, 250 / speed))
+    let animationFrame = 0
+    let previousTimestamp = performance.now()
+    let frameCarry = 0
 
-    return () => window.clearInterval(timer)
+    const advance = (timestamp: number) => {
+      const elapsedMilliseconds = Math.min(250, timestamp - previousTimestamp)
+      previousTimestamp = timestamp
+      frameCarry += (elapsedMilliseconds * speed) / 250
+      const frameStep = Math.floor(frameCarry)
+
+      if (frameStep > 0) {
+        frameCarry -= frameStep
+        setFrameIndex((current) => {
+          const next = Math.min(frames.length - 1, current + frameStep)
+          if (next >= frames.length - 1) setPlaying(false)
+          return next
+        })
+      }
+
+      animationFrame = window.requestAnimationFrame(advance)
+    }
+
+    animationFrame = window.requestAnimationFrame(advance)
+    return () => window.cancelAnimationFrame(animationFrame)
   }, [playing, speed, frames.length])
 
   useEffect(() => {
@@ -217,9 +239,12 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
   const homeEvents = events.filter((event) => event.team === "home")
   const awayEvents = events.filter((event) => event.team === "away")
   const replaying = selectedId !== ""
-  const sliderMax = replaying ? Math.max(1, frames.length - 1) : Math.max(90, match.clock.minute)
-  const sliderValue = replaying ? Math.min(frameIndex, sliderMax) : match.clock.minute
-  const sliderPercent = sliderMax > 0 ? (sliderValue / sliderMax) * 100 : 0
+  const sliderMax = 100
+  const sliderPercent = replaying
+    ? replayPercent(frameIndex, frames)
+    : liveTimelinePercent(match.clock.elapsedTick, match)
+  const sliderValue = sliderPercent
+  const sliderLabelOffset = 10 - sliderPercent * 0.2
 
   const selectSource = (matchId: string) => {
     if (localArchive && matchId === localArchiveId(localArchive)) {
@@ -277,46 +302,70 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
     }
   }
 
+  const sourceOptions = [
+    { value: "live", label: t("timeline.liveMatch") },
+    ...(localArchive
+      ? [{
+          value: localArchiveId(localArchive),
+          label: `${t("timeline.local")} · ${archiveOptionLabel(localArchive.archive, i18n.language, localArchive.metadata)}`,
+        }]
+      : []),
+    ...archives.map((archive) => ({
+      value: archive.matchId,
+      label: archiveOptionLabel(archive, i18n.language),
+    })),
+  ]
+  const selectedSourceValue = selectedId || "live"
+  const selectedSourceLabel = sourceOptions.find((option) => option.value === selectedSourceValue)?.label
+    ?? t("timeline.liveMatch")
+
   return (
     <TooltipProvider>
       <section className="flex h-full min-h-0 items-center gap-2 overflow-hidden px-4 py-1">
-        <div className="flex w-80 shrink-0 flex-col gap-1.5">
+        <div className="flex w-64 shrink-0 flex-col gap-1.5">
           <div className="flex gap-1.5">
-            <select
-              className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1.5 text-xs"
-              value={selectedId}
-              onChange={(event) => selectSource(event.target.value)}
-              aria-label={t("timeline.sourceLabel")}
+            <Select
+              value={selectedSourceValue}
+              onValueChange={(value) => selectSource(value === "live" || value == null ? "" : value)}
             >
-              <option value="">{t("timeline.liveMatch")}</option>
-              {localArchive && (
-                <option value={localArchiveId(localArchive)}>
-                  {t("timeline.local")} · {archiveOptionLabel(localArchive.archive, i18n.language, localArchive.metadata)}
-                </option>
-              )}
-              {archives.map((archive) => (
-                <option key={archive.matchId} value={archive.matchId}>
-                  {archiveOptionLabel(archive, i18n.language)}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger size="default" className="h-8 min-w-0 flex-1" aria-label={t("timeline.sourceLabel")}>
+                <SelectValue className="min-w-0 truncate">{selectedSourceLabel}</SelectValue>
+              </SelectTrigger>
+              <SelectContent align="start" alignItemWithTrigger={false} className="w-80 max-w-[calc(100vw-2rem)]">
+                {sourceOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button type="button" variant="outline" size="sm" className="h-8 px-2 text-xs" onClick={() => void refresh()}>
               {t("timeline.refresh")}
             </Button>
           </div>
 
-          <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-            <span className={`min-w-0 flex-1 truncate tabular-nums ${archiveError && !replaying ? "text-destructive" : ""}`}>
-              {archiveError && !replaying
-                ? archiveError
-                : replaying
-                  ? loading
-                    ? t("timeline.loading")
-                    : loadFailed
-                      ? archiveError || t("timeline.archiveReadFailed")
-                      : t("timeline.tickProgress", { current: frameIndex + 1, total: frames.length })
-                  : t("timeline.liveClock", { time: `${match.clock.minute}:${String(match.clock.second).padStart(2, "0")}` })}
-            </span>
+          <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+            {replaying && !loading && !loadFailed ? (
+              <span
+                className="flex h-8 min-w-0 flex-1 items-center justify-center rounded-md border border-border/70 bg-muted/35 px-2 tabular-nums shadow-xs"
+                aria-label={t("timeline.tickProgress", { current: frameIndex + 1, total: frames.length })}
+              >
+                <span className="font-semibold text-foreground">{frameIndex + 1}</span>
+                <span className="mx-1 text-muted-foreground/55">/</span>
+                <span>{frames.length}</span>
+                <span className="ml-1.5 text-[9px] font-semibold uppercase tracking-wider text-primary">Tick</span>
+              </span>
+            ) : (
+              <span className={`flex h-8 min-w-0 flex-1 items-center truncate px-1 tabular-nums ${archiveError && !replaying ? "text-destructive" : ""}`}>
+                {archiveError && !replaying
+                  ? archiveError
+                  : replaying
+                    ? loading
+                      ? t("timeline.loading")
+                      : archiveError || t("timeline.archiveReadFailed")
+                    : t("timeline.liveClock", { time: `${match.clock.minute}:${String(match.clock.second).padStart(2, "0")}` })}
+              </span>
+            )}
             <input
               ref={fileInputRef}
               type="file"
@@ -328,17 +377,22 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
                 event.target.value = ""
               }}
             />
-            <select
-              className="h-8 shrink-0 rounded-md border bg-background px-1.5 text-xs"
-              value={speed}
+            <Select
+              value={String(speed)}
               disabled={!replaying}
-              aria-label={t("timeline.speed")}
-              onChange={(event) => setSpeed(Number(event.target.value))}
+              onValueChange={(value) => {
+                if (value != null) setSpeed(Number(value))
+              }}
             >
-              {[0.5, 1, 2, 4, 8, 16].map((value) => (
-                <option key={value} value={value}>{value}×</option>
-              ))}
-            </select>
+              <SelectTrigger size="default" className="h-8 w-16 shrink-0 tabular-nums" aria-label={t("timeline.speed")}>
+                <SelectValue>{speed}×</SelectValue>
+              </SelectTrigger>
+              <SelectContent align="end" alignItemWithTrigger={false} className="w-16 min-w-16">
+                {[0.5, 1, 2, 4, 8, 16, 32, 64].map((value) => (
+                  <SelectItem key={value} value={String(value)}>{value}×</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <div
               className={`flex h-8 shrink-0 items-center rounded-md border border-dashed px-1 transition-colors ${draggingArchive ? "border-primary bg-primary/10" : "border-border bg-background/50"}`}
               onDragEnter={(event) => {
@@ -378,15 +432,26 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
           </Button>
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <EventRail events={homeEvents} side="home" color={match.home.color ?? "#6cabdd"} />
+        <div className="relative flex min-w-0 flex-1 flex-col gap-1">
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 left-1/2 z-0 w-px -translate-x-1/2 bg-primary/60"
+          />
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute left-1/2 top-1/2 z-0 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary ring-2 ring-card"
+          />
+          <EventRail events={homeEvents} side="home" color={match.home.color ?? "#6cabdd"} match={match} frames={frames} replaying={replaying} />
 
-          <div className="relative px-2">
+          <div className="relative z-1">
             <span
-              className="pointer-events-none absolute -top-0.5 z-10 -translate-x-1/2 rounded-sm bg-card px-1 text-[10px] font-semibold leading-none tabular-nums text-foreground shadow-[0_0_0_1px_hsl(var(--border))]"
-              style={{ left: `${Math.max(0, Math.min(100, sliderPercent))}%` }}
+              className="pointer-events-none absolute top-1/2 z-10 -ml-2.5 w-5 -translate-y-1/2 bg-transparent p-0 text-center text-[8px] font-bold leading-none tabular-nums text-foreground"
+              style={{
+                left: `${Math.max(0, Math.min(100, sliderPercent))}%`,
+                marginLeft: `${sliderLabelOffset - 10}px`,
+              }}
             >
-              {match.clock.minute}&apos;
+              {formatTimelineClock(match)}
             </span>
             <Slider
               min={0}
@@ -396,16 +461,16 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
               disabled={!replaying || loading || frames.length === 0}
               onValueChange={(value) => {
                 const next = Array.isArray(value) ? value[0] : value
-                if (typeof next === "number") {
+                if (typeof next === "number" && replaying) {
                   setPlaying(false)
-                  setFrameIndex(next)
+                  setFrameIndex(replayFrameIndex(next, frames))
                 }
               }}
-              className="[&_[data-slot=slider-track]]:h-2 [&_[data-slot=slider-track]]:rounded-full [&_[data-slot=slider-range]]:bg-primary/80 [&_[data-slot=slider-thumb]]:size-4 [&_[data-slot=slider-thumb]]:rounded-full [&_[data-slot=slider-thumb]]:border-2 [&_[data-slot=slider-thumb]]:bg-background"
+              className="[&_[data-slot=slider-track]]:h-2 [&_[data-slot=slider-track]]:rounded-full [&_[data-slot=slider-range]]:bg-primary/80 [&_[data-slot=slider-thumb]]:size-5 [&_[data-slot=slider-thumb]]:rounded-full [&_[data-slot=slider-thumb]]:border-2 [&_[data-slot=slider-thumb]]:bg-background"
             />
           </div>
 
-          <EventRail events={awayEvents} side="away" color={match.away.color ?? "#ef0107"} />
+          <EventRail events={awayEvents} side="away" color={match.away.color ?? "#ef0107"} match={match} frames={frames} replaying={replaying} />
         </div>
       </section>
     </TooltipProvider>
@@ -443,24 +508,43 @@ function localArchiveId(archive: ParsedLocalArchive) {
   return `local:${archive.archive.matchId}:${archive.archive.fileName}`
 }
 
-function EventRail({ events, side, color }: { events: TimelineEvent[]; side: TeamSide; color: string }) {
+function EventRail({
+  events,
+  side,
+  color,
+  match,
+  frames,
+  replaying,
+}: {
+  events: TimelineEvent[]
+  side: TeamSide
+  color: string
+  match: MatchSnapshot
+  frames: RealtimeFrame[]
+  replaying: boolean
+}) {
+  const positionedEvents = layoutEvents(events, (event) => eventTimelinePercent(event, match, frames, replaying))
+
   return (
-    <div className="relative h-6 min-w-0">
-      {events.map((event) => (
+    <div className="relative z-20 h-6 min-w-0">
+      {positionedEvents.map(({ event, percent, offset }) => (
         <Tooltip key={event.id}>
           <TooltipTrigger
             render={
               <button
                 type="button"
-                className={`absolute flex size-5 -translate-x-1/2 items-center justify-center rounded-full outline-none transition-transform hover:z-20 hover:scale-110 focus-visible:z-20 focus-visible:ring-2 focus-visible:ring-ring ${side === "home" ? "bottom-0" : "top-0"}`}
-                style={{ left: `${minuteToPercent(event.minute)}%` }}
+                className={`absolute z-20 flex size-5 items-center justify-center rounded-full outline-none transition-transform hover:z-30 hover:scale-110 focus-visible:z-30 focus-visible:ring-2 focus-visible:ring-ring ${side === "home" ? "bottom-0" : "top-0"}`}
+                style={{
+                  left: `${percent}%`,
+                  transform: `translateX(calc(-50% + ${offset}px))`,
+                }}
                 aria-label={`${event.label} ${event.minute}'`}
               />
             }
           >
             <EventIcon event={event} color={color} />
-            {event.type !== "substitution" && event.occurrences > 1 && (
-              <span className="pointer-events-none absolute -right-1.5 -top-1.5 flex min-w-3.5 items-center justify-center rounded-full bg-foreground px-0.5 text-[8px] font-bold leading-3.5 text-background">
+            {event.occurrences > 1 && (
+              <span className="pointer-events-none absolute -right-1.5 -top-0.5 z-30 flex min-w-3.5 items-center justify-center rounded-full bg-foreground px-0.5 text-[8px] font-bold leading-3.5 text-background shadow-sm">
                 {event.occurrences}
               </span>
             )}
@@ -468,15 +552,52 @@ function EventRail({ events, side, color }: { events: TimelineEvent[]; side: Tea
               {event.minute}&apos;
             </span>
           </TooltipTrigger>
-          <TooltipContent className="max-w-72">
-            <div className="font-medium">{event.minute}&apos; · {event.label}</div>
-            {event.details.map((detail, index) => (
-              <div key={`${detail}-${index}`} className="text-xs opacity-90">{detail}</div>
-            ))}
+          <TooltipContent className="w-max max-w-none gap-0 px-2.5 py-2">
+            <div className="grid grid-cols-[auto_auto] grid-rows-2 items-center gap-x-4 gap-y-1 whitespace-nowrap">
+              <span className="font-semibold tabular-nums text-background">{event.minute}&apos;</span>
+              <TimelineEventPeople event={event} row="primary" />
+              <span className="text-[10px] font-medium text-background/65">{event.label}</span>
+              <TimelineEventPeople event={event} row="secondary" />
+            </div>
           </TooltipContent>
         </Tooltip>
       ))}
     </div>
+  )
+}
+
+function TimelineEventPeople({ event, row }: { event: TimelineEvent; row: "primary" | "secondary" }) {
+  const people = row === "primary" ? event.primaryPeople : event.secondaryPeople
+  if (people.length === 0) return <span aria-hidden="true" />
+
+  return (
+    <span className="flex items-center gap-1.5 font-medium text-background">
+      <TimelineDetailIcon event={event} row={row} />
+      <span>{people.join(" / ")}</span>
+    </span>
+  )
+}
+
+function TimelineDetailIcon({ event, row }: { event: TimelineEvent; row: "primary" | "secondary" }) {
+  if (event.type === "goal") {
+    return <img src={row === "primary" ? "./goal.svg" : "./assist.svg"} alt="" aria-hidden="true" className="size-3.5 shrink-0" />
+  }
+
+  if (event.type === "substitution") {
+    return (
+      <span
+        aria-hidden="true"
+        className={`size-3.5 shrink-0 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] ${row === "primary" ? "text-emerald-400" : "text-rose-400"}`}
+        style={{ WebkitMaskImage: "url(./change.svg)", maskImage: "url(./change.svg)" }}
+      />
+    )
+  }
+
+  return (
+    <span
+      aria-hidden="true"
+      className={`size-2.5 shrink-0 rounded-[2px] ${event.type === "red_card" ? "bg-red-500" : "bg-yellow-400"}`}
+    />
   )
 }
 
@@ -526,22 +647,23 @@ function buildTimelineEvents(match: MatchSnapshot, t: (key: string) => string) {
       if (!team) return null
 
       const eventLabel = labelForEvent(event.type, t)
-      const details = player?.name ? [`${eventLabel} · ${player.name}`] : [eventLabel]
+      let assistants: string[] = []
       if (event.type === "goal") {
-        const assistants = match.events
+        assistants = match.events
           .filter((candidate) => candidate.type === "assist_candidate" && assistBelongsToGoal(match, candidate, event, team))
           .map((candidate) => match.players.find((entry) => entry.id === candidate.playerId)?.name)
           .filter((name): name is string => Boolean(name))
-        details.push(...assistants.map((name) => `${t("squad.assist")} · ${name}`))
       }
 
       return {
         id: event.id,
         type: event.type,
         minute: event.minute,
+        tick: event.tick,
         team,
         label: eventLabel,
-        details,
+        primaryPeople: player?.name ? [player.name] : [],
+        secondaryPeople: assistants,
         occurrences: 1,
       }
     })
@@ -550,20 +672,39 @@ function buildTimelineEvents(match: MatchSnapshot, t: (key: string) => string) {
   const substitutionEvents = buildSubstitutionEvents(match, t)
 
   const grouped = new Map<string, TimelineEvent>()
-  for (const event of matchEvents) {
+  for (const event of [...matchEvents, ...substitutionEvents]) {
     const key = `${event.team}-${event.minute}-${event.type}`
     const existing = grouped.get(key)
     if (existing) {
       existing.occurrences += event.occurrences
-      for (const detail of event.details) {
-        if (!existing.details.includes(detail)) existing.details.push(detail)
+      for (const person of event.primaryPeople) {
+        if (!existing.primaryPeople.includes(person)) existing.primaryPeople.push(person)
+      }
+      for (const person of event.secondaryPeople) {
+        if (!existing.secondaryPeople.includes(person)) existing.secondaryPeople.push(person)
       }
     } else {
-      grouped.set(key, { ...event, id: key, details: [...event.details] })
+      grouped.set(key, {
+        ...event,
+        id: key,
+        primaryPeople: [...event.primaryPeople],
+        secondaryPeople: [...event.secondaryPeople],
+      })
     }
   }
 
-  return [...grouped.values(), ...substitutionEvents].sort((left, right) => left.minute - right.minute)
+  return [...grouped.values()].sort((left, right) => left.minute - right.minute)
+}
+
+function eventTimelineMinute(event: TimelineEvent, match: MatchSnapshot) {
+  if (event.tick != null) return Math.max(0, event.tick / 240)
+
+  // Player status currently exposes only the display minute. Once the second
+  // half begins, Tick includes the first-half stoppage that DisplayTick hides.
+  const firstHalfOffset = match.period >= 2
+    ? Math.max(0, match.clock.elapsedTick / 240 - (match.clock.minute + match.clock.second / 60))
+    : 0
+  return event.minute + (event.minute > 45 ? firstHalfOffset : 0)
 }
 
 function assistBelongsToGoal(
@@ -620,10 +761,8 @@ function buildSubstitutionEvents(match: MatchSnapshot, t: (key: string) => strin
         team,
         label: t("timeline.substitution"),
         occurrences: 1,
-        details: [
-          `${t("squad.subbedOff")} · ${off.player.name}`,
-          ...(on ? [`${t("squad.subbedOn")} · ${on.player.name}`] : []),
-        ],
+        primaryPeople: on ? [on.player.name] : [],
+        secondaryPeople: [off.player.name],
       })
     }
 
@@ -634,9 +773,10 @@ function buildSubstitutionEvents(match: MatchSnapshot, t: (key: string) => strin
           type: "substitution",
           minute: on.minute,
           team,
-        label: t("timeline.substitution"),
-        occurrences: 1,
-        details: [`${t("squad.subbedOn")} · ${on.player.name}`],
+          label: t("timeline.substitution"),
+          occurrences: 1,
+          primaryPeople: [on.player.name],
+          secondaryPeople: [],
         })
       }
     })
@@ -654,6 +794,100 @@ function labelForEvent(type: MatchEventType, t: (key: string) => string) {
   }
 }
 
-function minuteToPercent(minute: number) {
-  return Math.max(0, Math.min(100, (minute / 90) * 100))
+function eventTimelinePercent(
+  event: TimelineEvent,
+  match: MatchSnapshot,
+  frames: readonly RealtimeFrame[],
+  replaying: boolean,
+) {
+  if (replaying && event.tick != null && frames.length > 1) {
+    return tickToReplayPercent(event.tick, frames)
+  }
+
+  const tick = event.tick ?? eventTimelineMinute(event, match) * 240
+  if (replaying && frames.length > 1) {
+    return tickToReplayPercent(tick, frames)
+  }
+  return liveTimelinePercent(tick, match)
+}
+
+function layoutEvents(events: readonly TimelineEvent[], getPercent: (event: TimelineEvent) => number) {
+  const positioned = events
+    .map((event) => ({ event, percent: getPercent(event) }))
+    .sort((left, right) => left.percent - right.percent)
+  const result: Array<{ event: TimelineEvent; percent: number; offset: number }> = []
+
+  // A percentage alone cannot express a fixed pixel gap on a responsive rail.
+  // Spread close events around their shared anchor so the 20px icons always
+  // retain a visible gap (especially substitutions followed by goals).
+  for (let index = 0; index < positioned.length;) {
+    let end = index + 1
+    while (end < positioned.length && positioned[end].percent - positioned[end - 1].percent <= 2.5) end += 1
+    const count = end - index
+    const middle = (count - 1) / 2
+    for (let cursor = index; cursor < end; cursor += 1) {
+      result.push({
+        ...positioned[cursor],
+        offset: (cursor - index - middle) * 24,
+      })
+    }
+    index = end
+  }
+  return result
+}
+
+function tickToReplayPercent(tick: number, frames: readonly RealtimeFrame[]) {
+  const startTick = frames[0].tick
+  const endTick = frames.at(-1)?.tick ?? startTick
+  return endTick > startTick
+    ? Math.max(0, Math.min(100, ((tick - startTick) / (endTick - startTick)) * 100))
+    : 0
+}
+
+function replayPercent(frameIndex: number, frames: readonly RealtimeFrame[]) {
+  const frame = frames[frameIndex]
+  return frame ? tickToReplayPercent(frame.tick, frames) : 0
+}
+
+function replayFrameIndex(percent: number, frames: readonly RealtimeFrame[]) {
+  if (frames.length <= 1) return 0
+  const startTick = frames[0].tick
+  const endTick = frames.at(-1)?.tick ?? startTick
+  const targetTick = startTick + (Math.max(0, Math.min(100, percent)) / 100) * (endTick - startTick)
+  let low = 0
+  let high = frames.length - 1
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2)
+    if (frames[middle].tick < targetTick) low = middle + 1
+    else high = middle
+  }
+  return low
+}
+
+function liveTimelinePercent(tick: number, match: MatchSnapshot) {
+  const firstHalfTicks = 45 * 240
+  if (match.period < 2) {
+    return Math.max(0, Math.min(100, (tick / firstHalfTicks) * 50))
+  }
+
+  // Tick keeps first-half stoppage; DisplayTick hides that offset after the
+  // interval. This lets us permanently compress the first half to 0..50.
+  const displayTick = match.clock.minute * 240 + match.clock.second * 4
+  const firstHalfOffset = Math.max(0, match.clock.elapsedTick - displayTick)
+  const firstHalfEnd = firstHalfTicks + firstHalfOffset
+  if (tick <= firstHalfEnd) {
+    return Math.max(0, Math.min(50, (tick / firstHalfEnd) * 50))
+  }
+
+  const secondHalfTick = tick - firstHalfEnd
+  const currentSecondHalfTicks = Math.max(firstHalfTicks, match.clock.elapsedTick - firstHalfEnd)
+  return Math.max(50, Math.min(100, 50 + (secondHalfTick / currentSecondHalfTicks) * 50))
+}
+
+function formatTimelineClock(match: MatchSnapshot) {
+  const displaySeconds = match.clock.minute * 60 + match.clock.second
+  const plannedSeconds = (match.period >= 2 ? 90 : 45) * 60
+  if (displaySeconds <= plannedSeconds) return `${match.clock.minute}`
+  const extraSeconds = displaySeconds - plannedSeconds
+  return `+${Math.floor(extraSeconds / 60)}`
 }
