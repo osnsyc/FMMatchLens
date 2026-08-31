@@ -12,6 +12,7 @@ import {
   type RealtimeMatchMetadata,
 } from "@/api/realtimeMatch"
 import { parseLocalArchive, type ParsedLocalArchive } from "@/api/localArchive"
+import { metadataAtTick } from "@/api/archiveMetadata"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import {
@@ -43,6 +44,7 @@ type ArchiveSummary = {
 type ArchiveSlice = {
   archive: ArchiveSummary
   metadata?: RealtimeMatchMetadata
+  metadataTimeline?: RealtimeMatchMetadata[]
   frames: RealtimeFrame[]
 }
 
@@ -87,6 +89,7 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
   const [loading, setLoading] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
   const [metadata, setMetadata] = useState<RealtimeMatchMetadata | undefined>(initialLocalArchive?.metadata)
+  const [metadataTimeline, setMetadataTimeline] = useState<RealtimeMatchMetadata[]>(initialLocalArchive?.metadataTimeline ?? [])
   const [localArchive, setLocalArchive] = useState<ParsedLocalArchive | undefined>(initialLocalArchive)
   const [archiveError, setArchiveError] = useState("")
   const [draggingArchive, setDraggingArchive] = useState(false)
@@ -130,6 +133,7 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
     const load = async () => {
       const loaded: RealtimeFrame[] = []
       let loadedMetadata: RealtimeMatchMetadata | undefined
+      let loadedMetadataTimeline: RealtimeMatchMetadata[] = []
       let fromTick = 0
 
       try {
@@ -139,6 +143,9 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
           if (!response.ok) throw new Error("archive read failed")
           const page = (await response.json()) as ArchiveSlice
           loadedMetadata ??= page.metadata
+          if (loadedMetadataTimeline.length === 0 && page.metadataTimeline?.length) {
+            loadedMetadataTimeline = page.metadataTimeline
+          }
           if (page.frames.length === 0) break
 
           loaded.push(...page.frames)
@@ -150,11 +157,13 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
         if (!cancelled) {
           setFrames(loaded)
           setMetadata(loadedMetadata)
+          setMetadataTimeline(loadedMetadataTimeline)
           setFrameIndex(0)
         }
       } catch {
         if (!cancelled) {
           setFrames([])
+          setMetadataTimeline([])
           setLoadFailed(true)
           setArchiveError(t("timeline.serverArchiveReadFailed"))
         }
@@ -188,9 +197,9 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
   useEffect(() => {
     const frame = frames[frameIndex]
     if (selectedId && frame) {
-      const frameMetadata = localArchive && selectedId === localArchiveId(localArchive)
-        ? metadataAtTick(localArchive.metadataTimeline, frame.tick) ?? metadata
-        : metadata
+      const frameMetadata = metadataAtTick(metadataTimeline, frame.tick)
+        ?? metadataTimeline[0]
+        ?? metadata
       onReplayFrame(
         frame,
         frameMetadata,
@@ -202,7 +211,7 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
         buildRollingMomentumTimeline(frames, frameIndex),
       )
     }
-  }, [selectedId, frameIndex, frames, metadata, localArchive, onReplayFrame])
+  }, [selectedId, frameIndex, frames, metadata, metadataTimeline, onReplayFrame])
 
   const events = useMemo(() => buildTimelineEvents(match, t), [match, t])
   const homeEvents = events.filter((event) => event.team === "home")
@@ -216,6 +225,7 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
     if (localArchive && matchId === localArchiveId(localArchive)) {
       setFrames(localArchive.frames)
       setMetadata(localArchive.metadata)
+      setMetadataTimeline(localArchive.metadataTimeline)
       setFrameIndex(0)
       setPlaying(false)
       setLoading(false)
@@ -228,6 +238,7 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
 
     setFrames([])
     setMetadata(undefined)
+    setMetadataTimeline([])
     setFrameIndex(0)
     setPlaying(false)
     setLoading(matchId !== "")
@@ -247,15 +258,17 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
 
     try {
       if (!file.name.toLowerCase().endsWith(".fmlens")) throw new Error(t("timeline.chooseArchive"))
-      const parsed = parseLocalArchive(await file.arrayBuffer(), file.name)
+      const parsed = await parseLocalArchive(await file.arrayBuffer(), file.name)
       setLocalArchive(parsed)
       setFrames(parsed.frames)
       setMetadata(parsed.metadata)
+      setMetadataTimeline(parsed.metadataTimeline)
       setFrameIndex(0)
       setSelectedId(localArchiveId(parsed))
     } catch (error) {
       setFrames([])
       setMetadata(undefined)
+      setMetadataTimeline([])
       setSelectedId("")
       setLoadFailed(true)
       setArchiveError(error instanceof Error ? error.message : t("timeline.localArchiveReadFailed"))
@@ -400,7 +413,7 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
 }
 
 function archiveOptionLabel(
-  archive: Pick<ArchiveSummary, "matchId" | "fileName" | "startedUnixMilliseconds" | "homeGoals" | "awayGoals" | "homeName" | "awayName">,
+  archive: Pick<ArchiveSummary, "matchId" | "fileName" | "startedUnixMilliseconds" | "homeGoals" | "awayGoals" | "homeName" | "awayName" | "fileSizeBytes">,
   language: string,
   metadata?: RealtimeMatchMetadata,
 ) {
@@ -408,7 +421,8 @@ function archiveOptionLabel(
   const homeName = archive.homeName ?? metadata?.home.name ?? fileNames?.home
   const awayName = archive.awayName ?? metadata?.away.name ?? fileNames?.away
   const matchup = homeName && awayName ? `${homeName} vs ${awayName} · ` : ""
-  return `${matchup}${new Date(archive.startedUnixMilliseconds).toLocaleString(language)} · ${archive.homeGoals}-${archive.awayGoals}`
+  const size = Number.isFinite(archive.fileSizeBytes) ? ` · ${(archive.fileSizeBytes / 1024 / 1024).toFixed(1)} MiB` : ""
+  return `${matchup}${new Date(archive.startedUnixMilliseconds).toLocaleString(language)} · ${archive.homeGoals}-${archive.awayGoals}${size}`
 }
 
 function archiveTeamNamesFromFileName(matchId: string, fileName?: string) {
@@ -427,16 +441,6 @@ function archiveTeamNamesFromFileName(matchId: string, fileName?: string) {
 
 function localArchiveId(archive: ParsedLocalArchive) {
   return `local:${archive.archive.matchId}:${archive.archive.fileName}`
-}
-
-function metadataAtTick(timeline: readonly RealtimeMatchMetadata[], tick: number) {
-  if (timeline.length === 0) return undefined
-  let selected = timeline[0]
-  for (const metadata of timeline) {
-    if (metadata.capturedTick > tick) break
-    selected = metadata
-  }
-  return selected
 }
 
 function EventRail({ events, side, color }: { events: TimelineEvent[]; side: TeamSide; color: string }) {

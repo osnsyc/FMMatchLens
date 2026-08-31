@@ -142,7 +142,6 @@ internal sealed class RealtimeMatchTimeline
             _lastTick = frame.Tick;
             _current = frame;
             _status = "live";
-            _archives.Append(frame);
 
             if (_metadata is null)
             {
@@ -168,7 +167,10 @@ internal sealed class RealtimeMatchTimeline
                         null,
                         null,
                         null)).ToArray());
+                _archives.WriteMetadata(_metadata);
             }
+
+            _archives.Append(frame);
 
             return true;
         }

@@ -1,29 +1,37 @@
-# 更新日志
 
-本项目的重要变更记录在此文件中，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
+# Changelog
+
+This file records the project's important changes. Version numbers follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### 计划
+### Added
 
-- 持续验证 Football Manager 2026 更新后的内存偏移兼容性。
-- 完善安装包、用户文档与自动化测试。
+- `.fmlens` archives now use 16-bit coordinate quantization, per-frame delta encoding, independent zlib/Deflate + CRC data blocks, a final index, and valid-prefix recovery after abnormal termination.
+- The backend only decompresses data blocks within the requested Tick range, and browsers can open local archives directly.
+- Added configuration for compression, block size, maximum block delay, and a bounded background queue.
+- Metadata uses an initial complete player static snapshot followed by Formation deltas. Static data such as attributes, height, and salary is stored only once for existing players; subsequent records contain only tactical changes and new players.
+
+### Planned
+
+- Continue validating memory-offset compatibility after Football Manager 2026 updates.
+- Improve the installer, user documentation, and automated tests.
 
 ## [0.1.1] - 2026-08-30
 
-### 修复
+### Fixed
 
-- 避免大型图像包索引期间逐条检查资源文件，并记录各索引阶段耗时，防止首次启动长时间阻塞。
+- Avoid checking resource files one by one while indexing large image packages and record the duration of each indexing stage to prevent long startup stalls.
 
 ## [0.1.0] - 2026-08-27
 
-### 新增
+### Added
 
-- Football Manager 2026 比赛数据实时采集与本地 API。
-- 比赛统计、xG、动量、阵型、热区、阵容与战术可视化。
-- `.fmlens` 本地增量存档和浏览器回放。
-- release/debug 两级插件日志模式。
-- 集中式项目元数据、CI 检查和 Tag 自动发布流水线。
+- Real-time collection of Football Manager 2026 match data and a local API.
+- Visualization of match statistics, xG, momentum, formations, heatmaps, lineups, and tactics.
+- Local incremental `.fmlens` archives and browser replay.
+- Two plugin logging modes: release and debug.
+- Centralized project metadata, CI checks, and an automated tag-based release pipeline.
 
 [Unreleased]: https://github.com/osnsyc/FMMatchLens/compare/v0.1.1...HEAD
 [0.1.1]: https://github.com/osnsyc/FMMatchLens/compare/v0.1.0...v0.1.1

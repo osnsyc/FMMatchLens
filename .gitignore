@@ -35,3 +35,4 @@ exports/
 tools/
 dev/
 src/FMMatchLens.Plugin/lib/
+tests/

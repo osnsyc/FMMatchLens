@@ -208,12 +208,26 @@ Mode = release
 
 [Graphics]
 GraphicsPath = C:\Users\<your-username>\Documents\Sports Interactive\Football Manager 26\graphics
+
+[Archive]
+Compression = Fast
+ChunkTicks = 2400
+MaxChunkLatencyMs = 60000
+QueueCapacity = 8
 ```
 
 | Setting | Default | Description |
 | --- | --- | --- |
 | `Logging.Mode` | `release` | `release` writes only key status messages, warnings, and errors; `debug` also writes Hook and frame diagnostics. |
 | `Graphics.GraphicsPath` | FM26 user graphics directory | Root directory containing graphics packs and `config.xml` files, used to load portraits and badges. Leave the default when no custom graphics packs are used. |
+| `Archive.Compression` | `Fast` | `Fast` uses independent zlib-wrapped Deflate chunks; `None` disables chunk compression. |
+| `Archive.ChunkTicks` | `2400` | Maximum captured ticks in one independently recoverable chunk. With the default capture rate of about 4 ticks per second, this is roughly 10 in-game minutes. The chunk is submitted when this limit or `MaxChunkLatencyMs` is reached, whichever comes first. |
+| `Archive.MaxChunkLatencyMs` | `60000` | Maximum delay in milliseconds before submitting a partial chunk. The default 60 seconds is mainly a fallback for pauses or unusually slow tick production; during a normal match, `ChunkTicks` usually triggers first. |
+| `Archive.QueueCapacity` | `8` | Bounded background compression/write queue. Sustained overflow stops the current archive explicitly instead of silently dropping frames. |
+
+Archive data is collected into chunks before it is encoded, compressed, and written by a background worker. Larger chunks reduce per-chunk overhead and usually improve compression, while smaller chunks are submitted more frequently. A chunk is sealed as soon as it reaches `ChunkTicks` or the latency limit expires. These settings do not change the capture rate; they only change how often accumulated data is flushed to the archive.
+
+With the default values and approximately 4 captured ticks per second, 2,400 ticks takes about 600 real seconds, or 10 in-game minutes at normal game speed. If the game is running at roughly 5x speed, the same in-game interval may pass in about 2 real minutes. `MaxChunkLatencyMs = 60000` does not force a write every minute when ticks are arriving normally; it only submits a partially filled chunk after 60 seconds when the tick limit has not been reached.
 
 Save the file and restart the game after making changes. `GraphicsPath` can be an absolute path, for example:
 

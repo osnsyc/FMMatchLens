@@ -35,6 +35,7 @@ import {
   type RealtimeMatchMetadata,
 } from "@/api/realtimeMatch"
 import { parseLocalArchive, type ParsedLocalArchive } from "@/api/localArchive"
+import { metadataAtTick } from "@/api/archiveMetadata"
 import { changeLanguage, type SupportedLanguage } from "@/i18n"
 import type { MatchEvent, MatchMomentumPoint, MatchSnapshot, PlayerPositionHeatmap, TacticalEventPoint, XgTimelinePoint } from "@/types/match"
 
@@ -75,12 +76,12 @@ export function App() {
       if (!file.name.toLowerCase().endsWith(".fmlens")) {
         throw new Error(t("timeline.chooseArchive"))
       }
-      const parsed = parseLocalArchive(await file.arrayBuffer(), file.name)
+      const parsed = await parseLocalArchive(await file.arrayBuffer(), file.name)
       const frameIndex = 0
       const frame = parsed.frames[frameIndex]
-      const frameMetadata = parsed.metadataTimeline.find(
-        (entry) => entry.capturedTick >= frame.tick,
-      ) ?? parsed.metadata
+      const frameMetadata = metadataAtTick(parsed.metadataTimeline, frame.tick)
+        ?? parsed.metadataTimeline[0]
+        ?? parsed.metadata
       setStartupArchive(parsed)
       setReplayMatch(toMatchSnapshot(
         frame,

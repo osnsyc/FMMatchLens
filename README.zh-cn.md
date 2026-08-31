@@ -209,12 +209,26 @@ Mode = release
 
 [Graphics]
 GraphicsPath = C:\Users\<你的用户名>\Documents\Sports Interactive\Football Manager 26\graphics
+
+[Archive]
+Compression = Fast
+ChunkTicks = 2400
+MaxChunkLatencyMs = 60000
+QueueCapacity = 8
 ```
 
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `Logging.Mode` | `release` | `release` 仅输出关键状态、警告和错误；`debug` 额外输出 Hook 与帧诊断信息。 |
 | `Graphics.GraphicsPath` | FM26 用户图形目录 | 图形包与 `config.xml` 所在的根目录，用于加载头像和队徽；不使用自定义图形包时可保持默认值。 |
+| `Archive.Compression` | `Fast` | `Fast` 使用独立的 zlib 封装 Deflate 块；`None` 禁用数据块压缩。 |
+| `Archive.ChunkTicks` | `2400` | 单个可独立恢复数据块的最大 Tick 数。按默认每秒约 4 个 Tick 计算，约对应比赛内 10 分钟。达到此数量或达到 `MaxChunkLatencyMs` 时，哪个条件先满足就先提交。 |
+| `Archive.MaxChunkLatencyMs` | `60000` | 未达到 Tick 上限时，提交部分数据块的最大等待时间（毫秒）。默认 60 秒主要用于应对暂停或 Tick 产生异常缓慢的情况；正常比赛中通常会先达到 `ChunkTicks`。 |
+| `Archive.QueueCapacity` | `8` | 后台压缩与写入队列上限；持续积压会明确停止当前存档，不会静默丢帧。 |
+
+归档数据会先积累成数据块，再由后台线程完成编码、压缩和写盘。数据块较大时，块头等固定开销较低，通常也更有利于压缩；数据块较小时，则会更频繁地提交。当前数据块达到 `ChunkTicks`，或者等待时间达到 `MaxChunkLatencyMs`，任一条件先满足都会触发提交。这些配置不会改变数据采集频率，只会改变已经采集的数据多久写入一次存档。
+
+按照默认值和每秒约 4 个 Tick 计算，2400 个 Tick 需要约 600 个现实秒，也就是比赛内约 10 分钟。如果游戏大约以 5 倍速度运行，同样的比赛内 10 分钟可能只经过约 2 个现实分钟。`MaxChunkLatencyMs = 60000` 并不意味着正常比赛每分钟必然写一次；只要 Tick 正常产生，通常会先达到 2400 个 Tick。60 秒主要是当比赛暂停或 Tick 频率明显降低时，对未满数据块的最长等待时间。
 
 修改后保存文件并重新启动游戏。`GraphicsPath` 可以填写绝对路径，例如：
 

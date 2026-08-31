@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace FMMatchLens.Plugin.Domain;
 
 /// <summary>
@@ -148,6 +150,7 @@ internal readonly record struct RealtimePlayerMetadata(
 internal readonly record struct PlayerTacticalAssignment(
     uint PositionMask,
     string Position,
+    [property: JsonNumberHandling(JsonNumberHandling.WriteAsString | JsonNumberHandling.AllowReadingFromString)]
     ulong RoleDuty,
     string Role,
     string RoleAbbreviation,

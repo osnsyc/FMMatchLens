@@ -30,13 +30,16 @@ public sealed class Plugin : BasePlugin
                 $"Unknown logging mode '{options.LogMode.Value}'; falling back to release. " +
                 "Use 'release' or 'debug' in com.fmmatchlens.plugin.cfg.");
         }
+        ArchiveDiagnostics.Configure(PluginLogger.Debug, PluginLogger.Warning, PluginLogger.Info);
 
         PluginLogger.Info(
             $"{ProjectMetadata.Name} {ProjectMetadata.Version} loaded " +
             $"for {ProjectMetadata.GameName} {ProjectMetadata.GameVersion} (log mode: {PluginLogger.Mode}).");
 
         var dataPath = Path.Combine(Paths.PluginPath, "FMMatchLens", "data");
-        _archiveStore = new MatchArchiveStore(Path.Combine(dataPath, "matches"));
+        var archiveOptions = options.GetArchiveWriteOptions();
+        _archiveStore = new MatchArchiveStore(Path.Combine(dataPath, "matches"), archiveOptions);
+        PluginLogger.Info($"Archive writer compression: {archiveOptions.Compression}, chunk ticks: {archiveOptions.ChunkTicks}.");
         _graphicsAssets = new GraphicsAssetIndex(
             options.GraphicsPath.Value,
             Path.Combine(dataPath, "graphics-index-cache.json"));

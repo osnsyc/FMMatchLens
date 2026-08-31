@@ -207,7 +207,7 @@ export type MatchPlayer = {
 export type PlayerTacticalAssignment = {
   positionMask: number
   position: string
-  roleDuty: number
+  roleDuty: string
   role: string
   roleAbbreviation: string
   duty?: string

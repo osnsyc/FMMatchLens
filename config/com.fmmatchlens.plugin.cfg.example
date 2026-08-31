@@ -13,3 +13,17 @@ Mode = release
 ## Root directory of Football Manager graphics packs and config.xml files.
 ## Replace <username> with your Windows account name.
 GraphicsPath = C:\Users\<username>\Documents\Sports Interactive\Football Manager 26\graphics
+
+[Archive]
+
+## None or Fast (independent zlib-wrapped Deflate chunks).
+Compression = Fast
+
+## Chunking and bounded background writer settings.
+## At 4 ticks per second, 2400 ticks is about 10 in-game minutes.
+## A chunk is submitted when it reaches ChunkTicks or MaxChunkLatencyMs,
+## whichever comes first.
+ChunkTicks = 2400
+## 60000 ms is a fallback for pauses or unusually slow tick production.
+MaxChunkLatencyMs = 60000
+QueueCapacity = 8
