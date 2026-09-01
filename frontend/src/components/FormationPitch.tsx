@@ -2,6 +2,11 @@ import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card"
 import { NativeTabs } from "@/components/uitripled/native-tabs-shadcnui"
 import { shortPlayerName } from "@/lib/player-name"
 import type { MatchPlayer, MatchSnapshot, PlayerTacticalAssignment, TeamSide } from "@/types/match"
@@ -64,25 +69,41 @@ export function FormationPitch({ match }: FormationPitchProps) {
             <PitchMarkings />
             <div className="pointer-events-none absolute inset-0">
               {entries.map(({ player, assignment, x, y }) => {
-                const roleLabel = [assignment.role, assignment.duty].filter(Boolean).join(" · ")
+                const roleNamespace = inPossession
+                  ? "inPossessionRoleNames"
+                  : "outOfPossessionRoleNames"
+                const roleName = t(`${roleNamespace}.${assignment.roleAbbreviation}`, {
+                  defaultValue: assignment.role,
+                })
+                const roleLabel = [roleName, assignment.duty].filter(Boolean).join(" · ")
                 return (
                   <div
                     key={`formation-${view}-${player.id}`}
-                    className="absolute -translate-x-1/2 -translate-y-1/2"
+                    className="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2"
                     style={{ left: `${x}%`, top: `${y}%` }}
-                    title={`${assignment.position} · ${roleLabel} · ${player.name}`}
                   >
-                    <div className="flex max-w-32 flex-col items-center text-center">
-                      <div
-                        className="flex size-7 items-center justify-center rounded-full border-2 border-background text-xs font-bold text-white shadow-sm"
-                        style={{ backgroundColor: teamColor }}
+                    <HoverCard>
+                      <HoverCardTrigger
+                        render={<div className="flex max-w-32 flex-col items-center text-center" />}
                       >
-                        {player.shirtNumber ?? "?"}
-                      </div>
-                      <span className="mt-0.5 max-w-32 truncate whitespace-nowrap rounded-sm bg-background/90 px-1 text-[9px] font-semibold leading-3 text-foreground shadow-sm">
-                        {assignment.roleAbbreviation} · {shortPlayerName(player.name)}
-                      </span>
-                    </div>
+                        <div
+                          className="flex size-7 items-center justify-center rounded-full border-2 border-background text-xs font-bold text-white shadow-sm"
+                          style={{ backgroundColor: teamColor }}
+                        >
+                          {player.shirtNumber ?? "?"}
+                        </div>
+                        <span className="mt-0.5 max-w-32 truncate whitespace-nowrap rounded-sm bg-background/90 px-1 text-[9px] font-semibold leading-3 text-foreground shadow-sm">
+                          {assignment.roleAbbreviation} · {shortPlayerName(player.name)}
+                        </span>
+                      </HoverCardTrigger>
+                      <HoverCardContent
+                        side="top"
+                        sideOffset={6}
+                        className="w-auto max-w-72 whitespace-nowrap px-2.5 py-1.5 font-medium"
+                      >
+                        {roleLabel}
+                      </HoverCardContent>
+                    </HoverCard>
                   </div>
                 )
               })}

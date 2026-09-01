@@ -16,6 +16,11 @@ import {
 } from "@/components/ui/drawer"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card"
 import { NativeTabs } from "@/components/uitripled/native-tabs-shadcnui"
 import {
   Tooltip,
@@ -416,7 +421,7 @@ export function SquadPanel({
     const positionDescription = showsFamiliarPosition
       ? positionLabel
       : player.inPossession
-        ? t(`roleNames.${player.inPossession.roleAbbreviation}`, {
+        ? t(`inPossessionRoleNames.${player.inPossession.roleAbbreviation}`, {
             defaultValue: player.inPossession.role,
           })
         : positionLabel
@@ -500,9 +505,9 @@ export function SquadPanel({
         </PlayerProfileHover>
 
         {/* Shirt number + position */}
-        <Tooltip>
-          <TooltipTrigger
-            render={<div className="flex min-w-0 cursor-help flex-col items-center justify-center overflow-hidden text-center" />}
+        <HoverCard>
+          <HoverCardTrigger
+            render={<div className="flex min-w-0 flex-col items-center justify-center overflow-hidden text-center" />}
           >
             <span
               className="flex h-[18px] items-center text-[14px] font-bold leading-[18px] tabular-nums"
@@ -514,30 +519,33 @@ export function SquadPanel({
               {player.shirtNumber ?? "-"}
             </span>
             <PositionTicker text={positionLabel} />
-          </TooltipTrigger>
-          <TooltipContent>{positionDescription}</TooltipContent>
-        </Tooltip>
+          </HoverCardTrigger>
+          <HoverCardContent
+            side="top"
+            sideOffset={6}
+            className="w-auto max-w-72 whitespace-nowrap px-2.5 py-1.5 font-medium"
+          >
+            {positionDescription}
+          </HoverCardContent>
+        </HoverCard>
 
         {/* Player name */}
-        <span
-          className="
-            min-w-0 truncate
-            text-sm font-medium
-            text-foreground/90
-            transition-colors
-            group-hover:text-foreground
-          "
-          title={player.name}
-        >
-          {player.uid == null ? (
+        <HoverCard>
+          <HoverCardTrigger
+            render={
+              <span className="min-w-0 truncate text-sm font-medium text-foreground/90 transition-colors group-hover:text-foreground" />
+            }
+          >
             <span className="block truncate leading-7">{displayName}</span>
-          ) : (
-            <Tooltip>
-              <TooltipTrigger render={<span className="block truncate leading-7" />}>{displayName}</TooltipTrigger>
-              <TooltipContent>{player.fullName ?? player.name}</TooltipContent>
-            </Tooltip>
-          )}
-        </span>
+          </HoverCardTrigger>
+          <HoverCardContent
+            side="top"
+            sideOffset={6}
+            className="w-auto max-w-72 whitespace-nowrap px-2.5 py-1.5 font-medium"
+          >
+            {player.fullName ?? player.name}
+          </HoverCardContent>
+        </HoverCard>
 
         {/* Match status */}
         <PlayerStatusStrip statuses={statuses} />
@@ -740,7 +748,7 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   return (
     <Tooltip onOpenChange={setOpen}>
       <TooltipTrigger
-        render={<div className="cursor-help" onPointerEnter={(event) => updateOffset(event.currentTarget)} />}
+        render={<div onPointerEnter={(event) => updateOffset(event.currentTarget)} />}
       >
         {children}
       </TooltipTrigger>
@@ -1348,14 +1356,18 @@ function PlayerStatsTable({
               {player.shirtNumber ?? "-"}
             </td>
             <td className="sticky left-11 z-20 max-w-32 border-b border-r bg-card px-2 py-2 font-medium">
-              {player.uid == null ? (
-                <div className="truncate leading-6" title={player.name}>{shortPlayerName(player.name)}</div>
-              ) : (
-                <Tooltip>
-                  <TooltipTrigger render={<div className="truncate leading-6" title={player.name} />}>{shortPlayerName(player.name)}</TooltipTrigger>
-                  <TooltipContent>{player.fullName ?? player.name}</TooltipContent>
-                </Tooltip>
-              )}
+              <HoverCard>
+                <HoverCardTrigger render={<div className="truncate leading-6" />}>
+                  {shortPlayerName(player.name)}
+                </HoverCardTrigger>
+                <HoverCardContent
+                  side="top"
+                  sideOffset={6}
+                  className="w-auto max-w-72 whitespace-nowrap px-2.5 py-1.5 font-medium"
+                >
+                  {player.fullName ?? player.name}
+                </HoverCardContent>
+              </HoverCard>
             </td>
             <td className="border-b border-r px-1.5 py-2 text-center">{squadRole(player)}</td>
             <td className="whitespace-nowrap border-b border-r px-1.5 py-2 text-center">
@@ -1486,8 +1498,8 @@ function PlayerStatusStrip({ statuses }: { statuses: PlayerStatus[] }) {
     >
       <div ref={trackRef} className="squad-status-strip-track absolute right-0 top-0 flex h-5 w-max items-center justify-end pr-0.5">
         {statuses.map((status, statusIndex) => (
-          <Tooltip key={status.key}>
-            <TooltipTrigger
+          <HoverCard key={status.key}>
+            <HoverCardTrigger
               render={
                 <button
                   type="button"
@@ -1507,14 +1519,18 @@ function PlayerStatusStrip({ statuses }: { statuses: PlayerStatus[] }) {
                   </span>
                 ))}
               </span>
-            </TooltipTrigger>
-            <TooltipContent>
+            </HoverCardTrigger>
+            <HoverCardContent
+              side="top"
+              sideOffset={6}
+              className="w-auto max-w-72 whitespace-nowrap px-2.5 py-1.5 font-medium"
+            >
               {status.label}
               {status.minutes?.length
                 ? ` ${status.minutes.map((minute) => `${minute}'`).join("、")}`
                 : ""}
-            </TooltipContent>
-          </Tooltip>
+            </HoverCardContent>
+          </HoverCard>
         ))}
       </div>
     </div>
