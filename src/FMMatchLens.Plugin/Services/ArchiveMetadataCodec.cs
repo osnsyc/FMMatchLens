@@ -327,6 +327,7 @@ internal static class ArchiveMetadataCodec
         writer.Write((byte)player.Team);
         WriteNullableInt(writer, player.ShirtNumber);
         WriteStringId(writer, player.Position, ids);
+        WritePositionFamiliarities(writer, player.PositionFamiliarities);
         WriteAssignment(writer, player.InPossession, ids);
         WriteAssignment(writer, player.OutOfPossession, ids);
         WriteStringId(writer, player.FirstName, ids);
@@ -346,6 +347,7 @@ internal static class ArchiveMetadataCodec
         var team = ReadTeamSide(reader);
         var shirt = ReadNullableInt(reader);
         var position = ReadStringId(reader, strings);
+        var positionFamiliarities = ReadPositionFamiliarities(reader);
         var inPossession = ReadAssignment(reader, strings);
         var outOfPossession = ReadAssignment(reader, strings);
         var first = ReadStringId(reader, strings);
@@ -355,7 +357,30 @@ internal static class ArchiveMetadataCodec
         var portrait = ReadStringId(reader, strings);
         var profile = ReadProfile(reader);
         var attributes = ReadAttributes(reader, strings);
-        return new RealtimePlayerMetadata(slot, playerId, uid, team, shirt, position, first, second, common, display, portrait, profile, attributes, inPossession, outOfPossession);
+        return new RealtimePlayerMetadata(slot, playerId, uid, team, shirt, position, first, second, common, display, portrait, profile, attributes, inPossession, outOfPossession, positionFamiliarities);
+    }
+
+    private static void WritePositionFamiliarities(
+        BinaryWriter writer,
+        IReadOnlyDictionary<string, int>? familiarities)
+    {
+        writer.Write(familiarities is not null);
+        if (familiarities is null) return;
+        foreach (var label in PlayerPositionFamiliarity.Labels)
+        {
+            writer.Write(checked((byte)familiarities.GetValueOrDefault(label)));
+        }
+    }
+
+    private static IReadOnlyDictionary<string, int>? ReadPositionFamiliarities(BinaryReader reader)
+    {
+        if (!reader.ReadBoolean()) return null;
+        var familiarities = new Dictionary<string, int>(PlayerPositionFamiliarity.Labels.Length, StringComparer.Ordinal);
+        foreach (var label in PlayerPositionFamiliarity.Labels)
+        {
+            familiarities[label] = reader.ReadByte();
+        }
+        return familiarities;
     }
 
     private static void WriteAssignment(BinaryWriter writer, PlayerTacticalAssignment? assignment, IReadOnlyDictionary<string, int> ids)

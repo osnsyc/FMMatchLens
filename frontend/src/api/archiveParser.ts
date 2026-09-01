@@ -9,7 +9,8 @@ import type {
   RealtimeTeamMetadata,
 } from "@/api/realtimeMatch"
 import type { ParsedLocalArchive } from "@/api/localArchive"
-import type { PlayerAttributes, PlayerProfile, PlayerTacticalAssignment, TeamSide } from "@/types/match"
+import type { PlayerAttributes, PlayerPositionFamiliarities, PlayerProfile, PlayerTacticalAssignment, TeamSide } from "@/types/match"
+import { playerPositionLabels } from "@/types/match"
 
 const magic = "FMLENS2\0"
 const supportedStructure = 2
@@ -445,7 +446,10 @@ function readTeamMetadata(reader: ArchiveBufferReader, strings: Array<string | u
   }
 }
 
-function readPlayerMetadata(reader: ArchiveBufferReader, strings: Array<string | undefined>): RealtimePlayerMetadata {
+function readPlayerMetadata(
+  reader: ArchiveBufferReader,
+  strings: Array<string | undefined>,
+): RealtimePlayerMetadata {
   const slot = reader.readVarUint()
   const playerId = reader.readVarInt()
   const uid = readNullableUint(reader)
@@ -453,6 +457,7 @@ function readPlayerMetadata(reader: ArchiveBufferReader, strings: Array<string |
   if (teamRaw > 1) throw new ArchiveError("元数据球队值无效")
   const shirtNumber = readNullableInt(reader)
   const position = readStringId(reader, strings)
+  const positionFamiliarities = readPositionFamiliarities(reader)
   const inPossession = readAssignment(reader, strings)
   const outOfPossession = readAssignment(reader, strings)
   const firstName = readStringId(reader, strings)
@@ -462,8 +467,13 @@ function readPlayerMetadata(reader: ArchiveBufferReader, strings: Array<string |
   const portraitPath = readStringId(reader, strings)
   const profile = readProfile(reader)
   const attributes = readAttributes(reader, strings)
-  return { slot, playerId, uid, team: teamRaw === 1 ? "away" : "home", shirtNumber, position, inPossession, outOfPossession,
+  return { slot, playerId, uid, team: teamRaw === 1 ? "away" : "home", shirtNumber, position, positionFamiliarities, inPossession, outOfPossession,
     firstName, secondName, commonName, displayName, portraitPath, profile, attributes }
+}
+
+function readPositionFamiliarities(reader: ArchiveBufferReader): PlayerPositionFamiliarities | undefined {
+  if (!reader.readBoolean()) return undefined
+  return Object.fromEntries(playerPositionLabels.map((label) => [label, reader.readByte()]))
 }
 
 function readAssignment(reader: ArchiveBufferReader, strings: Array<string | undefined>): PlayerTacticalAssignment | undefined {

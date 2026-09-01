@@ -11,6 +11,7 @@ import type {
   PlayerTacticalAssignment,
   PlayerAttributes,
   PlayerProfile,
+  PlayerPositionFamiliarities,
   TeamSide,
   TeamStats,
   TacticalEventPoint,
@@ -111,6 +112,7 @@ export type RealtimePlayerMetadata = {
   team: TeamSide
   shirtNumber?: number
   position?: string
+  positionFamiliarities?: PlayerPositionFamiliarities
   inPossession?: PlayerTacticalAssignment
   outOfPossession?: PlayerTacticalAssignment
   firstName?: string
@@ -1043,6 +1045,7 @@ function toPlayer(
     team: player.team,
     shirtNumber: metadata?.shirtNumber,
     position: metadata?.position,
+    positionFamiliarities: metadata?.positionFamiliarities,
     inPossession: metadata?.inPossession,
     outOfPossession: metadata?.outOfPossession,
     rating: player.rating > 0 ? player.rating : undefined,

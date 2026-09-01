@@ -26,9 +26,11 @@ import {
 import type {
   MatchEvent,
   MatchPlayer,
+  PlayerPositionFamiliarities,
   PlayerStats,
   TeamSide,
 } from "@/types/match"
+import { playerPositionLabels } from "@/types/match"
 import { shortPlayerName } from "@/lib/player-name"
 
 type SquadPanelProps = {
@@ -74,7 +76,110 @@ function initials(name: string) {
 }
 
 function squadRole(player: MatchPlayer) {
+  if (!player.isStarter) {
+    return familiarPosition(player)
+  }
+
   return player.inPossession?.roleAbbreviation ?? "-"
+}
+
+function familiarPosition(player: MatchPlayer) {
+  return formatPositionFamiliarities(player.positionFamiliarities) ?? player.position ?? "-"
+}
+
+function formatPositionFamiliarities(familiarities?: PlayerPositionFamiliarities) {
+  if (!familiarities) return undefined
+
+  const positions = new Set(
+    playerPositionLabels.filter((position) => (familiarities[position] ?? 0) >= 15)
+  )
+  if (positions.size === 0) return undefined
+
+  const parts: string[] = []
+  if (positions.has("GK")) parts.push("GK")
+  if (positions.has("SW")) parts.push("SW")
+
+  const defenderSides = positionSides(positions, "DR", "DL", "DC")
+  const wingBackSides = positionSides(positions, "WBR", "WBL")
+  if (defenderSides.size > 0 && setsEqual(defenderSides, wingBackSides)) {
+    parts.push(`D/WB(${formatPositionSides(defenderSides)})`)
+  } else {
+    addWidePosition(parts, "D", defenderSides)
+    addWidePosition(parts, "WB", wingBackSides)
+  }
+
+  const midfieldSides = positionSides(positions, "MR", "ML", "MC")
+  if (positions.has("DM") && setsEqual(midfieldSides, new Set(["C"]))) {
+    parts.push("DM/MC")
+    midfieldSides.clear()
+  } else if (positions.has("DM")) {
+    parts.push("DM")
+  }
+
+  addWidePosition(parts, "M", midfieldSides)
+  addWidePosition(parts, "AM", positionSides(positions, "AMR", "AML", "AMC"))
+  if (positions.has("ST")) parts.push("ST")
+  return parts.join(",")
+}
+
+function positionSides(
+  positions: ReadonlySet<string>,
+  right: string,
+  left: string,
+  centre?: string
+) {
+  const sides = new Set<string>()
+  if (positions.has(right)) sides.add("R")
+  if (positions.has(left)) sides.add("L")
+  if (centre && positions.has(centre)) sides.add("C")
+  return sides
+}
+
+function setsEqual(left: ReadonlySet<string>, right: ReadonlySet<string>) {
+  return left.size === right.size && [...left].every((value) => right.has(value))
+}
+
+function addWidePosition(parts: string[], line: string, sides: ReadonlySet<string>) {
+  if (sides.size > 0) parts.push(`${line}(${formatPositionSides(sides)})`)
+}
+
+function formatPositionSides(sides: ReadonlySet<string>) {
+  return ["R", "L", "C"].filter((side) => sides.has(side)).join("")
+}
+
+function PositionTicker({ text }: { text: string }) {
+  const viewportRef = useRef<HTMLSpanElement | null>(null)
+  const trackRef = useRef<HTMLSpanElement | null>(null)
+  const [overflow, setOverflow] = useState(0)
+
+  useEffect(() => {
+    const viewport = viewportRef.current
+    const track = trackRef.current
+    if (!viewport || !track) return
+
+    const measure = () => setOverflow(Math.max(0, track.scrollWidth - viewport.clientWidth))
+    const observer = new ResizeObserver(measure)
+    observer.observe(viewport)
+    observer.observe(track)
+    measure()
+    return () => observer.disconnect()
+  }, [text])
+
+  return (
+    <span
+      ref={viewportRef}
+      className="squad-position-ticker relative block h-2.5 w-full min-w-0 overflow-hidden"
+      data-overflow={overflow > 0 ? "true" : "false"}
+      style={{ "--squad-position-overflow": `${overflow}px` } as React.CSSProperties}
+    >
+      <span
+        ref={trackRef}
+        className="squad-position-ticker-track absolute left-0 top-0 block w-max text-[8px] font-medium uppercase leading-2.5 tracking-wide text-muted-foreground"
+      >
+        {text}
+      </span>
+    </span>
+  )
 }
 
 function ratingClass(
@@ -306,18 +411,27 @@ export function SquadPanel({
     const statuses =
       statusesFor(player)
     const displayName = shortPlayerName(player.name)
+    const positionLabel = squadRole(player)
+    const showsFamiliarPosition = !player.isStarter
+    const positionDescription = showsFamiliarPosition
+      ? positionLabel
+      : player.inPossession
+        ? t(`roleNames.${player.inPossession.roleAbbreviation}`, {
+            defaultValue: player.inPossession.role,
+          })
+        : positionLabel
 
     return (
       <li
         key={player.id}
         className={`
           group relative grid min-w-0
-          grid-cols-[1.75rem_2rem_minmax(3.5rem,1fr)_minmax(0,3.25rem)_2.25rem]
+          grid-cols-[1.75rem_1.5rem_minmax(3.5rem,1fr)_minmax(0,3.25rem)_2.25rem]
           items-center gap-1 whitespace-nowrap rounded-md
           px-1.5 py-1.5
           transition-colors
           hover:bg-muted/45
-          sm:grid-cols-[2rem_2.25rem_minmax(4.5rem,1fr)_minmax(0,4rem)_2.5rem]
+          sm:grid-cols-[2rem_1.75rem_minmax(4.5rem,1fr)_minmax(0,4rem)_2.5rem]
           sm:gap-1.5 sm:px-2
           ${
             !player.isOnPitch
@@ -386,23 +500,23 @@ export function SquadPanel({
         </PlayerProfileHover>
 
         {/* Shirt number + position */}
-        <div className="flex min-w-0 flex-col items-center justify-center overflow-hidden text-center leading-tight">
-          <span
-            className="truncate text-sm font-bold tabular-nums"
-            style={{
-              color:
-                resolvedTeamColor,
-              textShadow: `0 0 8px ${resolvedTeamColor}30`,
-            }}
+        <Tooltip>
+          <TooltipTrigger
+            render={<div className="flex min-w-0 cursor-help flex-col items-center justify-center overflow-hidden text-center" />}
           >
-            {player.shirtNumber ??
-              "-"}
-          </span>
-
-          <span className="truncate text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
-            {squadRole(player)}
-          </span>
-        </div>
+            <span
+              className="flex h-[18px] items-center text-[14px] font-bold leading-[18px] tabular-nums"
+              style={{
+                color: resolvedTeamColor,
+                textShadow: `0 0 8px ${resolvedTeamColor}30`,
+              }}
+            >
+              {player.shirtNumber ?? "-"}
+            </span>
+            <PositionTicker text={positionLabel} />
+          </TooltipTrigger>
+          <TooltipContent>{positionDescription}</TooltipContent>
+        </Tooltip>
 
         {/* Player name */}
         <span
@@ -605,7 +719,7 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   const { t } = useTranslation()
   const [sideOffset, setSideOffset] = useState(8)
   const [open, setOpen] = useState(false)
-  const isGoalkeeper = Boolean((player.inPossession?.position ?? player.position)?.includes("GK"))
+  const isGoalkeeper = (player.positionFamiliarities?.GK ?? 0) >= 15 || player.position === "GK"
   const attributeColumns = player.attributes
     ? buildAttributeColumns(isGoalkeeper)
     : []
@@ -649,7 +763,7 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
               <CardTitle className="truncate text-lg font-bold">{player.name}</CardTitle>
               <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                 <span className="font-semibold" style={{ color: teamColor }}>#{player.shirtNumber ?? "-"}</span>
-                <span>{squadRole(player)}</span>
+                <span>{familiarPosition(player)}</span>
                 {player.uid != null && <span>UID {player.uid}</span>}
               </div>
             </div>
@@ -1368,14 +1482,14 @@ function PlayerStatusStrip({ statuses }: { statuses: PlayerStatus[] }) {
       data-overflow={overflow > 0 ? "true" : "false"}
       style={{ "--squad-status-overflow": `${overflow}px` } as React.CSSProperties}
     >
-      <div ref={trackRef} className="squad-status-strip-track absolute right-0 top-0 flex h-5 w-max items-center justify-end gap-1 pr-0.5">
-        {statuses.map((status) => (
+      <div ref={trackRef} className="squad-status-strip-track absolute right-0 top-0 flex h-5 w-max items-center justify-end pr-0.5">
+        {statuses.map((status, statusIndex) => (
           <Tooltip key={status.key}>
             <TooltipTrigger
               render={
                 <button
                   type="button"
-                  className="flex h-5 min-w-4 shrink-0 items-center justify-center outline-none transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring"
+                  className={`relative flex h-5 min-w-4 shrink-0 items-center justify-center outline-none transition-transform hover:z-10 hover:scale-110 focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-ring ${statusIndex === 0 ? "" : "-ml-1.5"}`}
                   aria-label={status.label}
                 />
               }

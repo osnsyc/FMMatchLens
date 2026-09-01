@@ -1,5 +1,9 @@
 export type TeamSide = "home" | "away"
 
+export const playerPositionLabels = ["GK", "SW", "DL", "DC", "DR", "DM", "ML", "MC", "MR", "AML", "AMC", "AMR", "ST", "WBL", "WBR"] as const
+export type PlayerPosition = (typeof playerPositionLabels)[number]
+export type PlayerPositionFamiliarities = Partial<Record<PlayerPosition, number>>
+
 export type MatchEventType =
   | "goal"
   | "assist_candidate"
@@ -183,6 +187,7 @@ export type MatchPlayer = {
   team: TeamSide
   shirtNumber?: number
   position?: string
+  positionFamiliarities?: PlayerPositionFamiliarities
   inPossession?: PlayerTacticalAssignment
   outOfPossession?: PlayerTacticalAssignment
   rating?: number

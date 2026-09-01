@@ -324,6 +324,7 @@ internal sealed class RealtimeMatchTimeline
                 Team = player.Team,
                 ShirtNumber = player.ShirtNumber ?? existing.ShirtNumber,
                 Position = player.Position ?? existing.Position,
+                PositionFamiliarities = player.PositionFamiliarities ?? existing.PositionFamiliarities,
                 FirstName = player.FirstName ?? existing.FirstName,
                 SecondName = player.SecondName ?? existing.SecondName,
                 CommonName = player.CommonName ?? existing.CommonName,
@@ -451,7 +452,9 @@ internal sealed class RealtimeMatchTimeline
         {
             var a = left.Players[index];
             var b = right.Players[index];
-            if (a with { Attributes = null } != b with { Attributes = null } ||
+            if (a with { Attributes = null, PositionFamiliarities = null } !=
+                    b with { Attributes = null, PositionFamiliarities = null } ||
+                !PositionFamiliaritiesEqual(a.PositionFamiliarities, b.PositionFamiliarities) ||
                 !AttributesEqual(a.Attributes, b.Attributes))
             {
                 return false;
@@ -460,6 +463,12 @@ internal sealed class RealtimeMatchTimeline
 
         return true;
     }
+
+    private static bool PositionFamiliaritiesEqual(
+        IReadOnlyDictionary<string, int>? left,
+        IReadOnlyDictionary<string, int>? right) =>
+        ReferenceEquals(left, right) ||
+        left is not null && right is not null && AttributeGroupEqual(left, right);
 
     private static bool AttributesEqual(PlayerAttributes? left, PlayerAttributes? right) =>
         ReferenceEquals(left, right) ||

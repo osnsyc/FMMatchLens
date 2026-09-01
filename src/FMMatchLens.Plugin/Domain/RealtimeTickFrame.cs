@@ -145,7 +145,16 @@ internal readonly record struct RealtimePlayerMetadata(
     PlayerProfile? Profile,
     PlayerAttributes? Attributes,
     PlayerTacticalAssignment? InPossession,
-    PlayerTacticalAssignment? OutOfPossession);
+    PlayerTacticalAssignment? OutOfPossession,
+    IReadOnlyDictionary<string, int>? PositionFamiliarities = null);
+
+internal static class PlayerPositionFamiliarity
+{
+    public static readonly string[] Labels =
+    {
+        "GK", "SW", "DL", "DC", "DR", "DM", "ML", "MC", "MR", "AML", "AMC", "AMR", "ST", "WBL", "WBR"
+    };
+}
 
 internal readonly record struct PlayerTacticalAssignment(
     uint PositionMask,

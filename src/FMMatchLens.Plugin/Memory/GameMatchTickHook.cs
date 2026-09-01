@@ -763,13 +763,15 @@ internal sealed class GameMatchTickHook : IDisposable
                 displayName = $"Player {playerId}";
             }
 
+            var positionFamiliarities = ReadPlayerPositionFamiliarities(person);
+
             metadata.Add(new RealtimePlayerMetadata(
                 slot,
                 playerId,
                 playerUid,
                 team,
                 shirtNumber,
-                ReadPlayerPosition(person),
+                FormatPlayerPosition(positionFamiliarities),
                 firstName,
                 secondName,
                 commonName,
@@ -778,7 +780,8 @@ internal sealed class GameMatchTickHook : IDisposable
                 ReadPlayerProfile(person, fullContract),
                 ReadPlayerAttributes(person),
                 ReadTacticalAssignment(matchPlayer, inPossession: true),
-                ReadTacticalAssignment(matchPlayer, inPossession: false)));
+                ReadTacticalAssignment(matchPlayer, inPossession: false),
+                positionFamiliarities));
         }
 
         if (metadata.Count > 0)
@@ -822,7 +825,7 @@ internal sealed class GameMatchTickHook : IDisposable
             null);
     }
 
-    private string? ReadPlayerPosition(nint person)
+    private IReadOnlyDictionary<string, int>? ReadPlayerPositionFamiliarities(nint person)
     {
         if (person == default)
         {
@@ -830,19 +833,32 @@ internal sealed class GameMatchTickHook : IDisposable
         }
 
         var actualPlayer = person + Offsets.Person.ActualPlayerDelta;
-        var labels = new[]
+        var familiarities = new Dictionary<string, int>(PlayerPositionFamiliarity.Labels.Length, StringComparer.Ordinal);
+        for (var index = 0; index < PlayerPositionFamiliarity.Labels.Length; index++)
         {
-            "GK", "SW", "DL", "DC", "DR", "DM", "ML", "MC", "MR", "AML", "AMC", "AMR", "ST", "WBL", "WBR"
-        };
+            if (_memoryReader.TryReadByte(actualPlayer + Offsets.ActualPlayer.PositionGk + index, out var value))
+            {
+                familiarities[PlayerPositionFamiliarity.Labels[index]] = value;
+            }
+        }
+
+        return familiarities.Count > 0 ? familiarities : null;
+    }
+
+    private static string? FormatPlayerPosition(IReadOnlyDictionary<string, int>? familiarities)
+    {
+        if (familiarities is null || familiarities.Count == 0) return null;
+
         var bestValue = 0;
         string? bestLabel = null;
-        for (var index = 0; index < labels.Length; index++)
+        foreach (var label in PlayerPositionFamiliarity.Labels)
         {
-            if (_memoryReader.TryReadByte(actualPlayer + Offsets.ActualPlayer.PositionGk + index, out var value) &&
-                value > bestValue)
+            if (!familiarities.TryGetValue(label, out var value)) continue;
+
+            if (value > bestValue)
             {
                 bestValue = value;
-                bestLabel = labels[index];
+                bestLabel = label;
             }
         }
 

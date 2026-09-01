@@ -1035,8 +1035,31 @@
     animation-play-state: paused;
   }
 
+  @keyframes squad-position-pan {
+    0%, 18%, 100% {
+      transform: translateX(0);
+    }
+
+    48%, 70% {
+      transform: translateX(calc(-1 * var(--squad-position-overflow)));
+    }
+  }
+
+  .squad-position-ticker[data-overflow="false"] .squad-position-ticker-track {
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .squad-position-ticker[data-overflow="true"] .squad-position-ticker-track {
+    animation: squad-position-pan 6s ease-in-out infinite;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .squad-status-strip[data-overflow="true"] .squad-status-strip-track {
+      animation: none;
+    }
+
+    .squad-position-ticker[data-overflow="true"] .squad-position-ticker-track {
       animation: none;
     }
   }
