@@ -82,6 +82,8 @@ internal readonly record struct PlayerTickData(
     int SubbedOffMinute,
     int YellowCards,
     int RedCards,
+    int OverallPhysicalCondition,
+    int MatchSharpness,
     int Goals,
     int Assists,
     float Xg,

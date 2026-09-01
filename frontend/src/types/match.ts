@@ -120,6 +120,8 @@ export type PlayerStats = {
   clearances?: number
   shotsFaced?: number
   distanceM?: number
+  overallPhysicalCondition?: number
+  matchSharpness?: number
 }
 
 export type PlayerProfile = {

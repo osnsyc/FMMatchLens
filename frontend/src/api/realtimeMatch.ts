@@ -1096,6 +1096,8 @@ function toPlayer(
       clearances: player.clearances,
       shotsFaced: player.shotsFaced,
       distanceM: player.distanceM,
+      overallPhysicalCondition: player.overallPhysicalCondition,
+      matchSharpness: player.matchSharpness,
     },
   }
 }

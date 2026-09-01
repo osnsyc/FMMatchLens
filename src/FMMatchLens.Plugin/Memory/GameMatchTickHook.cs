@@ -614,6 +614,8 @@ internal sealed class GameMatchTickHook : IDisposable
             SubbedOffMinute: subbedOff,
             YellowCards: ReadByteDirect(stats + Offsets.PlayerStats.YellowCardsUnconfirmed),
             RedCards: ReadByteDirect(stats + Offsets.PlayerStats.RedCardsUnconfirmed),
+            OverallPhysicalCondition: ReadByteDirect(stats + Offsets.PlayerStats.OverallPhysicalCondition),
+            MatchSharpness: ReadByteDirect(stats + Offsets.PlayerStats.MatchSharpness),
             Goals: ReadByteDirect(stats + Offsets.PlayerStats.Goals),
             Assists: ReadByteDirect(stats + Offsets.PlayerStats.Assists),
             Xg: ReadFloatDirect(stats + Offsets.PlayerStats.Xg),

@@ -9,7 +9,7 @@ internal static class ArchiveFrameCodec
     private const byte RosterResetFlag = 1;
     private const byte PitchChangedFlag = 2;
     private const ulong AllTeamFields = (1UL << 23) - 1;
-    private const ulong AllPlayerFields = (1UL << 37) - 1;
+    private const ulong AllPlayerFields = (1UL << 39) - 1;
     private const int MaxFramesPerChunk = 4_096;
 
     public static byte[] Encode(IReadOnlyList<RealtimeTickFrame> frames)
@@ -92,7 +92,8 @@ internal static class ArchiveFrameCodec
         if (expectedFrameCount is < 1 or > MaxFramesPerChunk) throw new ArchiveFormatException("invalid_count", "Chunk frame count is invalid.");
         using var stream = new MemoryStream(payload.ToArray(), writable: false);
         using var reader = new BinaryReader(stream, Encoding.UTF8);
-        if (reader.ReadByte() != PayloadStructure) throw new ArchiveFormatException("unsupported_payload_structure", "The chunk payload structure is not supported.");
+        if (reader.ReadByte() != PayloadStructure)
+            throw new ArchiveFormatException("unsupported_payload_structure", "The chunk payload structure is not supported.");
         var frames = new RealtimeTickFrame[expectedFrameCount];
         RealtimeTickFrame? previous = null;
         for (var frameIndex = 0; frameIndex < frames.Length; frameIndex++)
@@ -276,6 +277,7 @@ internal static class ArchiveFrameCodec
         Mark(30, left.ThrowIns != right.ThrowIns); Mark(31, left.Corners != right.Corners); Mark(32, left.DefensiveFreeKicks != right.DefensiveFreeKicks);
         Mark(33, left.AttackingFreeKicks != right.AttackingFreeKicks); Mark(34, left.Clearances != right.Clearances); Mark(35, left.ShotsFaced != right.ShotsFaced);
         Mark(36, left.DistanceM != right.DistanceM);
+        Mark(37, left.OverallPhysicalCondition != right.OverallPhysicalCondition); Mark(38, left.MatchSharpness != right.MatchSharpness);
         return mask;
         void Mark(int bit, bool changed) { if (changed) mask |= 1UL << bit; }
     }
@@ -290,6 +292,7 @@ internal static class ArchiveFrameCodec
         Int(26, value.KeyTackles); Int(27, value.Aerials); Int(28, value.AerialsWon); Int(29, value.Interceptions); Int(30, value.ThrowIns);
         Int(31, value.Corners); Int(32, value.DefensiveFreeKicks); Int(33, value.AttackingFreeKicks); Int(34, value.Clearances); Int(35, value.ShotsFaced);
         Float(36, value.DistanceM);
+        Int(37, value.OverallPhysicalCondition); Int(38, value.MatchSharpness);
         void Int(int bit, int item) { if ((mask & (1UL << bit)) != 0) ArchiveBinary.WriteVarInt64(writer, item); }
         void Float(int bit, float item)
         {
@@ -318,7 +321,8 @@ internal static class ArchiveFrameCodec
             Aerials = Int(27, prior.Aerials), AerialsWon = Int(28, prior.AerialsWon), Interceptions = Int(29, prior.Interceptions),
             ThrowIns = Int(30, prior.ThrowIns), Corners = Int(31, prior.Corners), DefensiveFreeKicks = Int(32, prior.DefensiveFreeKicks),
             AttackingFreeKicks = Int(33, prior.AttackingFreeKicks), Clearances = Int(34, prior.Clearances), ShotsFaced = Int(35, prior.ShotsFaced),
-            DistanceM = Float(36, prior.DistanceM)
+            DistanceM = Float(36, prior.DistanceM), OverallPhysicalCondition = Int(37, prior.OverallPhysicalCondition),
+            MatchSharpness = Int(38, prior.MatchSharpness)
         };
     }
 

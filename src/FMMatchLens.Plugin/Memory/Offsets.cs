@@ -284,6 +284,8 @@ internal static class Offsets
         public const int EventTimestamp = 0x78;
         public const int RatingTimes100 = 0x82;
         public const int TeamSideUnconfirmed = 0x87;
+        public const int OverallPhysicalCondition = 0x89;
+        public const int MatchSharpness = 0x8A;
         public const int Goals = 0x8B;
         public const int YellowCardsUnconfirmed = 0x8E;
         public const int RedCardsUnconfirmed = 0x8F;

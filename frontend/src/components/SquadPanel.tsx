@@ -770,8 +770,8 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 self-end p-3 pt-0 text-[11px]">
               <ProfileFact label={t("playerProfile.weeklyWage")} value={formatWage(player.profile?.weeklyWage)} />
               <ProfileFact label={t("playerProfile.height")} value={player.profile?.heightCm ? `${player.profile.heightCm} cm` : "-"} />
-              <ProfileFact label={t("playerProfile.condition")} value={formatProfileLevel(player.profile?.condition)} />
-              <ProfileFact label={t("playerProfile.morale")} value={formatProfileLevel(player.profile?.morale)} />
+              <ProfileFact label={t("playerProfile.overallPhysicalCondition")} value={formatProfileLevel(player.stats.overallPhysicalCondition)} />
+              <ProfileFact label={t("playerProfile.matchSharpness")} value={formatProfileLevel(player.stats.matchSharpness)} />
             </div>
           </CardHeader>
 
@@ -823,7 +823,9 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   previous.player.inPossession === next.player.inPossession &&
   previous.player.portraitUrl === next.player.portraitUrl &&
   previous.player.profile === next.player.profile &&
-  previous.player.attributes === next.player.attributes
+  previous.player.attributes === next.player.attributes &&
+  previous.player.stats.overallPhysicalCondition === next.player.stats.overallPhysicalCondition &&
+  previous.player.stats.matchSharpness === next.player.stats.matchSharpness
 )
 
 function ProfileFact({ label, value }: { label: string; value: string }) {

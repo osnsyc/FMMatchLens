@@ -144,8 +144,8 @@ const resources = {
       playerProfile: {
         weeklyWage: "周薪",
         height: "身高",
-        condition: "状态",
-        morale: "士气",
+        overallPhysicalCondition: "体力",
+        matchSharpness: "比赛状态",
         noAttributes: "暂无可用的球员能力数据",
         attributeAnalysis: "属性分析",
         radarLabel: "球员属性八角图",
@@ -479,8 +479,8 @@ const resources = {
       playerProfile: {
         weeklyWage: "Weekly Wage",
         height: "Height",
-        condition: "Condition",
-        morale: "Morale",
+        overallPhysicalCondition: "Overall Physical Condition",
+        matchSharpness: "Match Sharpness",
         noAttributes: "Player attributes are not available",
         attributeAnalysis: "Attribute Analysis",
         radarLabel: "Player attribute radar",

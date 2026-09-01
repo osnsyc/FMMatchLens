@@ -24,7 +24,7 @@ const blockStructure = 1
 const maxRecordBytes = 4 * 1024 * 1024
 const maxChunkBytes = 16 * 1024 * 1024
 const allTeamFields = (1n << 23n) - 1n
-const allPlayerFields = (1n << 37n) - 1n
+const allPlayerFields = (1n << 39n) - 1n
 
 type ArchiveHeader = {
   matchId: string
@@ -215,7 +215,7 @@ async function decompressBlock(block: BlockReference) {
 
 function readFrames(payload: Uint8Array, matchId: string, frameCount: number, startTick: number, endTick: number) {
   const reader = new ArchiveBufferReader(payload)
-  if (reader.readByte() !== 1) throw new ArchiveError("不支持的 帧载荷版本")
+  if (reader.readByte() !== 1) throw new ArchiveError("不支持的帧载荷版本")
   const frames: RealtimeFrame[] = []
   let previous: RealtimeFrame | undefined
   for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
@@ -332,6 +332,7 @@ function readPlayerFields(reader: ArchiveBufferReader, prior: RealtimePlayer, ma
     [22, "passesCompleted"], [23, "keyPasses"], [24, "tacklesAttempted"], [25, "tacklesWon"], [26, "keyTackles"],
     [27, "aerials"], [28, "aerialsWon"], [29, "interceptions"], [30, "throwIns"], [31, "corners"],
     [32, "defensiveFreeKicks"], [33, "attackingFreeKicks"], [34, "clearances"], [35, "shotsFaced"],
+    [37, "overallPhysicalCondition"], [38, "matchSharpness"],
   ]
   for (const [bit, field] of statFields) if (has(bit)) Object.assign(result, { [field]: reader.readVarInt() })
   if (has(36)) result.distanceM = reader.readFloatXor(result.distanceM ?? 0)
