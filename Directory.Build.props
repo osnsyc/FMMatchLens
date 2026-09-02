@@ -2,7 +2,7 @@
   <PropertyGroup>
     <!-- Repository-wide metadata: update values here instead of hard-coding them in source files. -->
     <ProductName>FMMatchLens</ProductName>
-    <ProjectVersion>0.1.1</ProjectVersion>
+    <ProjectVersion>0.2.0</ProjectVersion>
     <PluginId>com.fmmatchlens.plugin</PluginId>
     <GameName>Football Manager</GameName>
     <GameVersion>26.x</GameVersion>
