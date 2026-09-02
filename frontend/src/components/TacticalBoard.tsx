@@ -1,12 +1,20 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { ArrowBigLeftDashIcon, ArrowBigRightDashIcon } from "@hugeicons/core-free-icons"
+import { HugeiconsIcon } from "@hugeicons/react"
 
 import {
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Toggle } from "@/components/ui/toggle"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Menubar,
   MenubarCheckboxItem,
@@ -28,6 +36,7 @@ import {
 import type {
   MatchPlayer,
   MatchSnapshot,
+  TacticalEventPoint,
   TeamSide,
 } from "@/types/match"
 
@@ -105,6 +114,14 @@ type MapPoint = {
     team: TeamSide
     metric: DataMetric
   }
+}
+
+type HorizontalZone = 0 | 1 | 2
+
+type LaneShare = {
+  zone: HorizontalZone
+  count: number
+  percentage: number
 }
 
 /* =========================================================
@@ -234,6 +251,11 @@ export function TacticalBoard({
   ] = useState(true)
 
   const [
+    showAttackFocus,
+    setShowAttackFocus,
+  ] = useState(true)
+
+  const [
     selectedMetrics,
     setSelectedMetrics,
   ] = useState<
@@ -254,6 +276,11 @@ export function TacticalBoard({
 
   const selectedMetricCount =
     selectedMetricList.length
+
+  const momentumLaneShares = useMemo(
+    () => calculateMomentumLaneShares(match.tacticalEvents),
+    [match.tacticalEvents]
+  )
 
   const points =
     useMemo<
@@ -518,16 +545,37 @@ export function TacticalBoard({
             )}
           </Menubar>
 
-          <Toggle
-            variant="outline"
-            size="sm"
-            pressed={showNumbers}
-            onPressedChange={setShowNumbers}
-            aria-label={t("dataMap.showNumbers")}
-            className="shrink-0 px-2 text-[10px] aria-pressed:border-primary/35 aria-pressed:bg-primary/15 aria-pressed:text-foreground"
-          >
-            {t("dataMap.showNumbers")}
-          </Toggle>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="px-2 text-[10px]"
+                />
+              }
+            >
+              {t("dataMap.displaySettings")}
+              <span className="ml-1 text-[9px] tabular-nums text-primary">
+                {Number(showNumbers) + Number(showAttackFocus)}
+              </span>
+            </DropdownMenuTrigger>
+
+            <DropdownMenuContent align="end" className="z-[100] min-w-36">
+              <DropdownMenuCheckboxItem
+                checked={showNumbers}
+                onCheckedChange={(checked) => setShowNumbers(checked === true)}
+              >
+                {t("dataMap.showNumbers")}
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={showAttackFocus}
+                onCheckedChange={(checked) => setShowAttackFocus(checked === true)}
+              >
+                {t("dataMap.attackFocus")}
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </CardHeader>
 
         {/* =================================================
@@ -552,6 +600,44 @@ export function TacticalBoard({
               <div className="pointer-events-none absolute inset-0 bg-primary/[0.025]" />
 
               <PitchSvg />
+
+              {/* The native momentum table only weights events in each
+                  team's attacking half (vertical zones 3–5). Show the raw
+                  event-count split across its relative left/centre/right
+                  thirds; deliberately do not multiply by momentum weight. */}
+              {showAttackFocus && (
+              <div className="pointer-events-none absolute inset-0 z-[5]" aria-hidden="true">
+                <div className="absolute inset-x-0 top-1/3 border-t-2 border-dashed border-foreground/15" />
+                <div className="absolute inset-x-0 top-2/3 border-t-2 border-dashed border-foreground/15" />
+
+                {(["away", "home"] as const).flatMap((team) => {
+                  return momentumLaneShares[team].map((lane) => {
+                    const relativeTop = ((lane.zone + 0.5) / 3) * 100
+                    const top = team === "home" ? relativeTop : 100 - relativeTop
+
+                    return (
+                      <div
+                        key={`${team}-momentum-lane-${lane.zone}`}
+                        className="absolute h-1/4 w-[22%] -translate-x-1/2 -translate-y-1/2"
+                        style={{
+                          left: team === "home" ? "60%" : "40%",
+                          top: `${top}%`,
+                        }}
+                      >
+                        <HugeiconsIcon
+                          icon={team === "home" ? ArrowBigRightDashIcon : ArrowBigLeftDashIcon}
+                          strokeWidth={0.5}
+                          className="size-full text-foreground/[0.10]"
+                        />
+                        <span className="absolute inset-0 flex items-center justify-center text-[clamp(11px,2cqw,18px)] font-bold tabular-nums text-foreground/55">
+                          {lane.percentage}%
+                        </span>
+                      </div>
+                    )
+                  })
+                })}
+              </div>
+              )}
 
               {/* ===========================================
                   Data points
@@ -789,6 +875,70 @@ export function TacticalBoard({
 function formatMatchTick(tick: number) {
   const seconds = Math.floor(Math.max(0, tick) / 4)
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
+}
+
+function calculateMomentumLaneShares(events: TacticalEventPoint[]): Record<TeamSide, LaneShare[]> {
+  const counts: Record<TeamSide, [number, number, number]> = {
+    home: [0, 0, 0],
+    away: [0, 0, 0],
+  }
+
+  for (const event of events) {
+    const zone = weightedMomentumHorizontalZone(event)
+    if (zone == null) continue
+    counts[event.team][zone] += 1
+  }
+
+  return {
+    home: buildLaneShares(counts.home),
+    away: buildLaneShares(counts.away),
+  }
+}
+
+function weightedMomentumHorizontalZone(event: TacticalEventPoint): HorizontalZone | undefined {
+  if (!Number.isFinite(event.x) || !Number.isFinite(event.y)) return undefined
+
+  const reverseDirection = (event.flags & 0x100) !== 0
+  const rotatedForDisplay = event.team === "home" ? !reverseDirection : reverseDirection
+  const nativeLongitudinal = rotatedForDisplay ? 100 - event.x : event.x
+  const nativeLateral = rotatedForDisplay ? 100 - event.y : event.y
+  const relativeLongitudinal = reverseDirection ? 100 - nativeLongitudinal : nativeLongitudinal
+  const relativeLateral = reverseDirection ? 100 - nativeLateral : nativeLateral
+
+  // Normalized relativeLongitudinal < 50 is native vertical zone 3, 4 or 5.
+  // Events outside those zones have zero momentum weight and are not counted.
+  if (relativeLongitudinal >= 50) return undefined
+  if (relativeLateral > 200 / 3) return 0
+  if (relativeLateral > 100 / 3) return 1
+  return 2
+}
+
+function buildLaneShares(counts: [number, number, number]): LaneShare[] {
+  const total = counts[0] + counts[1] + counts[2]
+  if (total === 0) {
+    return counts.map((count, zone) => ({
+      zone: zone as HorizontalZone,
+      count,
+      percentage: 0,
+    }))
+  }
+
+  const exact = counts.map((count) => (count / total) * 100)
+  const percentages = exact.map(Math.floor)
+  const remainder = 100 - percentages.reduce((sum, value) => sum + value, 0)
+  const remainderOrder = exact
+    .map((value, zone) => ({ zone, fraction: value - Math.floor(value) }))
+    .sort((left, right) => right.fraction - left.fraction || left.zone - right.zone)
+
+  for (let index = 0; index < remainder; index += 1) {
+    percentages[remainderOrder[index].zone] += 1
+  }
+
+  return counts.map((count, zone) => ({
+    zone: zone as HorizontalZone,
+    count,
+    percentage: percentages[zone],
+  }))
 }
 
 /* =========================================================
