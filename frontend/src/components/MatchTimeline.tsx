@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { ArrowDataTransferHorizontalIcon } from "@hugeicons/core-free-icons"
+import { HugeiconsIcon } from "@hugeicons/react"
 
 import {
   buildMatchEvents,
@@ -585,10 +587,11 @@ function TimelineDetailIcon({ event, row }: { event: TimelineEvent; row: "primar
 
   if (event.type === "substitution") {
     return (
-      <span
+      <HugeiconsIcon
+        icon={ArrowDataTransferHorizontalIcon}
+        strokeWidth={3}
         aria-hidden="true"
-        className={`size-3.5 shrink-0 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] ${row === "primary" ? "text-emerald-400" : "text-rose-400"}`}
-        style={{ WebkitMaskImage: "url(./change.svg)", maskImage: "url(./change.svg)" }}
+        className={`size-3.5 shrink-0 ${row === "primary" ? "text-emerald-400" : "text-rose-400"}`}
       />
     )
   }
@@ -608,10 +611,11 @@ function EventIcon({ event, color }: { event: TimelineEvent; color: string }) {
 
   if (event.type === "substitution") {
     return (
-      <span
+      <HugeiconsIcon
+        icon={ArrowDataTransferHorizontalIcon}
+        strokeWidth={3}
         aria-hidden="true"
-        className="size-4 bg-current text-emerald-500 [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] dark:text-emerald-400"
-        style={{ WebkitMaskImage: "url(./change.svg)", maskImage: "url(./change.svg)" }}
+        className="size-4 text-emerald-500 dark:text-emerald-400"
       />
     )
   }

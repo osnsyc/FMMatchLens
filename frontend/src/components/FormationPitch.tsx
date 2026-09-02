@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { useTranslation } from "react-i18next"
-import { Exchange01Icon, Pin02Icon } from "@hugeicons/core-free-icons"
+import { ArrowDataTransferHorizontalIcon, Pin02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { AnimatePresence, motion } from "framer-motion"
 
@@ -423,7 +423,7 @@ export function FormationPitch({ match }: FormationPitchProps) {
                           </AvatarFallback>
                           {player.status?.subbedOnMinute != null && (
                             <AvatarBadge aria-hidden="true" className="bg-background text-foreground ring-1 ring-background">
-                              <HugeiconsIcon icon={Exchange01Icon} strokeWidth={2.25} />
+                              <HugeiconsIcon icon={ArrowDataTransferHorizontalIcon} strokeWidth={2} />
                             </AvatarBadge>
                           )}
                         </Avatar>

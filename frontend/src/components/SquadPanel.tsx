@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { SidebarLeft01Icon } from "@hugeicons/core-free-icons"
+import { ArrowDataTransferHorizontalIcon, SidebarLeft01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -1557,10 +1557,16 @@ function EventIcon({
     )
   }
 
-  const iconUrl =
-    icon === "assist"
-      ? "./assist.svg"
-      : "./change.svg"
+  if (icon !== "assist") {
+    return (
+      <HugeiconsIcon
+        icon={ArrowDataTransferHorizontalIcon}
+        strokeWidth={3}
+        aria-hidden="true"
+        className={`size-3.5 shrink-0 ${icon === "sub-off" ? "rotate-180" : ""} ${className ?? ""}`}
+      />
+    )
+  }
 
   return (
     <span
@@ -1571,17 +1577,11 @@ function EventIcon({
         [mask-position:center]
         [mask-repeat:no-repeat]
         [mask-size:contain]
-        ${
-          icon ===
-          "sub-off"
-            ? "rotate-180"
-            : ""
-        }
         ${className ?? ""}
       `}
       style={{
-        WebkitMaskImage: `url(${iconUrl})`,
-        maskImage: `url(${iconUrl})`,
+        WebkitMaskImage: "url(./assist.svg)",
+        maskImage: "url(./assist.svg)",
       }}
     />
   )
