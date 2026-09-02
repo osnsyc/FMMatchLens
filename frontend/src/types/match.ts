@@ -221,7 +221,14 @@ export type PlayerTacticalAssignment = {
   duty?: string
 }
 
+export type FormationSnapshot = {
+  tick: number
+  minute: number
+  players: MatchPlayer[]
+}
+
 export type MatchSnapshot = {
+  matchId?: string
   clock: { minute: number; second: number; elapsedMinute: number; elapsedSecond: number; elapsedTick: number }
   period: number
   score: { home: number; away: number }
@@ -234,4 +241,5 @@ export type MatchSnapshot = {
   tacticalEvents: TacticalEventPoint[]
   momentum: MatchMomentumPoint[]
   rollingMomentum: MatchMomentumPoint[]
+  formationSnapshots?: FormationSnapshot[]
 }

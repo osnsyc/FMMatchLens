@@ -36,16 +36,16 @@ internal sealed class WebSocketHub : IDisposable
 
     public async Task AddAsync(WebSocket socket, CancellationToken cancellationToken)
     {
+        await SendEnvelopeAsync(socket, "connection_status", new
+        {
+            status = "connected",
+            connectionCount = ConnectionCount + 1
+        }, cancellationToken).ConfigureAwait(false);
+
         lock (_gate)
         {
             _connections.Add(socket);
         }
-
-        await SendEnvelopeAsync(socket, "connection_status", new
-        {
-            status = "connected",
-            connectionCount = ConnectionCount
-        }, cancellationToken).ConfigureAwait(false);
 
         _ = Task.Run(() => ReceiveUntilClosedAsync(socket, cancellationToken), cancellationToken);
     }

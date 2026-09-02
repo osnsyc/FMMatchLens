@@ -41,8 +41,8 @@ import type { MatchEvent, MatchMomentumPoint, MatchSnapshot, PlayerPositionHeatm
 
 export function App() {
   const { t, i18n } = useTranslation()
-  const realtimeMatch = useRealtimeMatch()
   const [replayMatch, setReplayMatch] = useState<MatchSnapshot | null>(null)
+  const realtimeMatch = useRealtimeMatch(replayMatch === null)
   const [startupArchive, setStartupArchive] = useState<ParsedLocalArchive>()
   const [archiveError, setArchiveError] = useState("")
   const [draggingArchive, setDraggingArchive] = useState(false)

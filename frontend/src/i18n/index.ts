@@ -171,6 +171,14 @@ const resources = {
         awayInPossession: "客队控球",
         awayOutOfPossession: "客队无球",
       },
+      formationHistory: {
+        initial: "初始",
+        personnel: "换人",
+        formation: "阵型",
+        role: "角色",
+        pinStart: "固定为起点",
+        unpinStart: "取消固定起点",
+      },
       momentum: {
         title: "比赛势头",
         line: "折线图",
@@ -546,6 +554,14 @@ const resources = {
         homeOutOfPossession: "Home OOP",
         awayInPossession: "Away IP",
         awayOutOfPossession: "Away OOP",
+      },
+      formationHistory: {
+        initial: "Initial",
+        personnel: "Sub.",
+        formation: "Shape",
+        role: "Role",
+        pinStart: "Pin as start",
+        unpinStart: "Unpin start",
       },
       momentum: {
         title: "Momentum",

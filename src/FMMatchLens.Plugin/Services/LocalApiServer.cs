@@ -25,6 +25,8 @@ internal sealed class LocalApiServer : IDisposable
     private CancellationTokenSource? _cancellation;
     private Timer? _realtimePublishTimer;
     private int _lastPublishedRealtimeTick = -1;
+    private string? _publishedFormationMatchId;
+    private int _nextPublishedFormationIndex;
     private int _isPublishingRealtime;
 
     public LocalApiServer(
@@ -49,6 +51,9 @@ internal sealed class LocalApiServer : IDisposable
         _listener.Prefixes.Add($"http://127.0.0.1:{DefaultPort}/");
         _listener.Start();
         _webSockets.Start();
+        _lastPublishedRealtimeTick = -1;
+        _publishedFormationMatchId = null;
+        _nextPublishedFormationIndex = 0;
         _realtimePublishTimer = new Timer(
             _ => PublishLatestRealtimeFrame(),
             null,
@@ -169,6 +174,15 @@ internal sealed class LocalApiServer : IDisposable
                     break;
                 case "/api/match/meta":
                     await WriteJsonAsync(context.Response, _timeline.GetMetadata(), cancellationToken).ConfigureAwait(false);
+                    break;
+                case "/api/match/formation/history":
+                    var formationQuery = context.Request.QueryString;
+                    var fromIndex = ParseQueryInt(formationQuery["fromIndex"], 0);
+                    var formationLimit = ParseQueryInt(formationQuery["limit"], 256);
+                    await WriteJsonAsync(
+                        context.Response,
+                        _timeline.GetFormationTimeline(fromIndex, formationLimit),
+                        cancellationToken).ConfigureAwait(false);
                     break;
                 case "/api/match/status":
                     await WriteJsonAsync(context.Response, _timeline.GetStatus(), cancellationToken).ConfigureAwait(false);
@@ -292,21 +306,42 @@ internal sealed class LocalApiServer : IDisposable
             return;
         }
 
+        _ = PublishLatestRealtimeFrameAsync();
+    }
+
+    private async Task PublishLatestRealtimeFrameAsync()
+    {
         try
         {
             var frame = _timeline.GetCurrent();
-            if (frame is null || frame.Tick == _lastPublishedRealtimeTick)
+            if (frame is not null && frame.Tick != _lastPublishedRealtimeTick)
             {
-                return;
+                _lastPublishedRealtimeTick = frame.Tick;
+                await _webSockets.BroadcastAsync("realtime_tick", frame, CancellationToken.None).ConfigureAwait(false);
             }
 
-            _lastPublishedRealtimeTick = frame.Tick;
-            _ = _webSockets.BroadcastAsync("realtime_tick", frame, CancellationToken.None);
+            await PublishFormationChangesAsync().ConfigureAwait(false);
         }
         finally
         {
             Interlocked.Exchange(ref _isPublishingRealtime, 0);
         }
+    }
+
+    private async Task PublishFormationChangesAsync()
+    {
+        var status = _timeline.GetStatus();
+        if (status.MatchId != _publishedFormationMatchId)
+        {
+            _publishedFormationMatchId = status.MatchId;
+            _nextPublishedFormationIndex = 0;
+        }
+        if (status.MatchId is null) return;
+
+        var slice = _timeline.GetFormationTimeline(_nextPublishedFormationIndex, 256);
+        if (slice.Entries.Count == 0) return;
+        _nextPublishedFormationIndex = slice.Entries[^1].Index + 1;
+        await _webSockets.BroadcastAsync("formation_changed", slice, CancellationToken.None).ConfigureAwait(false);
     }
 
     private static int ParseQueryInt(string? value, int fallback)

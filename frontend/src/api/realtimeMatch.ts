@@ -1,6 +1,7 @@
 import { startTransition, useEffect, useRef, useState } from "react"
 
 import type {
+  FormationSnapshot,
   MatchPlayer,
   MatchEvent,
   MatchSnapshot,
@@ -153,6 +154,31 @@ type RealtimeFrameSlice = {
   status: string
   totalFrameCount: number
   frames: RealtimeFrame[]
+}
+
+type RealtimeFormationPlayerSnapshot = {
+  playerId: number
+  team: TeamSide
+  isSubstitute: boolean
+  isOnPitch: boolean
+  subbedOnMinute: number
+  subbedOffMinute: number
+  inPossession?: PlayerTacticalAssignment
+  outOfPossession?: PlayerTacticalAssignment
+}
+
+type RealtimeFormationTimelineEntry = {
+  index: number
+  tick: number
+  displayTick: number
+  players: RealtimeFormationPlayerSnapshot[]
+}
+
+type RealtimeFormationTimelineSlice = {
+  matchId?: string
+  status: string
+  totalEntryCount: number
+  entries: RealtimeFormationTimelineEntry[]
 }
 
 type HeatCell = { count: number; sumX: number; sumY: number }
@@ -399,9 +425,16 @@ class LiveDerivations {
   }
 }
 
-export function useRealtimeMatch(): MatchSnapshot | null {
+export function useRealtimeMatch(enabled = true): MatchSnapshot | null {
   const [match, setMatch] = useState<MatchSnapshot | null>(null)
   const metadata = useRef<RealtimeMatchMetadata | null>(null)
+  const enabledRef = useRef(enabled)
+  const resumeRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    enabledRef.current = enabled
+    if (enabled) resumeRef.current?.()
+  }, [enabled])
 
   useEffect(() => {
     let disposed = false
@@ -410,14 +443,17 @@ export function useRealtimeMatch(): MatchSnapshot | null {
     let latestFrame: RealtimeFrame | null = null
     let historyMatchId = ""
     let historyLastTick = -1
+    let formationHistoryIndex = 0
+    let formationHistoryEntries: RealtimeFormationTimelineEntry[] = []
+    let formationSnapshots: FormationSnapshot[] = []
     let derived = new LiveDerivations()
     let historical = derived.snapshot(0)
     let syncing = false
     let syncPending = false
-    let lastMetadataAttempt = 0
+    let formationSyncing = false
+    let formationSyncPending = false
 
     const fetchMetadata = async () => {
-      lastMetadataAttempt = Date.now()
       try {
         const response = await fetch(`${apiBase}/api/match/meta`, { cache: "no-store" })
         if (!response.ok) return false
@@ -432,11 +468,11 @@ export function useRealtimeMatch(): MatchSnapshot | null {
     }
 
     const publish = (frame: RealtimeFrame | null, lowPriority: boolean) => {
-      if (disposed || !frame) return
+      if (disposed || !enabledRef.current || !frame) return
       const commit = () => setMatch(toMatchSnapshot(
         frame, historical.xg, metadata.current, historical.events,
         historical.heatmaps, historical.tactical, historical.momentum,
-        historical.rollingMomentum,
+        historical.rollingMomentum, formationSnapshots,
       ))
       if (lowPriority) startTransition(commit)
       else commit()
@@ -446,23 +482,116 @@ export function useRealtimeMatch(): MatchSnapshot | null {
       if (historyMatchId === matchId) return
       historyMatchId = matchId
       historyLastTick = -1
+      formationHistoryIndex = 0
+      formationHistoryEntries = []
+      formationSnapshots = []
       derived = new LiveDerivations()
       historical = derived.snapshot(0)
       if (metadata.current?.matchId !== matchId) metadata.current = null
     }
 
+    const rebuildFormationSnapshots = () => {
+      if (!metadata.current) return
+      formationSnapshots = formationHistoryEntries.map((entry) =>
+        toFormationSnapshot(entry, metadata.current!))
+    }
+
+    const acceptFormationSlice = (slice: RealtimeFormationTimelineSlice) => {
+      if (slice.matchId && latestFrame?.matchId && slice.matchId !== latestFrame.matchId) {
+        return { changed: false, gap: false }
+      }
+      if (slice.matchId) resetFor(slice.matchId)
+
+      let changed = false
+      let gap = false
+      const additions = slice.entries
+        .filter((entry) => entry.index >= formationHistoryIndex)
+        .sort((left, right) => left.index - right.index)
+      for (const entry of additions) {
+        if (entry.index > formationHistoryIndex) {
+          gap = true
+          break
+        }
+        formationHistoryEntries.push(entry)
+        formationHistoryIndex = entry.index + 1
+        if (metadata.current) {
+          metadata.current = mergeFormationEntryIntoMetadata(metadata.current, entry)
+        }
+        changed = true
+      }
+      if (changed) rebuildFormationSnapshots()
+      return { changed, gap }
+    }
+
+    const fetchFormationHistory = async () => {
+      let changed = false
+      let keepLoading = true
+      while (!disposed && enabledRef.current && keepLoading) {
+        const response = await fetch(
+          `${apiBase}/api/match/formation/history?fromIndex=${formationHistoryIndex}&limit=256`,
+          { cache: "no-store" },
+        )
+        if (!response.ok) throw new Error("live formation history read failed")
+        const slice = (await response.json()) as RealtimeFormationTimelineSlice
+        const accepted = acceptFormationSlice(slice)
+        if (accepted.gap) throw new Error("live formation history has an index gap")
+        changed ||= accepted.changed
+        keepLoading = accepted.changed && formationHistoryIndex < slice.totalEntryCount
+      }
+      return changed
+    }
+
+    const syncFormationState = async () => {
+      if (!enabledRef.current) {
+        formationSyncPending = true
+        return
+      }
+      if (formationSyncing) {
+        formationSyncPending = true
+        return
+      }
+
+      formationSyncing = true
+      formationSyncPending = false
+      try {
+        const metadataChanged = await fetchMetadata()
+        const historyChanged = await fetchFormationHistory()
+        if (metadataChanged || historyChanged) {
+          rebuildFormationSnapshots()
+          publish(latestFrame, true)
+        }
+      } catch {
+        // Reconnect and explicit Live resume retry the missing formation range.
+      } finally {
+        formationSyncing = false
+        if (formationSyncPending && !disposed && enabledRef.current) {
+          formationSyncPending = false
+          void syncFormationState()
+        }
+      }
+    }
+
+    const refreshMetadataAfterFormationChange = async () => {
+      if (!enabledRef.current) return
+      if (await fetchMetadata()) {
+        rebuildFormationSnapshots()
+        publish(latestFrame, true)
+      }
+    }
+
     const syncHistory = async () => {
+      if (!enabledRef.current) return
       if (syncing) {
         syncPending = true
         return
       }
 
       syncing = true
+      syncPending = false
       try {
         let keepLoading = true
         let changed = false
-        let metadataChanged = false
-        while (!disposed && keepLoading) {
+        while (!disposed && enabledRef.current && keepLoading) {
           const fromTick = historyLastTick + 1
           const response = await fetch(`${apiBase}/api/match/frames?fromTick=${fromTick}&stride=1&limit=${liveFramePageSize}`)
           if (!response.ok) throw new Error("live frame read failed")
@@ -477,19 +606,14 @@ export function useRealtimeMatch(): MatchSnapshot | null {
           changed ||= additions.length > 0
           keepLoading = slice.frames.length >= liveFramePageSize && additions.length > 0
         }
-        // Tactical assignments move from the outgoing MATCH_PLAYER to the
-        // substitute after a change. Keep polling metadata even after names and
-        // profiles are complete so the live formation receives that update.
-        if (Date.now() - lastMetadataAttempt >= 2_000)
-          metadataChanged = await fetchMetadata()
         if (changed) historical = derived.snapshot(latestFrame?.tick ?? historyLastTick)
-        if (changed || metadataChanged) publish(latestFrame, true)
+        if (changed) publish(latestFrame, true)
       } catch {
         // WebSocket still keeps the current score/player state live. The next
         // low-frequency sync retries the missing historical range.
       } finally {
         syncing = false
-        if (syncPending && !disposed) {
+        if (syncPending && !disposed && enabledRef.current) {
           syncPending = false
           void syncHistory()
         }
@@ -516,8 +640,11 @@ export function useRealtimeMatch(): MatchSnapshot | null {
 
       socket = new WebSocket(webSocketUrl)
       socket.onopen = () => {
-        void fetchCurrent()
-        void syncHistory()
+        if (enabledRef.current) {
+          void fetchCurrent()
+          void syncHistory()
+          void syncFormationState()
+        }
       }
       socket.onmessage = (event: MessageEvent<string>) => {
         try {
@@ -530,6 +657,18 @@ export function useRealtimeMatch(): MatchSnapshot | null {
             // The 250ms WebSocket path only builds the current snapshot. No
             // historical scan, HTTP round-trip, or heatmap aggregation occurs.
             publish(frame, false)
+          } else if (envelope.type === "formation_changed") {
+            const slice = envelope.payload as RealtimeFormationTimelineSlice
+            const accepted = acceptFormationSlice(slice)
+            if (accepted.gap) {
+              formationSyncPending = true
+              if (enabledRef.current) void syncFormationState()
+              return
+            }
+            if (accepted.changed) {
+              publish(latestFrame, false)
+              void refreshMetadataAfterFormationChange()
+            }
           }
         } catch {
           // Ignore malformed or unrelated development messages.
@@ -543,8 +682,15 @@ export function useRealtimeMatch(): MatchSnapshot | null {
       socket.onerror = () => socket?.close()
     }
 
-    void fetchCurrent()
-    const syncTimer = window.setInterval(() => void syncHistory(), 1_000)
+    resumeRef.current = () => {
+      if (disposed) return
+      void fetchCurrent()
+      void syncHistory()
+      void syncFormationState()
+    }
+    const syncTimer = window.setInterval(() => {
+      if (enabledRef.current) void syncHistory()
+    }, 1_000)
     connect()
 
     return () => {
@@ -552,6 +698,7 @@ export function useRealtimeMatch(): MatchSnapshot | null {
       if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer)
       window.clearInterval(syncTimer)
       socket?.close()
+      resumeRef.current = null
     }
   }, [])
 
@@ -567,6 +714,7 @@ export function toMatchSnapshot(
   tacticalEvents: TacticalEventPoint[] = [],
   momentum: MatchMomentumPoint[] = [],
   rollingMomentum: MatchMomentumPoint[] = [],
+  formationSnapshots?: FormationSnapshot[],
 ): MatchSnapshot {
   const clockTick = Number.isFinite(frame.displayTick) ? frame.displayTick : frame.tick
   const minute = Math.floor(Math.max(0, clockTick) / 240)
@@ -576,6 +724,7 @@ export function toMatchSnapshot(
   const awayClubUid = metadata?.away.clubUid
 
   return {
+    matchId: frame.matchId,
     clock: {
       minute,
       second,
@@ -612,6 +761,7 @@ export function toMatchSnapshot(
     tacticalEvents,
     momentum,
     rollingMomentum,
+    formationSnapshots,
     xgTimeline: xgTimeline?.length
       ? [...xgTimeline]
       : appendXgPoint([{ minute: 0, home: 0, away: 0 }], {
@@ -1027,6 +1177,64 @@ function toTeamStats(team: RealtimeTeam): TeamStats {
     defensiveFreeKicks: 0,
     attackingFreeKicks: 0,
     throwIns: 0,
+  }
+}
+
+function toFormationSnapshot(
+  entry: RealtimeFormationTimelineEntry,
+  metadata: RealtimeMatchMetadata,
+): FormationSnapshot {
+  const playerMetadata = new Map(metadata.players.map((player) => [player.playerId, player]))
+  return {
+    tick: Math.max(0, entry.tick),
+    minute: Math.floor(Math.max(0, entry.displayTick) / 240),
+    players: entry.players.map((player) => {
+      const details = playerMetadata.get(player.playerId)
+      const uid = details?.uid
+      return {
+        id: player.playerId,
+        uid,
+        name: details?.commonName || details?.displayName || `Player ${player.playerId}`,
+        fullName: `${details?.firstName ?? ""} ${details?.secondName ?? ""}`.trim()
+          || details?.displayName,
+        portraitPath: details?.portraitPath,
+        portraitUrl: uid != null ? graphicsAssetUrl("person", uid, "portrait") : undefined,
+        team: player.team,
+        shirtNumber: details?.shirtNumber,
+        position: details?.position,
+        positionFamiliarities: details?.positionFamiliarities,
+        inPossession: player.inPossession,
+        outOfPossession: player.outOfPossession,
+        isStarter: !player.isSubstitute,
+        isOnPitch: player.isOnPitch,
+        status: {
+          subbedOnMinute: player.subbedOnMinute || undefined,
+          subbedOffMinute: player.subbedOffMinute || undefined,
+        },
+        stats: { goals: 0, assists: 0 },
+      }
+    }),
+  }
+}
+
+function mergeFormationEntryIntoMetadata(
+  metadata: RealtimeMatchMetadata,
+  entry: RealtimeFormationTimelineEntry,
+): RealtimeMatchMetadata {
+  const assignments = new Map(entry.players.map((player) => [player.playerId, player]))
+  return {
+    ...metadata,
+    capturedTick: entry.tick,
+    players: metadata.players.map((player) => {
+      const assignment = assignments.get(player.playerId)
+      return assignment
+        ? {
+            ...player,
+            inPossession: assignment.inPossession,
+            outOfPossession: assignment.outOfPossession,
+          }
+        : player
+    }),
   }
 }
 
