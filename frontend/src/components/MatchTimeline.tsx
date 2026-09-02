@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowDataTransferHorizontalIcon } from "@hugeicons/core-free-icons"
+import { ArrowDataTransferHorizontalIcon, FootballIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import {
@@ -581,6 +581,18 @@ function TimelineEventPeople({ event, row }: { event: TimelineEvent; row: "prima
 }
 
 function TimelineDetailIcon({ event, row }: { event: TimelineEvent; row: "primary" | "secondary" }) {
+  if (event.type === "own_goal") {
+    return (
+      <HugeiconsIcon
+        icon={FootballIcon}
+        stroke="currentColor"
+        strokeWidth={1.5}
+        aria-hidden="true"
+        className="size-3.5 shrink-0 text-red-500 dark:text-red-400"
+      />
+    )
+  }
+
   if (event.type === "goal") {
     return <img src={row === "primary" ? "./goal.svg" : "./assist.svg"} alt="" aria-hidden="true" className="size-3.5 shrink-0" />
   }
@@ -605,6 +617,18 @@ function TimelineDetailIcon({ event, row }: { event: TimelineEvent; row: "primar
 }
 
 function EventIcon({ event, color }: { event: TimelineEvent; color: string }) {
+  if (event.type === "own_goal") {
+    return (
+      <HugeiconsIcon
+        icon={FootballIcon}
+        stroke="currentColor"
+        strokeWidth={1.5}
+        aria-hidden="true"
+        className="size-3.5 shrink-0 text-red-500 dark:text-red-400"
+      />
+    )
+  }
+
   if (event.type === "goal") {
     return <img src="./goal.svg" alt="" aria-hidden="true" className="size-4" />
   }
@@ -644,7 +668,7 @@ function PauseIcon() {
 
 function buildTimelineEvents(match: MatchSnapshot, t: (key: string) => string) {
   const matchEvents = match.events
-    .filter((event) => event.type === "goal" || event.type === "yellow_card" || event.type === "red_card")
+    .filter((event) => event.type === "goal" || event.type === "own_goal" || event.type === "yellow_card" || event.type === "red_card")
     .map((event): TimelineEvent | null => {
       const player = match.players.find((entry) => entry.id === event.playerId)
       const team = event.team ?? player?.team
@@ -792,6 +816,7 @@ function buildSubstitutionEvents(match: MatchSnapshot, t: (key: string) => strin
 function labelForEvent(type: MatchEventType, t: (key: string) => string) {
   switch (type) {
     case "goal": return t("squad.goal")
+    case "own_goal": return t("squad.ownGoal")
     case "yellow_card": return t("squad.yellowCard")
     case "red_card": return t("squad.redCard")
     default: return type

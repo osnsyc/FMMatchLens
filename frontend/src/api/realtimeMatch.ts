@@ -61,8 +61,8 @@ export type RealtimePlayer = PlayerStats & {
   isOnPitch: boolean
   subbedOnMinute: number
   subbedOffMinute: number
-  yellowCards: number
-  redCards: number
+  penalties: number
+  ownGoals: number
   shotsFaced: number
 }
 
@@ -275,7 +275,7 @@ class LiveDerivations {
       if (!old) continue
       const goalDelta = Math.max(0, player.goals - old.goals)
       const assistDelta = Math.max(0, player.assists - old.assists)
-      const redDelta = Math.max(0, player.redCards - old.redCards)
+      const ownGoalDelta = Math.max(0, player.ownGoals - old.ownGoals)
       for (let count = 0; count < goalDelta; count += 1) {
         this.events.push({
           id: `${frame.matchId}-player-${player.playerId}-goal-${player.goals - goalDelta + count + 1}-${frame.tick}`,
@@ -290,11 +290,14 @@ class LiveDerivations {
           type: "assist_candidate", minute: frameMinute(frame), tick: frame.tick, team: player.team, playerId: player.playerId,
         })
       }
-      for (let count = 0; count < redDelta; count += 1) {
+      for (let count = 0; count < ownGoalDelta; count += 1) {
+        const scoringTeam = oppositeTeam(player.team)
         this.events.push({
-          id: `${frame.matchId}-player-${player.playerId}-red-${frame.tick}-${count}`,
-          type: "red_card", minute: frameMinute(frame), tick: frame.tick, team: player.team, playerId: player.playerId,
+          id: `${frame.matchId}-player-${player.playerId}-own-goal-${frame.tick}-${count}`,
+          type: "own_goal", minute: frameMinute(frame), tick: frame.tick, team: player.team, playerId: player.playerId,
         })
+        if (scoringTeam === "home") identifiedHomeGoals += 1
+        else identifiedAwayGoals += 1
       }
     }
     appendUnidentifiedGoals(this.events, frame, "home",
@@ -852,7 +855,7 @@ export function buildMatchEvents(
     frames[0].players.map((player) => [player.playerId, {
       goals: player.goals,
       assists: player.assists,
-      redCards: player.redCards,
+      ownGoals: player.ownGoals,
     }]),
   )
 
@@ -867,7 +870,7 @@ export function buildMatchEvents(
       if (previous) {
         const goalDelta = Math.max(0, player.goals - previous.goals)
         const assistDelta = Math.max(0, player.assists - previous.assists)
-        const redCardDelta = Math.max(0, player.redCards - previous.redCards)
+        const ownGoalDelta = Math.max(0, player.ownGoals - previous.ownGoals)
 
         for (let count = 0; count < goalDelta; count += 1) {
           events.push({
@@ -893,22 +896,25 @@ export function buildMatchEvents(
           })
         }
 
-        for (let count = 0; count < redCardDelta; count += 1) {
+        for (let count = 0; count < ownGoalDelta; count += 1) {
+          const scoringTeam = oppositeTeam(player.team)
           events.push({
-            id: `${frame.matchId}-player-${player.playerId}-red-${frame.tick}-${count}`,
-            type: "red_card",
+            id: `${frame.matchId}-player-${player.playerId}-own-goal-${frame.tick}-${count}`,
+            type: "own_goal",
             minute,
             tick: frame.tick,
             team: player.team,
             playerId: player.playerId,
           })
+          if (scoringTeam === "home") identifiedHomeGoals += 1
+          else identifiedAwayGoals += 1
         }
       }
 
       previousPlayers.set(player.playerId, {
         goals: player.goals,
         assists: player.assists,
-        redCards: player.redCards,
+        ownGoals: player.ownGoals,
       })
     }
 
@@ -1136,6 +1142,10 @@ function frameMinute(frame: RealtimeFrame): number {
   return Math.floor(Math.max(0, clockTick) / 240)
 }
 
+function oppositeTeam(team: TeamSide): TeamSide {
+  return team === "home" ? "away" : "home"
+}
+
 function appendXgPoint(
   points: readonly XgTimelinePoint[],
   point: XgTimelinePoint,
@@ -1268,14 +1278,16 @@ function toPlayer(
     status: {
       subbedOnMinute: player.subbedOnMinute || undefined,
       subbedOffMinute: player.subbedOffMinute || undefined,
-      yellowCards: player.yellowCards || undefined,
-      redCards: player.redCards || undefined,
+      penalties: player.penalties || undefined,
+      ownGoals: player.ownGoals || undefined,
     },
     profile: metadata?.profile,
     attributes: metadata?.attributes,
     stats: {
       goals: player.goals,
       assists: player.assists,
+      penalties: player.penalties,
+      ownGoals: player.ownGoals,
       xg: player.xg,
       xa: player.xa,
       shots: player.shots,

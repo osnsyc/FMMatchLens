@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowDataTransferHorizontalIcon, SidebarLeft01Icon } from "@hugeicons/core-free-icons"
+import { ArrowDataTransferHorizontalIcon, FootballIcon, SidebarLeft01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -50,6 +50,7 @@ type SquadPanelProps = {
 
 type StatusIcon =
   | "goal"
+  | "own-goal"
   | "assist"
   | "sub-on"
   | "sub-off"
@@ -289,45 +290,24 @@ export function SquadPanel({
 
     if (
       player.status
-        ?.yellowCards
+        ?.ownGoals
     ) {
       statuses.push({
-        key: "yellow",
+        key: "own-goal",
         label: t(
-          "squad.yellowCard"
+          "squad.ownGoal"
         ),
         marker: "",
+        icon: "own-goal",
         className:
-          "size-2.5 rounded-[1px] bg-yellow-400",
+          "text-red-500 dark:text-red-400",
         minutes: minutesFor(
           player,
-          "yellow_card"
+          "own_goal"
         ),
         count:
           player.status
-            .yellowCards,
-      })
-    }
-
-    if (
-      player.status
-        ?.redCards
-    ) {
-      statuses.push({
-        key: "red",
-        label: t(
-          "squad.redCard"
-        ),
-        marker: "",
-        className:
-          "size-2.5 rounded-[1px] bg-red-500",
-        minutes: minutesFor(
-          player,
-          "red_card"
-        ),
-        count:
-          player.status
-            .redCards,
+            .ownGoals,
       })
     }
 
@@ -1079,6 +1059,7 @@ const playerStatGroups: Array<{ id: StatGroupId; fields: PlayerMetric[] }> = [
     id: "attack",
     fields: [
       { id: "goals", value: statValue("goals"), format: integer },
+      { id: "penalties", value: statValue("penalties"), format: integer },
       { id: "assists", value: statValue("assists"), format: integer },
       { id: "xg", value: statValue("xg"), format: decimal(2) },
       { id: "xa", value: statValue("xa"), format: decimal(2) },
@@ -1114,6 +1095,7 @@ const playerStatGroups: Array<{ id: StatGroupId; fields: PlayerMetric[] }> = [
     id: "other",
     fields: [
       { id: "distance", value: (player) => Number(player.stats.distanceM ?? 0) / 1000, format: (value) => `${value.toFixed(2)} km` },
+      { id: "ownGoals", value: statValue("ownGoals"), format: integer },
       { id: "fouls", value: statValue("fouls"), format: integer },
       { id: "fouled", value: statValue("fouled"), format: integer },
       { id: "corners", value: statValue("corners"), format: integer },
@@ -1131,6 +1113,8 @@ const playerMetricTranslationKeys: Record<string, string> = {
   passAccuracy: "stats.passAccuracy",
   xg: "stats.xg",
   goals: "stats.goals",
+  penalties: "stats.penalties",
+  ownGoals: "stats.ownGoals",
   xa: "stats.xa",
   assists: "stats.assists",
   rating: "stats.rating",
@@ -1510,7 +1494,7 @@ function PlayerStatusStrip({ statuses }: { statuses: PlayerStatus[] }) {
             >
               <span className="flex h-5 items-center justify-center">
                 {Array.from({
-                  length: status.icon === "goal" || status.icon === "assist"
+                  length: status.icon === "goal" || status.icon === "own-goal" || status.icon === "assist"
                     ? Math.max(1, status.count ?? 1)
                     : 1,
                 }).map((_, index) => (
@@ -1553,6 +1537,18 @@ function EventIcon({
         className={`size-3.5 shrink-0 ${
           className ?? ""
         }`}
+      />
+    )
+  }
+
+  if (icon === "own-goal") {
+    return (
+      <HugeiconsIcon
+        icon={FootballIcon}
+        stroke="currentColor"
+        strokeWidth={1.5}
+        aria-hidden="true"
+        className={`size-3.5 shrink-0 ${className ?? ""}`}
       />
     )
   }

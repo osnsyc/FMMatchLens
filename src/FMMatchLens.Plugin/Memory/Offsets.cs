@@ -287,8 +287,8 @@ internal static class Offsets
         public const int OverallPhysicalCondition = 0x89;
         public const int MatchSharpness = 0x8A;
         public const int Goals = 0x8B;
-        public const int YellowCardsUnconfirmed = 0x8E;
-        public const int RedCardsUnconfirmed = 0x8F;
+        public const int Penalties = 0x8E;
+        public const int OwnGoals = 0x8F;
         public const int Shots = 0x90;
         public const int ShotsOnTarget = 0x91;
         public const int BlockedShotsUnconfirmed = 0x92;

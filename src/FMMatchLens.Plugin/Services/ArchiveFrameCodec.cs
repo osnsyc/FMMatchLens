@@ -266,8 +266,8 @@ internal static class ArchiveFrameCodec
     {
         ulong mask = 0;
         Mark(0, left.Rating != right.Rating); Mark(1, left.IsSubstitute != right.IsSubstitute); Mark(2, left.IsOnPitch != right.IsOnPitch);
-        Mark(3, left.SubbedOnMinute != right.SubbedOnMinute); Mark(4, left.SubbedOffMinute != right.SubbedOffMinute); Mark(5, left.YellowCards != right.YellowCards);
-        Mark(6, left.RedCards != right.RedCards); Mark(7, left.Goals != right.Goals); Mark(8, left.Assists != right.Assists); Mark(9, left.Xg != right.Xg); Mark(10, left.Xa != right.Xa);
+        Mark(3, left.SubbedOnMinute != right.SubbedOnMinute); Mark(4, left.SubbedOffMinute != right.SubbedOffMinute); Mark(5, left.Penalties != right.Penalties);
+        Mark(6, left.OwnGoals != right.OwnGoals); Mark(7, left.Goals != right.Goals); Mark(8, left.Assists != right.Assists); Mark(9, left.Xg != right.Xg); Mark(10, left.Xa != right.Xa);
         Mark(11, left.Shots != right.Shots); Mark(12, left.ShotsOnTarget != right.ShotsOnTarget); Mark(13, left.BlockedShots != right.BlockedShots);
         Mark(14, left.ClearCutChances != right.ClearCutChances); Mark(15, left.HitWoodwork != right.HitWoodwork); Mark(16, left.Dribbles != right.Dribbles);
         Mark(17, left.Fouls != right.Fouls); Mark(18, left.Fouled != right.Fouled); Mark(19, left.Crosses != right.Crosses); Mark(20, left.CrossesCompleted != right.CrossesCompleted);
@@ -285,7 +285,7 @@ internal static class ArchiveFrameCodec
     private static void WritePlayerFields(BinaryWriter writer, PlayerTickData value, PlayerTickData prior, ulong mask)
     {
         Float(0, value.Rating); Bool(1, value.IsSubstitute); Bool(2, value.IsOnPitch); Int(3, value.SubbedOnMinute); Int(4, value.SubbedOffMinute);
-        Int(5, value.YellowCards); Int(6, value.RedCards); Int(7, value.Goals); Int(8, value.Assists); Float(9, value.Xg); Float(10, value.Xa);
+        Int(5, value.Penalties); Int(6, value.OwnGoals); Int(7, value.Goals); Int(8, value.Assists); Float(9, value.Xg); Float(10, value.Xa);
         Int(11, value.Shots); Int(12, value.ShotsOnTarget); Int(13, value.BlockedShots); Int(14, value.ClearCutChances); Int(15, value.HitWoodwork);
         Int(16, value.Dribbles); Int(17, value.Fouls); Int(18, value.Fouled); Int(19, value.Crosses); Int(20, value.CrossesCompleted);
         Int(21, value.Passes); Int(22, value.PassesCompleted); Int(23, value.KeyPasses); Int(24, value.TacklesAttempted); Int(25, value.TacklesWon);
@@ -311,8 +311,8 @@ internal static class ArchiveFrameCodec
         return prior with
         {
             Rating = Float(0, prior.Rating), IsSubstitute = Bool(1, prior.IsSubstitute), IsOnPitch = Bool(2, prior.IsOnPitch),
-            SubbedOnMinute = Int(3, prior.SubbedOnMinute), SubbedOffMinute = Int(4, prior.SubbedOffMinute), YellowCards = Int(5, prior.YellowCards),
-            RedCards = Int(6, prior.RedCards), Goals = Int(7, prior.Goals), Assists = Int(8, prior.Assists), Xg = Float(9, prior.Xg), Xa = Float(10, prior.Xa),
+            SubbedOnMinute = Int(3, prior.SubbedOnMinute), SubbedOffMinute = Int(4, prior.SubbedOffMinute), Penalties = Int(5, prior.Penalties),
+            OwnGoals = Int(6, prior.OwnGoals), Goals = Int(7, prior.Goals), Assists = Int(8, prior.Assists), Xg = Float(9, prior.Xg), Xa = Float(10, prior.Xa),
             Shots = Int(11, prior.Shots), ShotsOnTarget = Int(12, prior.ShotsOnTarget), BlockedShots = Int(13, prior.BlockedShots),
             ClearCutChances = Int(14, prior.ClearCutChances), HitWoodwork = Int(15, prior.HitWoodwork), Dribbles = Int(16, prior.Dribbles),
             Fouls = Int(17, prior.Fouls), Fouled = Int(18, prior.Fouled), Crosses = Int(19, prior.Crosses), CrossesCompleted = Int(20, prior.CrossesCompleted),

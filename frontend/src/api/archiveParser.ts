@@ -308,7 +308,7 @@ function readFullPlayer(reader: ArchiveBufferReader, halfWidth: number, halfLeng
   const seed = {
     slot, playerId, team: teamRaw === 1 ? "away" : "home", isBallHolder: false,
     x: dequantize(reader.readUint16(), halfWidth), y: dequantize(reader.readUint16(), halfLength), rating: 0,
-    isSubstitute: false, isOnPitch: false, subbedOnMinute: 0, subbedOffMinute: 0, yellowCards: 0, redCards: 0,
+    isSubstitute: false, isOnPitch: false, subbedOnMinute: 0, subbedOffMinute: 0, penalties: 0, ownGoals: 0,
     goals: 0, assists: 0, shotsFaced: 0,
   } satisfies RealtimePlayer
   return readPlayerFields(reader, seed, allPlayerFields)
@@ -321,7 +321,7 @@ function readPlayerFields(reader: ArchiveBufferReader, prior: RealtimePlayer, ma
   if (has(1)) result.isSubstitute = reader.readBoolean()
   if (has(2)) result.isOnPitch = reader.readBoolean()
   const integerFields: Array<[number, keyof RealtimePlayer]> = [
-    [3, "subbedOnMinute"], [4, "subbedOffMinute"], [5, "yellowCards"], [6, "redCards"], [7, "goals"], [8, "assists"],
+    [3, "subbedOnMinute"], [4, "subbedOffMinute"], [5, "penalties"], [6, "ownGoals"], [7, "goals"], [8, "assists"],
   ]
   for (const [bit, field] of integerFields) if (has(bit)) Object.assign(result, { [field]: reader.readVarInt() })
   if (has(9)) result.xg = reader.readFloatXor(result.xg ?? 0)

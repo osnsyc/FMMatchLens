@@ -6,6 +6,7 @@ export type PlayerPositionFamiliarities = Partial<Record<PlayerPosition, number>
 
 export type MatchEventType =
   | "goal"
+  | "own_goal"
   | "assist_candidate"
   | "yellow_card"
   | "red_card"
@@ -92,6 +93,8 @@ export type TacticalEventPoint = {
 export type PlayerStats = {
   goals: number
   assists: number
+  penalties?: number
+  ownGoals?: number
   xg?: number
   xa?: number
   shots?: number
@@ -202,8 +205,8 @@ export type MatchPlayer = {
     displayY: number
   }
   status?: {
-    yellowCards?: number
-    redCards?: number
+    penalties?: number
+    ownGoals?: number
     subbedOnMinute?: number
     subbedOffMinute?: number
   }
