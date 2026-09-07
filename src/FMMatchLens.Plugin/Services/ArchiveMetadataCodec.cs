@@ -18,6 +18,8 @@ internal static class ArchiveMetadataCodec
     private const byte HomeTeamFlag = 1 << 0;
     private const byte AwayTeamFlag = 1 << 1;
     private const byte AllTeamDeltaFlags = HomeTeamFlag | AwayTeamFlag;
+    private const byte MatchDateExtensionFlag = 1 << 0;
+    private const byte AllMetadataExtensionFlags = MatchDateExtensionFlag;
 
     private readonly record struct PlayerDelta(
         RealtimePlayerMetadata Player,
@@ -48,6 +50,11 @@ internal static class ArchiveMetadataCodec
         WriteTeam(writer, metadata.Away, ids);
         ArchiveBinary.WriteVarUInt64(writer, (ulong)metadata.Players.Count);
         foreach (var player in metadata.Players.OrderBy(item => item.Slot)) WritePlayer(writer, player, ids);
+        if (!string.IsNullOrWhiteSpace(metadata.MatchDate))
+        {
+            writer.Write(MatchDateExtensionFlag);
+            ArchiveBinary.WriteString(writer, metadata.MatchDate);
+        }
         return stream.ToArray();
     }
 
@@ -72,8 +79,17 @@ internal static class ArchiveMetadataCodec
             if (!slots.Add(players[index].Slot)) throw new ArchiveFormatException("duplicate_slot", "Metadata contains a duplicate player slot.");
             if (!playerIds.Add(players[index].PlayerId)) throw new ArchiveFormatException("duplicate_player", "Metadata contains a duplicate player id.");
         }
+        string? matchDate = null;
+        if (stream.Position < stream.Length)
+        {
+            var extensionFlags = reader.ReadByte();
+            if (extensionFlags == 0 || (extensionFlags & ~AllMetadataExtensionFlags) != 0)
+                throw new ArchiveFormatException("unknown_metadata_extension", "Metadata contains unknown extension fields.");
+            if ((extensionFlags & MatchDateExtensionFlag) != 0)
+                matchDate = ArchiveBinary.ReadString(reader);
+        }
         if (stream.Position != stream.Length) throw new ArchiveFormatException("trailing_data", "Metadata record contains trailing bytes.");
-        return (revision, new RealtimeMatchMetadata(matchId, startedUnixMilliseconds, capturedTick, home, away, players));
+        return (revision, new RealtimeMatchMetadata(matchId, startedUnixMilliseconds, capturedTick, home, away, players, matchDate));
     }
 
     public static bool TryEncodeDelta(
@@ -127,7 +143,8 @@ internal static class ArchiveMetadataCodec
             incoming.CapturedTick,
             homeChanged ? incoming.Home : previous.Home,
             awayChanged ? incoming.Away : previous.Away,
-            players);
+            players,
+            incoming.MatchDate ?? previous.MatchDate);
         var strings = BuildDeltaStringTable(effective, deltas, homeChanged, awayChanged);
         var ids = BuildStringIds(strings);
         using var stream = new MemoryStream();
@@ -204,7 +221,14 @@ internal static class ArchiveMetadataCodec
         if (orderedPlayers.Length > byte.MaxValue || orderedPlayers.Select(player => player.Slot).Distinct().Count() != orderedPlayers.Length)
             throw new ArchiveFormatException("duplicate_slot", "Metadata delta produces a duplicate player slot.");
         if (stream.Position != stream.Length) throw new ArchiveFormatException("trailing_data", "Metadata delta contains trailing bytes.");
-        return (revision, new RealtimeMatchMetadata(matchId, startedUnixMilliseconds, capturedTick, home, away, orderedPlayers));
+        return (revision, new RealtimeMatchMetadata(
+            matchId,
+            startedUnixMilliseconds,
+            capturedTick,
+            home,
+            away,
+            orderedPlayers,
+            previous.MatchDate));
     }
 
     private static List<string> BuildStringTable(RealtimeMatchMetadata metadata)

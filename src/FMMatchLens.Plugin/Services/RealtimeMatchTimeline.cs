@@ -189,7 +189,8 @@ internal sealed class RealtimeMatchTimeline
     public void SetMetadata(
         RealtimeTeamMetadata home,
         RealtimeTeamMetadata away,
-        IReadOnlyList<RealtimePlayerMetadata> players)
+        IReadOnlyList<RealtimePlayerMetadata> players,
+        string? matchDate)
     {
         lock (_gate)
         {
@@ -205,7 +206,8 @@ internal sealed class RealtimeMatchTimeline
                 _lastTick,
                 home,
                 away,
-                players.ToArray()));
+                players.ToArray(),
+                matchDate));
             var candidate = _metadata is null ? incoming : MergeMetadata(_metadata, incoming);
             if (_metadata is not null && MetadataContentEquals(_metadata, candidate))
             {
@@ -460,7 +462,8 @@ internal sealed class RealtimeMatchTimeline
             incoming.CapturedTick,
             MergeTeamMetadata(current.Home, incoming.Home, "Home"),
             MergeTeamMetadata(current.Away, incoming.Away, "Away"),
-            players.Values.OrderBy(player => player.Slot).ToArray());
+            players.Values.OrderBy(player => player.Slot).ToArray(),
+            incoming.MatchDate ?? current.MatchDate);
     }
 
     private static RealtimeTeamMetadata MergeTeamMetadata(
@@ -558,7 +561,8 @@ internal sealed class RealtimeMatchTimeline
 
     private static bool MetadataContentEquals(RealtimeMatchMetadata left, RealtimeMatchMetadata right)
     {
-        if (left.Home != right.Home || left.Away != right.Away || left.Players.Count != right.Players.Count)
+        if (left.MatchDate != right.MatchDate ||
+            left.Home != right.Home || left.Away != right.Away || left.Players.Count != right.Players.Count)
         {
             return false;
         }

@@ -196,6 +196,26 @@ internal static class Offsets
         public const int Club = 0x30;
         public const int Competition = 0x50;
         public const int Stadium = 0x78;
+        public const int Schedule = 0xA0;
+    }
+
+    public static class Schedule
+    {
+        public const int PreviousMatch = 0x00;
+        public const int CurrentMatch = 0x28;
+    }
+
+    public static class ScheduleMatch
+    {
+        public const int Size = 0x28;
+        public const int Team = 0x08;
+        public const int Opponent = 0x10;
+        // uint32 FM date: year = raw >> 16, one-based day-of-year = raw & 0x1FF.
+        public const int Date = 0x18;
+        // Confirmed score pair. Home/away versus team/opponent orientation still
+        // needs an away-team historical sample before assigning semantic names.
+        public const int FirstScore = 0x20;
+        public const int SecondScore = 0x21;
     }
 
     public static class Club

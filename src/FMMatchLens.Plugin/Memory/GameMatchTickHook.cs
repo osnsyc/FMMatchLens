@@ -4,6 +4,7 @@ using FMMatchLens.Plugin.Domain;
 using FMMatchLens.Plugin.Services;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -825,6 +826,7 @@ internal sealed class GameMatchTickHook : IDisposable
         }
 
         var source = state.LastActiveRecord;
+        state.MatchDate ??= ReadTemporaryMatchDate(match);
         var metadata = new List<RealtimePlayerMetadata>(source.PlayerCount);
         for (var slot = 0; slot < Math.Min(source.PlayerCount, (byte)RawRealtimeTickFrame.MaxPlayers); slot++)
         {
@@ -888,8 +890,41 @@ internal sealed class GameMatchTickHook : IDisposable
             _timeline.SetMetadata(
                 ReadTeamMetadata(homeTeam, "Home"),
                 ReadTeamMetadata(awayTeam, "Away"),
-                metadata);
+                metadata,
+                state.MatchDate);
         }
+    }
+
+    private string? ReadTemporaryMatchDate(nint match)
+    {
+        // TODO: This is a temporary match-date solution. Reading the date from the
+        // home team's schedule is sufficient for current metadata, but a direct,
+        // authoritative field should be located in GAME_MATCH instead.
+        if (!_memoryReader.TryReadPointer(match + Offsets.GameMatch.HomeTeam, out var homeTeam) ||
+            homeTeam == default ||
+            !_memoryReader.TryReadPointer(homeTeam + Offsets.Team.DbTeam, out var dbTeam) ||
+            dbTeam == default ||
+            !_memoryReader.TryReadPointer(dbTeam + Offsets.DbTeam.Schedule, out var schedule) ||
+            schedule == default ||
+            !_memoryReader.TryReadUInt32(
+                schedule + Offsets.Schedule.CurrentMatch + Offsets.ScheduleMatch.Date,
+                out var rawDate))
+        {
+            return null;
+        }
+
+        var year = checked((int)(rawDate >> 16));
+        var dayOfYear = checked((int)(rawDate & 0x1FF));
+        if (year is < 1900 or > 2100 ||
+            dayOfYear < 1 ||
+            dayOfYear > (DateTime.IsLeapYear(year) ? 366 : 365))
+        {
+            return null;
+        }
+
+        return new DateTime(year, 1, 1)
+            .AddDays(dayOfYear - 1)
+            .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
     }
 
     private PlayerTacticalAssignment? ReadTacticalAssignment(nint matchPlayer, bool inPossession)
@@ -1579,6 +1614,7 @@ internal sealed class GameMatchTickHook : IDisposable
         public int EpochResetProbeCount;
         public int EpochResetFirstTick;
         public int EpochResetMaxTick;
+        public string? MatchDate;
     }
 
     private sealed class NativeMomentumCaptureState

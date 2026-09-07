@@ -420,8 +420,14 @@ function readMetadata(payload: Uint8Array, header: ArchiveHeader) {
   const players = Array.from({ length: playerCount }, () => readPlayerMetadata(reader, strings))
   if (new Set(players.map((player) => player.slot)).size !== players.length) throw new ArchiveError("元数据包含重复 Slot")
   if (new Set(players.map((player) => player.playerId)).size !== players.length) throw new ArchiveError("元数据包含重复球员 ID")
+  let matchDate: string | undefined
+  if (!reader.atEnd) {
+    const extensionFlags = reader.readByte()
+    if (extensionFlags === 0 || (extensionFlags & ~0x01) !== 0) throw new ArchiveError("元数据包含未知扩展字段")
+    if ((extensionFlags & 0x01) !== 0) matchDate = reader.readString()
+  }
   if (!reader.atEnd) throw new ArchiveError("元数据包含多余字节")
-  const metadata: RealtimeMatchMetadata = { matchId: header.matchId, startedUnixMilliseconds: header.startedUnixMilliseconds, capturedTick, home, away, players }
+  const metadata: RealtimeMatchMetadata = { matchId: header.matchId, startedUnixMilliseconds: header.startedUnixMilliseconds, capturedTick, matchDate, home, away, players }
   return { revision, metadata }
 }
 
@@ -470,6 +476,7 @@ function readMetadataDelta(payload: Uint8Array, header: ArchiveHeader, previous:
     matchId: header.matchId,
     startedUnixMilliseconds: header.startedUnixMilliseconds,
     capturedTick,
+    matchDate: previous.matchDate,
     home,
     away,
     players,

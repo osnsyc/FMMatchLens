@@ -149,6 +149,7 @@ export type RealtimeMatchMetadata = {
   matchId: string
   startedUnixMilliseconds: number
   capturedTick: number
+  matchDate?: string
   home: RealtimeTeamMetadata
   away: RealtimeTeamMetadata
   players: RealtimePlayerMetadata[]

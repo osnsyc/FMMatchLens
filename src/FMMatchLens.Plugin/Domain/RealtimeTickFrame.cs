@@ -143,7 +143,8 @@ internal sealed record RealtimeMatchMetadata(
     int CapturedTick,
     RealtimeTeamMetadata Home,
     RealtimeTeamMetadata Away,
-    IReadOnlyList<RealtimePlayerMetadata> Players);
+    IReadOnlyList<RealtimePlayerMetadata> Players,
+    string? MatchDate = null);
 
 internal readonly record struct RealtimeTeamMetadata(
     uint? Uid,
