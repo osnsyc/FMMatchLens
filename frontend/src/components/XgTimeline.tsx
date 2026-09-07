@@ -21,6 +21,11 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card"
 import type {
   MatchSnapshot,
   TeamSide,
@@ -318,29 +323,40 @@ function GoalMarkerLabel({
   }
 
   return (
-    <g
-      transform={`translate(${point.x - 7}, ${point.y - 17})`}
-      className="cursor-help drop-shadow-sm"
+    <foreignObject
+      x={point.x - 7}
+      y={point.y - 17}
+      width="14"
+      height="14"
+      style={{ overflow: "visible" }}
     >
-      <title>{title}</title>
-      <circle
-        cx="7"
-        cy="7"
-        r="7"
-        fill="hsl(var(--background))"
-        stroke={color}
-        strokeWidth="1.25"
-      />
-
-      <image
-        href="./goal.svg"
-        x="1.5"
-        y="1.5"
-        width="11"
-        height="11"
-        preserveAspectRatio="xMidYMid meet"
-      />
-    </g>
+      <HoverCard>
+        <HoverCardTrigger
+          render={(
+            <button
+              type="button"
+              aria-label={title.replaceAll("\n", " · ")}
+              className="flex size-3.5 cursor-help items-center justify-center rounded-full border bg-background shadow-sm outline-none transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring"
+              style={{ borderColor: color }}
+            />
+          )}
+        >
+          <img
+            src="./goal.svg"
+            alt=""
+            aria-hidden="true"
+            className="size-2.5"
+          />
+        </HoverCardTrigger>
+        <HoverCardContent
+          side="top"
+          sideOffset={6}
+          className="w-auto max-w-72 whitespace-pre-line px-2.5 py-1.5 font-medium"
+        >
+          {title}
+        </HoverCardContent>
+      </HoverCard>
+    </foreignObject>
   )
 }
 
