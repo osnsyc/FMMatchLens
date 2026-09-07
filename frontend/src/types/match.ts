@@ -1,15 +1,29 @@
 export type TeamSide = "home" | "away"
 
-export const playerPositionLabels = ["GK", "SW", "DL", "DC", "DR", "DM", "ML", "MC", "MR", "AML", "AMC", "AMR", "ST", "WBL", "WBR"] as const
+export const playerPositionLabels = [
+  "GK",
+  "SW",
+  "DL",
+  "DC",
+  "DR",
+  "DM",
+  "ML",
+  "MC",
+  "MR",
+  "AML",
+  "AMC",
+  "AMR",
+  "ST",
+  "WBL",
+  "WBR",
+] as const
 export type PlayerPosition = (typeof playerPositionLabels)[number]
-export type PlayerPositionFamiliarities = Partial<Record<PlayerPosition, number>>
+export type PlayerPositionFamiliarities = Partial<
+  Record<PlayerPosition, number>
+>
 
 export type MatchEventType =
-  | "goal"
-  | "own_goal"
-  | "assist_candidate"
-  | "yellow_card"
-  | "red_card"
+  "goal" | "own_goal" | "assist_candidate" | "yellow_card" | "red_card"
 
 export type MatchEvent = {
   id: string
@@ -34,25 +48,37 @@ export type MatchMomentumPoint = {
   awayWeight: number
 }
 
-export type PlayerHeatmapPoint = {
-  x: number
-  y: number
-  weight: number
-}
-
 export type PositionHeatmapRange = "full" | "half" | "recent15"
-
-export type PlayerPositionHeatmapSlice = {
+export type HeatmapPhase = "all" | "inPossession" | "outOfPossession"
+export type HeatmapScope =
+  { type: "team"; team: TeamSide } | { type: "player"; playerId: number }
+export type HeatmapRange =
+  | PositionHeatmapRange
+  | {
+      type: "custom"
+      fromTick: number
+      toTick: number
+    }
+export type HeatmapQuery = {
+  scope: HeatmapScope
+  phase: HeatmapPhase
+  range: HeatmapRange
+}
+export type HeatmapGrid = {
+  width: 20
+  height: 30
+  density: Float32Array
   sampleCount: number
   averageX: number
   averageY: number
-  points: PlayerHeatmapPoint[]
 }
-
-export type PlayerPositionHeatmap = PlayerPositionHeatmapSlice & {
-  playerId: number
-  team: TeamSide
-  ranges: Record<PositionHeatmapRange, PlayerPositionHeatmapSlice>
+export type HeatmapSnapshot = {
+  /**
+   * Query-keyed live view. The map itself is read-only, but grid objects are
+   * reused and updated by HeatmapDerivations to avoid per-frame allocations.
+   * Use getHeatmap() rather than retaining individual grid references.
+   */
+  grids: ReadonlyMap<string, HeatmapGrid>
 }
 
 export type TacticalEventMetricId =
@@ -249,15 +275,39 @@ export type FormationSnapshot = {
 
 export type MatchSnapshot = {
   matchId?: string
-  clock: { minute: number; second: number; elapsedMinute: number; elapsedSecond: number; elapsedTick: number }
+  clock: {
+    minute: number
+    second: number
+    elapsedMinute: number
+    elapsedSecond: number
+    elapsedTick: number
+  }
   period: number
   score: { home: number; away: number }
-  home: { uid?: number; clubUid?: number; name: string; color?: string; logoPath?: string; logoUrl?: string; formation?: string; stats: TeamStats }
-  away: { uid?: number; clubUid?: number; name: string; color?: string; logoPath?: string; logoUrl?: string; formation?: string; stats: TeamStats }
+  home: {
+    uid?: number
+    clubUid?: number
+    name: string
+    color?: string
+    logoPath?: string
+    logoUrl?: string
+    formation?: string
+    stats: TeamStats
+  }
+  away: {
+    uid?: number
+    clubUid?: number
+    name: string
+    color?: string
+    logoPath?: string
+    logoUrl?: string
+    formation?: string
+    stats: TeamStats
+  }
   players: MatchPlayer[]
   events: MatchEvent[]
   xgTimeline: XgTimelinePoint[]
-  positionHeatmaps: PlayerPositionHeatmap[]
+  heatmaps: HeatmapSnapshot
   tacticalEvents: TacticalEventPoint[]
   momentum: MatchMomentumPoint[]
   rollingMomentum: MatchMomentumPoint[]

@@ -52,7 +52,8 @@ const resources = {
         liveClock: "实时 · {{time}}",
         substitution: "换人",
         waitingForConnection: "正在等待比赛连接",
-        waitingDescription: "进入比赛后会自动显示实时数据，也可以载入本地存档查看回放。",
+        waitingDescription:
+          "进入比赛后会自动显示实时数据，也可以载入本地存档查看回放。",
         dropArchive: "将 .fmlens 存档拖放到这里",
       },
       squad: {
@@ -189,8 +190,20 @@ const resources = {
       heatmapRange: {
         full: "全场",
         half: "半场",
-        recent15: "近15分钟",
+        recent15: "近15",
         samples: "{{count}} 个采样点",
+      },
+      heatmap: {
+        scope: "范围",
+        range: "时间范围",
+        phase: "比赛阶段",
+        team: "球队",
+        player: "球员",
+        all: "全部",
+        inPossession: "持球",
+        outOfPossession: "无球",
+        ip: "持球",
+        oop: "无球",
       },
       playerProfile: {
         weeklyWage: "周薪",
@@ -401,9 +414,11 @@ const resources = {
           Low: "低",
         },
         keepPressureTitle: "保持禁区周边压力",
-        keepPressureDetail: "球队已经创造出足够射门。保持锋线活跃，并争取禁区附近的二点球。",
+        keepPressureDetail:
+          "球队已经创造出足够射门。保持锋线活跃，并争取禁区附近的二点球。",
         reduceSpaceTitle: "压缩两线之间空间",
-        reduceSpaceDetail: "对手太容易获得射门机会。要求中场线在上抢前先保持队形。",
+        reduceSpaceDetail:
+          "对手太容易获得射门机会。要求中场线在上抢前先保持队形。",
         circulateTitle: "转移前先耐心传导",
         circulateDetail: "控球较稳定。通过支点球员梳理后，再攻击远端空间。",
         outletTitle: "需要更安全的短传接应",
@@ -450,7 +465,8 @@ const resources = {
         liveClock: "Live · {{time}}",
         substitution: "Substitution",
         waitingForConnection: "Waiting for match connection",
-        waitingDescription: "Live data appears automatically when a match starts, or load a local archive to watch a replay.",
+        waitingDescription:
+          "Live data appears automatically when a match starts, or load a local archive to watch a replay.",
         dropArchive: "Drop a .fmlens archive here",
       },
       squad: {
@@ -589,6 +605,18 @@ const resources = {
         half: "Half",
         recent15: "15Min",
         samples: "{{count}} samples",
+      },
+      heatmap: {
+        scope: "Scope",
+        range: "Time range",
+        phase: "Phase",
+        team: "Team",
+        player: "Player",
+        all: "All",
+        inPossession: "In Possession",
+        outOfPossession: "Out of Possession",
+        ip: "IP",
+        oop: "OOP",
       },
       playerProfile: {
         weeklyWage: "Weekly Wage",
@@ -799,17 +827,23 @@ const resources = {
           Low: "Low",
         },
         keepPressureTitle: "Keep pressure around the box",
-        keepPressureDetail: "The side is creating enough shots. Keep the front line active and look for second balls near the area.",
+        keepPressureDetail:
+          "The side is creating enough shots. Keep the front line active and look for second balls near the area.",
         reduceSpaceTitle: "Reduce space between lines",
-        reduceSpaceDetail: "The opponent is finding shots too easily. Ask the midfield line to hold shape before pressing.",
+        reduceSpaceDetail:
+          "The opponent is finding shots too easily. Ask the midfield line to hold shape before pressing.",
         circulateTitle: "Circulate before switching play",
-        circulateDetail: "Possession control is stable. Move the ball through the pivot before attacking the far side.",
+        circulateDetail:
+          "Possession control is stable. Move the ball through the pivot before attacking the far side.",
         outletTitle: "Shorter passing outlet needed",
-        outletDetail: "The team is spending too long without the ball. Offer a safer outlet from the defensive third.",
+        outletDetail:
+          "The team is spending too long without the ball. Offer a safer outlet from the defensive third.",
         rhythmTitle: "Passing rhythm is clean",
-        rhythmDetail: "Passing completion is strong. Be patient rather than forcing early crosses.",
+        rhythmDetail:
+          "Passing completion is strong. Be patient rather than forcing early crosses.",
         lanesTitle: "Protect central passing lanes",
-        lanesDetail: "Several moves are breaking down centrally. Slow the tempo and use support duties to connect play.",
+        lanesDetail:
+          "Several moves are breaking down centrally. Slow the tempo and use support duties to connect play.",
       },
     },
   },

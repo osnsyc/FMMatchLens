@@ -4,7 +4,6 @@
   "version": "0.2.0",
   "type": "module",
   "scripts": {
-    "postinstall": "patch-package",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
@@ -21,8 +20,8 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^13.1.0",
-    "heatmap.js": "^2.0.5",
     "i18next": "^26.3.6",
+    "pixi.js": "^8.20.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-i18next": "^17.0.11",
@@ -33,7 +32,6 @@
   },
   "devDependencies": {
     "@eslint/js": "^10",
-    "@types/heatmap.js": "^2.0.41",
     "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -42,7 +40,6 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17",
-    "patch-package": "^8.0.1",
     "prettier": "^3.8.3",
     "prettier-plugin-tailwindcss": "^0.8.1",
     "typescript": "~6",

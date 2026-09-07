@@ -1,13 +1,14 @@
 import { startTransition, useEffect, useRef, useState } from "react"
 
+import { HeatmapDerivations } from "@/api/heatmap"
+
 import type {
   FormationSnapshot,
   MatchPlayer,
   MatchEvent,
   MatchSnapshot,
   MatchMomentumPoint,
-  PlayerPositionHeatmap,
-  PlayerPositionHeatmapSlice,
+  HeatmapSnapshot,
   PlayerStats,
   PlayerTacticalAssignment,
   PlayerAttributes,
@@ -192,18 +193,6 @@ type RealtimeFormationTimelineSlice = {
   entries: RealtimeFormationTimelineEntry[]
 }
 
-type HeatCell = { count: number; sumX: number; sumY: number }
-type HeatAccumulator = {
-  playerId: number
-  team: TeamSide
-  sampleCount: number
-  sumX: number
-  sumY: number
-  cells: Map<string, HeatCell>
-}
-type HeatSample = { playerId: number; team: TeamSide; x: number; y: number; cell: string }
-type RecentHeatFrame = { minute: number; samples: HeatSample[] }
-
 /** Incremental historical state. Each accepted frame is visited exactly once. */
 class LiveDerivations {
   private previous?: RealtimeFrame
@@ -212,12 +201,7 @@ class LiveDerivations {
   private tactical = new Map<number, TacticalEventPoint>()
   private momentum = new Map<number, MatchMomentumPoint>()
   private rollingMomentum = new Map<number, MatchMomentumPoint>()
-  private fullHeat = new Map<number, HeatAccumulator>()
-  private halfHeat = new Map<number, HeatAccumulator>()
-  private recentHeat = new Map<number, HeatAccumulator>()
-  private recentFrames: RecentHeatFrame[] = []
-  private recentStart = 0
-  private halfKey = -1
+  private heatmaps = new HeatmapDerivations()
 
   reset() {
     this.previous = undefined
@@ -226,12 +210,7 @@ class LiveDerivations {
     this.tactical.clear()
     this.momentum.clear()
     this.rollingMomentum.clear()
-    this.fullHeat.clear()
-    this.halfHeat.clear()
-    this.recentHeat.clear()
-    this.recentFrames = []
-    this.recentStart = 0
-    this.halfKey = -1
+    this.heatmaps.reset()
   }
 
   append(frames: readonly RealtimeFrame[]) {
@@ -242,13 +221,16 @@ class LiveDerivations {
     return {
       xg: [...this.xg],
       events: [...this.events],
-      tactical: [...this.tactical.values()].sort((left, right) => left.tick - right.tick),
-      heatmaps: this.buildHeatmaps(),
+      tactical: [...this.tactical.values()].sort(
+        (left, right) => left.tick - right.tick
+      ),
+      heatmaps: this.heatmaps.snapshot(),
       momentum: [...this.momentum.values()]
         .filter((point) => point.timeTicks <= currentTick + 1_200)
         .sort((left, right) => left.timeTicks - right.timeTicks),
-      rollingMomentum: [...this.rollingMomentum.values()]
-        .sort((left, right) => left.timeTicks - right.timeTicks),
+      rollingMomentum: [...this.rollingMomentum.values()].sort(
+        (left, right) => left.timeTicks - right.timeTicks
+      ),
     }
   }
 
@@ -260,12 +242,20 @@ class LiveDerivations {
     else this.xg.push(xgPoint)
 
     for (const point of frame.momentum) {
-      if (!Number.isFinite(point.value) || !Number.isFinite(point.timeTicks)) continue
-      this.momentum.set(point.timeTicks, { ...point, minute: (point.timeTicks + 1) / 240 })
+      if (!Number.isFinite(point.value) || !Number.isFinite(point.timeTicks))
+        continue
+      this.momentum.set(point.timeTicks, {
+        ...point,
+        minute: (point.timeTicks + 1) / 240,
+      })
     }
     for (const point of frame.rollingMomentum) {
-      if (!Number.isFinite(point.value) || !Number.isFinite(point.timeTicks)) continue
-      this.rollingMomentum.set(point.timeTicks, { ...point, minute: point.timeTicks / 240 })
+      if (!Number.isFinite(point.value) || !Number.isFinite(point.timeTicks))
+        continue
+      this.rollingMomentum.set(point.timeTicks, {
+        ...point,
+        minute: point.timeTicks / 240,
+      })
     }
 
     this.appendNativeMomentumEvents(frame)
@@ -273,12 +263,14 @@ class LiveDerivations {
     if (previous) {
       this.appendEvents(previous, frame)
     }
-    this.appendHeat(frame, minute)
+    this.heatmaps.append([frame])
     this.previous = frame
   }
 
   private appendEvents(previous: RealtimeFrame, frame: RealtimeFrame) {
-    const previousPlayers = new Map(previous.players.map((player) => [player.playerId, player]))
+    const previousPlayers = new Map(
+      previous.players.map((player) => [player.playerId, player])
+    )
     let identifiedHomeGoals = 0
     let identifiedAwayGoals = 0
     for (const player of frame.players) {
@@ -290,7 +282,11 @@ class LiveDerivations {
       for (let count = 0; count < goalDelta; count += 1) {
         this.events.push({
           id: `${frame.matchId}-player-${player.playerId}-goal-${player.goals - goalDelta + count + 1}-${frame.tick}`,
-          type: "goal", minute: frameMinute(frame), tick: frame.tick, team: player.team, playerId: player.playerId,
+          type: "goal",
+          minute: frameMinute(frame),
+          tick: frame.tick,
+          team: player.team,
+          playerId: player.playerId,
         })
         if (player.team === "home") identifiedHomeGoals += 1
         else identifiedAwayGoals += 1
@@ -298,23 +294,39 @@ class LiveDerivations {
       for (let count = 0; count < assistDelta; count += 1) {
         this.events.push({
           id: `${frame.matchId}-player-${player.playerId}-assist-${player.assists - assistDelta + count + 1}-${frame.tick}`,
-          type: "assist_candidate", minute: frameMinute(frame), tick: frame.tick, team: player.team, playerId: player.playerId,
+          type: "assist_candidate",
+          minute: frameMinute(frame),
+          tick: frame.tick,
+          team: player.team,
+          playerId: player.playerId,
         })
       }
       for (let count = 0; count < ownGoalDelta; count += 1) {
         const scoringTeam = oppositeTeam(player.team)
         this.events.push({
           id: `${frame.matchId}-player-${player.playerId}-own-goal-${frame.tick}-${count}`,
-          type: "own_goal", minute: frameMinute(frame), tick: frame.tick, team: player.team, playerId: player.playerId,
+          type: "own_goal",
+          minute: frameMinute(frame),
+          tick: frame.tick,
+          team: player.team,
+          playerId: player.playerId,
         })
         if (scoringTeam === "home") identifiedHomeGoals += 1
         else identifiedAwayGoals += 1
       }
     }
-    appendUnidentifiedGoals(this.events, frame, "home",
-      Math.max(0, frame.home.goals - previous.home.goals - identifiedHomeGoals))
-    appendUnidentifiedGoals(this.events, frame, "away",
-      Math.max(0, frame.away.goals - previous.away.goals - identifiedAwayGoals))
+    appendUnidentifiedGoals(
+      this.events,
+      frame,
+      "home",
+      Math.max(0, frame.home.goals - previous.home.goals - identifiedHomeGoals)
+    )
+    appendUnidentifiedGoals(
+      this.events,
+      frame,
+      "away",
+      Math.max(0, frame.away.goals - previous.away.goals - identifiedAwayGoals)
+    )
   }
 
   private appendNativeMomentumEvents(frame: RealtimeFrame) {
@@ -326,17 +338,52 @@ class LiveDerivations {
       if (!metricId) continue
       const metricIds = nativeMomentumEventMetricIds(item, metricId)
       const rotateForDisplay = nativeMomentumEventNeedsDisplayRotation(item)
-      const rawStartLateral = finiteCoordinate(item.trajectoryStartLateralPosition)
-      const rawStartLongitudinal = finiteCoordinate(item.trajectoryStartLongitudinalPosition)
+      const rawStartLateral = finiteCoordinate(
+        item.trajectoryStartLateralPosition
+      )
+      const rawStartLongitudinal = finiteCoordinate(
+        item.trajectoryStartLongitudinalPosition
+      )
       const rawEndLateral = finiteCoordinate(item.trajectoryEndLateralPosition)
-      const rawEndLongitudinal = finiteCoordinate(item.trajectoryEndLongitudinalPosition)
-      const anchorLateral = rotateForDisplay ? -item.lateralPosition : item.lateralPosition
-      const anchorLongitudinal = rotateForDisplay ? -item.longitudinalPosition : item.longitudinalPosition
-      const trajectoryStartLateral = rawStartLateral == null ? undefined : rotateForDisplay ? -rawStartLateral : rawStartLateral
-      const trajectoryStartLongitudinal = rawStartLongitudinal == null ? undefined : rotateForDisplay ? -rawStartLongitudinal : rawStartLongitudinal
-      const endLateral = rawEndLateral == null ? undefined : rotateForDisplay ? -rawEndLateral : rawEndLateral
-      const endLongitudinal = rawEndLongitudinal == null ? undefined : rotateForDisplay ? -rawEndLongitudinal : rawEndLongitudinal
-      const trajectoryPoints = normalizeMomentumTrajectory(item, rotateForDisplay, halfWidth, halfLength)
+      const rawEndLongitudinal = finiteCoordinate(
+        item.trajectoryEndLongitudinalPosition
+      )
+      const anchorLateral = rotateForDisplay
+        ? -item.lateralPosition
+        : item.lateralPosition
+      const anchorLongitudinal = rotateForDisplay
+        ? -item.longitudinalPosition
+        : item.longitudinalPosition
+      const trajectoryStartLateral =
+        rawStartLateral == null
+          ? undefined
+          : rotateForDisplay
+            ? -rawStartLateral
+            : rawStartLateral
+      const trajectoryStartLongitudinal =
+        rawStartLongitudinal == null
+          ? undefined
+          : rotateForDisplay
+            ? -rawStartLongitudinal
+            : rawStartLongitudinal
+      const endLateral =
+        rawEndLateral == null
+          ? undefined
+          : rotateForDisplay
+            ? -rawEndLateral
+            : rawEndLateral
+      const endLongitudinal =
+        rawEndLongitudinal == null
+          ? undefined
+          : rotateForDisplay
+            ? -rawEndLongitudinal
+            : rawEndLongitudinal
+      const trajectoryPoints = normalizeMomentumTrajectory(
+        item,
+        rotateForDisplay,
+        halfWidth,
+        halfLength
+      )
       const displayTick = nativeMomentumEventDisplayTick(frame, item)
       this.tactical.set(item.eventIndex, {
         id: `${frame.matchId}-native-momentum-${item.eventIndex}`,
@@ -352,108 +399,27 @@ class LiveDerivations {
         y: normalize(anchorLateral, -halfWidth, halfWidth),
         anchorX: normalize(anchorLongitudinal, -halfLength, halfLength),
         anchorY: normalize(anchorLateral, -halfWidth, halfWidth),
-        trajectoryStartX: trajectoryStartLongitudinal == null ? undefined : normalize(trajectoryStartLongitudinal, -halfLength, halfLength),
-        trajectoryStartY: trajectoryStartLateral == null ? undefined : normalize(trajectoryStartLateral, -halfWidth, halfWidth),
+        trajectoryStartX:
+          trajectoryStartLongitudinal == null
+            ? undefined
+            : normalize(trajectoryStartLongitudinal, -halfLength, halfLength),
+        trajectoryStartY:
+          trajectoryStartLateral == null
+            ? undefined
+            : normalize(trajectoryStartLateral, -halfWidth, halfWidth),
         trajectoryPoints,
-        endX: endLongitudinal == null ? undefined : normalize(endLongitudinal, -halfLength, halfLength),
-        endY: endLateral == null ? undefined : normalize(endLateral, -halfWidth, halfWidth),
+        endX:
+          endLongitudinal == null
+            ? undefined
+            : normalize(endLongitudinal, -halfLength, halfLength),
+        endY:
+          endLateral == null
+            ? undefined
+            : normalize(endLateral, -halfWidth, halfWidth),
         nativeEventType: item.eventType,
         flags: item.flags,
         sequenceIndex: item.sequenceIndex,
       })
-    }
-  }
-
-  private appendHeat(frame: RealtimeFrame, minute: number) {
-    const nextHalfKey = minute < 45 ? 0 : minute < 90 ? 1 : minute < 105 ? 2 : 3
-    if (nextHalfKey !== this.halfKey) {
-      this.halfKey = nextHalfKey
-      this.halfHeat.clear()
-    }
-    const samples: HeatSample[] = []
-    if (frame.possessionTeam != null) {
-      const secondHalf = frame.period === 2
-      for (const player of frame.players) {
-        if (!player.isOnPitch || !Number.isFinite(player.x) || !Number.isFinite(player.y)) continue
-        const halfWidth = validPitchHalf(frame.halfPitchWidth)
-        const halfLength = validPitchHalf(frame.halfPitchLength)
-        if (!halfWidth || !halfLength) continue
-        const x = normalize(secondHalf ? -player.x : player.x, -halfWidth, halfWidth)
-        const y = normalize(secondHalf ? player.y : -player.y, -halfLength, halfLength)
-        const sample = {
-          playerId: player.playerId,
-          team: player.team,
-          x,
-          y,
-          cell: `${Math.min(19, Math.floor(x / 5))}:${Math.min(29, Math.floor(y / (100 / 30)))}`,
-        }
-        samples.push(sample)
-        this.applyHeatSample(this.fullHeat, sample, 1)
-        this.applyHeatSample(this.halfHeat, sample, 1)
-        this.applyHeatSample(this.recentHeat, sample, 1)
-      }
-    }
-    this.recentFrames.push({ minute, samples })
-    const oldestMinute = Math.max(0, minute - 15)
-    while (this.recentStart < this.recentFrames.length &&
-      this.recentFrames[this.recentStart].minute < oldestMinute) {
-      for (const sample of this.recentFrames[this.recentStart].samples)
-        this.applyHeatSample(this.recentHeat, sample, -1)
-      this.recentStart += 1
-    }
-    if (this.recentStart > 2_048) {
-      this.recentFrames = this.recentFrames.slice(this.recentStart)
-      this.recentStart = 0
-    }
-  }
-
-  private applyHeatSample(target: Map<number, HeatAccumulator>, sample: HeatSample, direction: 1 | -1) {
-    let player = target.get(sample.playerId)
-    if (!player && direction > 0) {
-      player = { playerId: sample.playerId, team: sample.team, sampleCount: 0, sumX: 0, sumY: 0, cells: new Map() }
-      target.set(sample.playerId, player)
-    }
-    if (!player) return
-    player.sampleCount += direction
-    player.sumX += sample.x * direction
-    player.sumY += sample.y * direction
-    const cell = player.cells.get(sample.cell) ?? { count: 0, sumX: 0, sumY: 0 }
-    cell.count += direction
-    cell.sumX += sample.x * direction
-    cell.sumY += sample.y * direction
-    if (cell.count <= 0) player.cells.delete(sample.cell)
-    else player.cells.set(sample.cell, cell)
-    if (player.sampleCount <= 0) target.delete(sample.playerId)
-  }
-
-  private buildHeatmaps(): PlayerPositionHeatmap[] {
-    return [...this.fullHeat.values()].map((player) => {
-      const full = this.heatSlice(player)
-      return {
-        playerId: player.playerId,
-        team: player.team,
-        ...full,
-        ranges: {
-          full,
-          half: this.heatSlice(this.halfHeat.get(player.playerId)),
-          recent15: this.heatSlice(this.recentHeat.get(player.playerId)),
-        },
-      }
-    })
-  }
-
-  private heatSlice(player?: HeatAccumulator): PlayerPositionHeatmapSlice {
-    if (!player || player.sampleCount <= 0)
-      return { sampleCount: 0, averageX: 50, averageY: 50, points: [] }
-    return {
-      sampleCount: player.sampleCount,
-      averageX: player.sumX / player.sampleCount,
-      averageY: player.sumY / player.sampleCount,
-      points: [...player.cells.values()].map((cell) => ({
-        x: cell.sumX / cell.count,
-        y: cell.sumY / cell.count,
-        weight: cell.count,
-      })),
     }
   }
 }
@@ -488,10 +454,13 @@ export function useRealtimeMatch(enabled = true): MatchSnapshot | null {
 
     const fetchMetadata = async () => {
       try {
-        const response = await fetch(`${apiBase}/api/match/meta`, { cache: "no-store" })
+        const response = await fetch(`${apiBase}/api/match/meta`, {
+          cache: "no-store",
+        })
         if (!response.ok) return false
         const next = (await response.json()) as RealtimeMatchMetadata | null
-        const changed = JSON.stringify(next) !== JSON.stringify(metadata.current)
+        const changed =
+          JSON.stringify(next) !== JSON.stringify(metadata.current)
         metadata.current = next
         return changed
       } catch {
@@ -502,11 +471,20 @@ export function useRealtimeMatch(enabled = true): MatchSnapshot | null {
 
     const publish = (frame: RealtimeFrame | null, lowPriority: boolean) => {
       if (disposed || !enabledRef.current || !frame) return
-      const commit = () => setMatch(toMatchSnapshot(
-        frame, historical.xg, metadata.current, historical.events,
-        historical.heatmaps, historical.tactical, historical.momentum,
-        historical.rollingMomentum, formationSnapshots,
-      ))
+      const commit = () =>
+        setMatch(
+          toMatchSnapshot(
+            frame,
+            historical.xg,
+            metadata.current,
+            historical.events,
+            historical.heatmaps,
+            historical.tactical,
+            historical.momentum,
+            historical.rollingMomentum,
+            formationSnapshots
+          )
+        )
       if (lowPriority) startTransition(commit)
       else commit()
     }
@@ -526,11 +504,16 @@ export function useRealtimeMatch(enabled = true): MatchSnapshot | null {
     const rebuildFormationSnapshots = () => {
       if (!metadata.current) return
       formationSnapshots = formationHistoryEntries.map((entry) =>
-        toFormationSnapshot(entry, metadata.current!))
+        toFormationSnapshot(entry, metadata.current!)
+      )
     }
 
     const acceptFormationSlice = (slice: RealtimeFormationTimelineSlice) => {
-      if (slice.matchId && latestFrame?.matchId && slice.matchId !== latestFrame.matchId) {
+      if (
+        slice.matchId &&
+        latestFrame?.matchId &&
+        slice.matchId !== latestFrame.matchId
+      ) {
         return { changed: false, gap: false }
       }
       if (slice.matchId) resetFor(slice.matchId)
@@ -548,7 +531,10 @@ export function useRealtimeMatch(enabled = true): MatchSnapshot | null {
         formationHistoryEntries.push(entry)
         formationHistoryIndex = entry.index + 1
         if (metadata.current) {
-          metadata.current = mergeFormationEntryIntoMetadata(metadata.current, entry)
+          metadata.current = mergeFormationEntryIntoMetadata(
+            metadata.current,
+            entry
+          )
         }
         changed = true
       }
@@ -562,14 +548,16 @@ export function useRealtimeMatch(enabled = true): MatchSnapshot | null {
       while (!disposed && enabledRef.current && keepLoading) {
         const response = await fetch(
           `${apiBase}/api/match/formation/history?fromIndex=${formationHistoryIndex}&limit=256`,
-          { cache: "no-store" },
+          { cache: "no-store" }
         )
         if (!response.ok) throw new Error("live formation history read failed")
         const slice = (await response.json()) as RealtimeFormationTimelineSlice
         const accepted = acceptFormationSlice(slice)
-        if (accepted.gap) throw new Error("live formation history has an index gap")
+        if (accepted.gap)
+          throw new Error("live formation history has an index gap")
         changed ||= accepted.changed
-        keepLoading = accepted.changed && formationHistoryIndex < slice.totalEntryCount
+        keepLoading =
+          accepted.changed && formationHistoryIndex < slice.totalEntryCount
       }
       return changed
     }
@@ -626,20 +614,31 @@ export function useRealtimeMatch(enabled = true): MatchSnapshot | null {
         let changed = false
         while (!disposed && enabledRef.current && keepLoading) {
           const fromTick = historyLastTick + 1
-          const response = await fetch(`${apiBase}/api/match/frames?fromTick=${fromTick}&stride=1&limit=${liveFramePageSize}`)
+          const response = await fetch(
+            `${apiBase}/api/match/frames?fromTick=${fromTick}&stride=1&limit=${liveFramePageSize}`
+          )
           if (!response.ok) throw new Error("live frame read failed")
           const slice = (await response.json()) as RealtimeFrameSlice
           // An old request may finish after the WebSocket has already switched
           // to a new match. Never let that response roll live state backwards.
-          if (slice.matchId && latestFrame?.matchId && slice.matchId !== latestFrame.matchId) return
+          if (
+            slice.matchId &&
+            latestFrame?.matchId &&
+            slice.matchId !== latestFrame.matchId
+          )
+            return
           if (slice.matchId) resetFor(slice.matchId)
-          const additions = slice.frames.filter((frame) => frame.tick > historyLastTick)
+          const additions = slice.frames.filter(
+            (frame) => frame.tick > historyLastTick
+          )
           derived.append(additions)
           if (additions.length > 0) historyLastTick = additions.at(-1)!.tick
           changed ||= additions.length > 0
-          keepLoading = slice.frames.length >= liveFramePageSize && additions.length > 0
+          keepLoading =
+            slice.frames.length >= liveFramePageSize && additions.length > 0
         }
-        if (changed) historical = derived.snapshot(latestFrame?.tick ?? historyLastTick)
+        if (changed)
+          historical = derived.snapshot(latestFrame?.tick ?? historyLastTick)
         if (changed) publish(latestFrame, true)
       } catch {
         // WebSocket still keeps the current score/player state live. The next
@@ -743,16 +742,20 @@ export function toMatchSnapshot(
   xgTimeline?: MatchSnapshot["xgTimeline"],
   metadata?: RealtimeMatchMetadata | null,
   events: MatchEvent[] = [],
-  positionHeatmaps: PlayerPositionHeatmap[] = [],
+  heatmaps: HeatmapSnapshot = { grids: new Map() },
   tacticalEvents: TacticalEventPoint[] = [],
   momentum: MatchMomentumPoint[] = [],
   rollingMomentum: MatchMomentumPoint[] = [],
-  formationSnapshots?: FormationSnapshot[],
+  formationSnapshots?: FormationSnapshot[]
 ): MatchSnapshot {
-  const clockTick = Number.isFinite(frame.displayTick) ? frame.displayTick : frame.tick
+  const clockTick = Number.isFinite(frame.displayTick)
+    ? frame.displayTick
+    : frame.tick
   const minute = Math.floor(Math.max(0, clockTick) / 240)
   const second = Math.floor(Math.max(0, clockTick) / 4) % 60
-  const playerMetadata = new Map(metadata?.players.map((player) => [player.playerId, player]) ?? [])
+  const playerMetadata = new Map(
+    metadata?.players.map((player) => [player.playerId, player]) ?? []
+  )
   const homeClubUid = metadata?.home.clubUid
   const awayClubUid = metadata?.away.clubUid
 
@@ -773,7 +776,10 @@ export function toMatchSnapshot(
       name: metadata?.home.name || "Home",
       color: argbToCss(metadata?.home.foregroundColour),
       logoPath: metadata?.home.logoPath,
-      logoUrl: homeClubUid != null ? graphicsAssetUrl("club", homeClubUid, "logo") : undefined,
+      logoUrl:
+        homeClubUid != null
+          ? graphicsAssetUrl("club", homeClubUid, "logo")
+          : undefined,
       stats: toTeamStats(frame.home),
     },
     away: {
@@ -782,15 +788,17 @@ export function toMatchSnapshot(
       name: metadata?.away.name || "Away",
       color: argbToCss(metadata?.away.foregroundColour),
       logoPath: metadata?.away.logoPath,
-      logoUrl: awayClubUid != null ? graphicsAssetUrl("club", awayClubUid, "logo") : undefined,
+      logoUrl:
+        awayClubUid != null
+          ? graphicsAssetUrl("club", awayClubUid, "logo")
+          : undefined,
       stats: toTeamStats(frame.away),
     },
-    players: frame.players.map((player) => toPlayer(
-      player,
-      playerMetadata.get(player.playerId),
-    )),
+    players: frame.players.map((player) =>
+      toPlayer(player, playerMetadata.get(player.playerId))
+    ),
     events: [...events],
-    positionHeatmaps,
+    heatmaps,
     tacticalEvents,
     momentum,
     rollingMomentum,
@@ -807,7 +815,7 @@ export function toMatchSnapshot(
 
 export function buildMomentumTimeline(
   frames: readonly RealtimeFrame[],
-  throughIndex = frames.length - 1,
+  throughIndex = frames.length - 1
 ): MatchMomentumPoint[] {
   const end = Math.min(Math.max(throughIndex, -1), frames.length - 1)
   if (end < 0) return []
@@ -815,7 +823,8 @@ export function buildMomentumTimeline(
   const points = new Map<number, MatchMomentumPoint>()
   for (let index = 0; index <= end; index += 1) {
     for (const point of frames[index].momentum) {
-      if (!Number.isFinite(point.value) || !Number.isFinite(point.timeTicks)) continue
+      if (!Number.isFinite(point.value) || !Number.isFinite(point.timeTicks))
+        continue
       points.set(point.timeTicks, {
         ...point,
         minute: (point.timeTicks + 1) / 240,
@@ -833,7 +842,7 @@ export function buildMomentumTimeline(
 
 export function buildRollingMomentumTimeline(
   frames: readonly RealtimeFrame[],
-  throughIndex = frames.length - 1,
+  throughIndex = frames.length - 1
 ): MatchMomentumPoint[] {
   const end = Math.min(Math.max(throughIndex, -1), frames.length - 1)
   if (end < 0) return []
@@ -841,7 +850,8 @@ export function buildRollingMomentumTimeline(
   const points = new Map<number, MatchMomentumPoint>()
   for (let index = 0; index <= end; index += 1) {
     for (const point of frames[index].rollingMomentum) {
-      if (!Number.isFinite(point.value) || !Number.isFinite(point.timeTicks)) continue
+      if (!Number.isFinite(point.value) || !Number.isFinite(point.timeTicks))
+        continue
       points.set(point.timeTicks, {
         ...point,
         minute: point.timeTicks / 240,
@@ -849,12 +859,14 @@ export function buildRollingMomentumTimeline(
     }
   }
 
-  return [...points.values()].sort((left, right) => left.timeTicks - right.timeTicks)
+  return [...points.values()].sort(
+    (left, right) => left.timeTicks - right.timeTicks
+  )
 }
 
 export function buildXgTimeline(
   frames: readonly RealtimeFrame[],
-  throughIndex = frames.length - 1,
+  throughIndex = frames.length - 1
 ): XgTimelinePoint[] {
   let points: XgTimelinePoint[] = [{ minute: 0, home: 0, away: 0 }]
   const end = Math.min(Math.max(throughIndex, -1), frames.length - 1)
@@ -873,7 +885,7 @@ export function buildXgTimeline(
 
 export function buildMatchEvents(
   frames: readonly RealtimeFrame[],
-  throughIndex = frames.length - 1,
+  throughIndex = frames.length - 1
 ): MatchEvent[] {
   const end = Math.min(Math.max(throughIndex, -1), frames.length - 1)
   if (end < 1) return []
@@ -882,11 +894,14 @@ export function buildMatchEvents(
   let homeGoals = frames[0].home.goals
   let awayGoals = frames[0].away.goals
   const previousPlayers = new Map(
-    frames[0].players.map((player) => [player.playerId, {
-      goals: player.goals,
-      assists: player.assists,
-      ownGoals: player.ownGoals,
-    }]),
+    frames[0].players.map((player) => [
+      player.playerId,
+      {
+        goals: player.goals,
+        assists: player.assists,
+        ownGoals: player.ownGoals,
+      },
+    ])
   )
 
   for (let index = 1; index <= end; index += 1) {
@@ -948,8 +963,18 @@ export function buildMatchEvents(
       })
     }
 
-    appendUnidentifiedGoals(events, frame, "home", Math.max(0, frame.home.goals - homeGoals - identifiedHomeGoals))
-    appendUnidentifiedGoals(events, frame, "away", Math.max(0, frame.away.goals - awayGoals - identifiedAwayGoals))
+    appendUnidentifiedGoals(
+      events,
+      frame,
+      "home",
+      Math.max(0, frame.home.goals - homeGoals - identifiedHomeGoals)
+    )
+    appendUnidentifiedGoals(
+      events,
+      frame,
+      "away",
+      Math.max(0, frame.away.goals - awayGoals - identifiedAwayGoals)
+    )
     homeGoals = frame.home.goals
     awayGoals = frame.away.goals
   }
@@ -957,128 +982,9 @@ export function buildMatchEvents(
   return events
 }
 
-export function buildPositionHeatmaps(
-  frames: readonly RealtimeFrame[],
-  throughIndex = frames.length - 1,
-): PlayerPositionHeatmap[] {
-  type Cell = { count: number; sumX: number; sumY: number }
-  type Accumulator = {
-    playerId: number
-    team: TeamSide
-    sampleCount: number
-    sumX: number
-    sumY: number
-    cells: Map<string, Cell>
-  }
-
-  const end = Math.min(Math.max(throughIndex, -1), frames.length - 1)
-  if (end < 0) return []
-  const currentFrame = frames[end]
-  const currentMinute = frameMinute(currentFrame)
-  const currentHalfStart = currentMinute < 45
-    ? 0
-    : currentMinute < 90
-      ? 45
-      : currentMinute < 105
-        ? 90
-        : 105
-
-  const buildRange = (include: (frame: RealtimeFrame) => boolean) => {
-    const players = new Map<number, Accumulator>()
-
-    for (let index = 0; index <= end; index += 1) {
-      const frame = frames[index]
-      if (!include(frame)) continue
-    // 0x141C0 is null during stoppages/out-of-play. Those frames must not
-    // influence the positional distribution.
-    if (frame.possessionTeam == null) continue
-
-    for (const player of frame.players) {
-      if (!player.isOnPitch || !Number.isFinite(player.x) || !Number.isFinite(player.y)) continue
-
-      // GAME_MATCH positions are absolute pitch coordinates. Rotate second-half
-      // samples by 180 degrees before aggregation so both halves share one
-      // tactical orientation. The final Y negation swaps the current home/away
-      // top-bottom presentation requested by the heatmap UI.
-      const secondHalf = frame.period === 2
-      const orientedX = secondHalf ? -player.x : player.x
-      const orientedY = secondHalf ? -player.y : player.y
-      // Coordinates are metres. Normalize against the live pitch half-size
-      // carried by the same native event source used for the shot map.
-      const halfWidth = validPitchHalf(frame.halfPitchWidth)
-      const halfLength = validPitchHalf(frame.halfPitchLength)
-      if (!halfWidth || !halfLength) continue
-      const x = normalize(orientedX, -halfWidth, halfWidth)
-      const y = normalize(-orientedY, -halfLength, halfLength)
-      const column = Math.min(19, Math.floor(x / 5))
-      const row = Math.min(29, Math.floor(y / (100 / 30)))
-      const key = `${column}:${row}`
-      let accumulator = players.get(player.playerId)
-      if (!accumulator) {
-        accumulator = {
-          playerId: player.playerId,
-          team: player.team,
-          sampleCount: 0,
-          sumX: 0,
-          sumY: 0,
-          cells: new Map(),
-        }
-        players.set(player.playerId, accumulator)
-      }
-
-      accumulator.sampleCount += 1
-      accumulator.sumX += x
-      accumulator.sumY += y
-      const cell = accumulator.cells.get(key) ?? { count: 0, sumX: 0, sumY: 0 }
-      cell.count += 1
-      cell.sumX += x
-      cell.sumY += y
-      accumulator.cells.set(key, cell)
-    }
-    }
-
-    return new Map([...players.values()].map((player) => [player.playerId, {
-      playerId: player.playerId,
-      team: player.team,
-      sampleCount: player.sampleCount,
-      averageX: player.sumX / player.sampleCount,
-      averageY: player.sumY / player.sampleCount,
-      points: [...player.cells.values()].map((cell) => ({
-        x: cell.sumX / cell.count,
-        y: cell.sumY / cell.count,
-        weight: cell.count,
-      })),
-    }]))
-  }
-
-  const full = buildRange(() => true)
-  const half = buildRange((frame) => {
-    const minute = frameMinute(frame)
-    return minute >= currentHalfStart && minute <= currentMinute
-  })
-  const recent15 = buildRange((frame) => frameMinute(frame) >= Math.max(0, currentMinute - 15))
-
-  return [...full.values()].map((heatmap) => ({
-    ...heatmap,
-    ranges: {
-      full: toHeatmapSlice(heatmap),
-      half: toHeatmapSlice(half.get(heatmap.playerId)),
-      recent15: toHeatmapSlice(recent15.get(heatmap.playerId)),
-    },
-  }))
-}
-
-function toHeatmapSlice(
-  heatmap: (PlayerPositionHeatmapSlice & { playerId: number; team: TeamSide }) | undefined,
-): PlayerPositionHeatmapSlice {
-  return heatmap
-    ? { sampleCount: heatmap.sampleCount, averageX: heatmap.averageX, averageY: heatmap.averageY, points: heatmap.points }
-    : { sampleCount: 0, averageX: 50, averageY: 50, points: [] }
-}
-
 export function buildTacticalEvents(
   frames: readonly RealtimeFrame[],
-  throughIndex = frames.length - 1,
+  throughIndex = frames.length - 1
 ): TacticalEventPoint[] {
   const end = Math.min(Math.max(throughIndex, -1), frames.length - 1)
   if (end < 0) return []
@@ -1094,17 +1000,52 @@ export function buildTacticalEvents(
       if (!metricId) continue
       const metricIds = nativeMomentumEventMetricIds(item, metricId)
       const rotateForDisplay = nativeMomentumEventNeedsDisplayRotation(item)
-      const rawStartLateral = finiteCoordinate(item.trajectoryStartLateralPosition)
-      const rawStartLongitudinal = finiteCoordinate(item.trajectoryStartLongitudinalPosition)
+      const rawStartLateral = finiteCoordinate(
+        item.trajectoryStartLateralPosition
+      )
+      const rawStartLongitudinal = finiteCoordinate(
+        item.trajectoryStartLongitudinalPosition
+      )
       const rawEndLateral = finiteCoordinate(item.trajectoryEndLateralPosition)
-      const rawEndLongitudinal = finiteCoordinate(item.trajectoryEndLongitudinalPosition)
-      const anchorLateral = rotateForDisplay ? -item.lateralPosition : item.lateralPosition
-      const anchorLongitudinal = rotateForDisplay ? -item.longitudinalPosition : item.longitudinalPosition
-      const trajectoryStartLateral = rawStartLateral == null ? undefined : rotateForDisplay ? -rawStartLateral : rawStartLateral
-      const trajectoryStartLongitudinal = rawStartLongitudinal == null ? undefined : rotateForDisplay ? -rawStartLongitudinal : rawStartLongitudinal
-      const endLateral = rawEndLateral == null ? undefined : rotateForDisplay ? -rawEndLateral : rawEndLateral
-      const endLongitudinal = rawEndLongitudinal == null ? undefined : rotateForDisplay ? -rawEndLongitudinal : rawEndLongitudinal
-      const trajectoryPoints = normalizeMomentumTrajectory(item, rotateForDisplay, halfWidth, halfLength)
+      const rawEndLongitudinal = finiteCoordinate(
+        item.trajectoryEndLongitudinalPosition
+      )
+      const anchorLateral = rotateForDisplay
+        ? -item.lateralPosition
+        : item.lateralPosition
+      const anchorLongitudinal = rotateForDisplay
+        ? -item.longitudinalPosition
+        : item.longitudinalPosition
+      const trajectoryStartLateral =
+        rawStartLateral == null
+          ? undefined
+          : rotateForDisplay
+            ? -rawStartLateral
+            : rawStartLateral
+      const trajectoryStartLongitudinal =
+        rawStartLongitudinal == null
+          ? undefined
+          : rotateForDisplay
+            ? -rawStartLongitudinal
+            : rawStartLongitudinal
+      const endLateral =
+        rawEndLateral == null
+          ? undefined
+          : rotateForDisplay
+            ? -rawEndLateral
+            : rawEndLateral
+      const endLongitudinal =
+        rawEndLongitudinal == null
+          ? undefined
+          : rotateForDisplay
+            ? -rawEndLongitudinal
+            : rawEndLongitudinal
+      const trajectoryPoints = normalizeMomentumTrajectory(
+        item,
+        rotateForDisplay,
+        halfWidth,
+        halfLength
+      )
       const displayTick = nativeMomentumEventDisplayTick(frame, item)
       events.set(item.eventIndex, {
         id: `${frame.matchId}-native-momentum-${item.eventIndex}`,
@@ -1120,11 +1061,23 @@ export function buildTacticalEvents(
         y: normalize(anchorLateral, -halfWidth, halfWidth),
         anchorX: normalize(anchorLongitudinal, -halfLength, halfLength),
         anchorY: normalize(anchorLateral, -halfWidth, halfWidth),
-        trajectoryStartX: trajectoryStartLongitudinal == null ? undefined : normalize(trajectoryStartLongitudinal, -halfLength, halfLength),
-        trajectoryStartY: trajectoryStartLateral == null ? undefined : normalize(trajectoryStartLateral, -halfWidth, halfWidth),
+        trajectoryStartX:
+          trajectoryStartLongitudinal == null
+            ? undefined
+            : normalize(trajectoryStartLongitudinal, -halfLength, halfLength),
+        trajectoryStartY:
+          trajectoryStartLateral == null
+            ? undefined
+            : normalize(trajectoryStartLateral, -halfWidth, halfWidth),
         trajectoryPoints,
-        endX: endLongitudinal == null ? undefined : normalize(endLongitudinal, -halfLength, halfLength),
-        endY: endLateral == null ? undefined : normalize(endLateral, -halfWidth, halfWidth),
+        endX:
+          endLongitudinal == null
+            ? undefined
+            : normalize(endLongitudinal, -halfLength, halfLength),
+        endY:
+          endLateral == null
+            ? undefined
+            : normalize(endLateral, -halfWidth, halfWidth),
         nativeEventType: item.eventType,
         flags: item.flags,
         sequenceIndex: item.sequenceIndex,
@@ -1135,50 +1088,78 @@ export function buildTacticalEvents(
   return [...events.values()].sort((left, right) => left.tick - right.tick)
 }
 
-function nativeMomentumEventMetric(eventType: number): TacticalEventPoint["metricId"] | undefined {
+function nativeMomentumEventMetric(
+  eventType: number
+): TacticalEventPoint["metricId"] | undefined {
   switch (eventType) {
-    case 1: return "goals"
-    case 2: return "shotsOffTarget"
-    case 3: return "hitWoodwork"
-    case 4: return "shotsOnTarget"
-    case 5: return "blockedShots"
-    case 7: return "passesCompleted"
+    case 1:
+      return "goals"
+    case 2:
+      return "shotsOffTarget"
+    case 3:
+      return "hitWoodwork"
+    case 4:
+      return "shotsOnTarget"
+    case 5:
+      return "blockedShots"
+    case 7:
+      return "passesCompleted"
     case 6:
     case 8:
     case 9:
     case 10:
-    case 11: return "passesIncomplete"
-    case 12: return "crossesCompleted"
+    case 11:
+      return "passesIncomplete"
+    case 12:
+      return "crossesCompleted"
     case 13:
     case 14:
     case 15:
     case 16:
-    case 17: return "crossesIncomplete"
-    case 18: return "fouled"
+    case 17:
+      return "crossesIncomplete"
+    case 18:
+      return "fouled"
     case 19:
     case 20:
-    case 21: return "foulsCommitted"
-    case 23: return "offsides"
-    case 24: return "clearances"
-    case 25: return "defensiveBlocks"
-    case 26: return "tacklesWon"
-    case 27: return "tacklesLost"
-    case 28: return "aerialsWon"
-    case 29: return "aerialsLost"
-    case 31: return "interceptions"
-    case 34: return "dribblesCompleted"
-    case 37: return "goalkeeperSavesHeld"
-    case 38: return "goalkeeperSavesParried"
-    case 52: return "possessionGained"
-    case 53: return "possessionLost"
-    case 54: return "touches"
-    default: return undefined
+    case 21:
+      return "foulsCommitted"
+    case 23:
+      return "offsides"
+    case 24:
+      return "clearances"
+    case 25:
+      return "defensiveBlocks"
+    case 26:
+      return "tacklesWon"
+    case 27:
+      return "tacklesLost"
+    case 28:
+      return "aerialsWon"
+    case 29:
+      return "aerialsLost"
+    case 31:
+      return "interceptions"
+    case 34:
+      return "dribblesCompleted"
+    case 37:
+      return "goalkeeperSavesHeld"
+    case 38:
+      return "goalkeeperSavesParried"
+    case 52:
+      return "possessionGained"
+    case 53:
+      return "possessionLost"
+    case 54:
+      return "touches"
+    default:
+      return undefined
   }
 }
 
 function nativeMomentumEventMetricIds(
   item: RealtimeMomentumEvent,
-  primaryMetricId: TacticalEventPoint["metricId"],
+  primaryMetricId: TacticalEventPoint["metricId"]
 ): TacticalEventPoint["metricId"][] {
   const isPassOrCross = item.eventType >= 6 && item.eventType <= 17
   return isPassOrCross && (item.flags & 0x02) !== 0
@@ -1186,15 +1167,22 @@ function nativeMomentumEventMetricIds(
     : [primaryMetricId]
 }
 
-function nativeMomentumEventNeedsDisplayRotation(item: RealtimeMomentumEvent): boolean {
+function nativeMomentumEventNeedsDisplayRotation(
+  item: RealtimeMomentumEvent
+): boolean {
   const reverseDirection = (item.flags & 0x100) !== 0
   return item.team === "home" ? !reverseDirection : reverseDirection
 }
 
-function nativeMomentumEventDisplayTick(frame: RealtimeFrame, item: RealtimeMomentumEvent): number {
+function nativeMomentumEventDisplayTick(
+  frame: RealtimeFrame,
+  item: RealtimeMomentumEvent
+): number {
   const reverseDirection = (item.flags & 0x100) !== 0
-  const usesSecondPeriodDirection = item.team === "home" ? reverseDirection : !reverseDirection
-  if (!usesSecondPeriodDirection || frame.period < 2) return Math.max(0, item.tick)
+  const usesSecondPeriodDirection =
+    item.team === "home" ? reverseDirection : !reverseDirection
+  if (!usesSecondPeriodDirection || frame.period < 2)
+    return Math.max(0, item.tick)
 
   // Native event ticks retain first-half stoppage time; displayTick removes it
   // once the second half starts. A replayed historical second-half event uses
@@ -1207,7 +1195,9 @@ function validPitchHalf(value: number): number | undefined {
   return Number.isFinite(value) && value > 0 ? value : undefined
 }
 
-function finiteCoordinate(value: number | null | undefined): number | undefined {
+function finiteCoordinate(
+  value: number | null | undefined
+): number | undefined {
   return value != null && Number.isFinite(value) ? value : undefined
 }
 
@@ -1215,26 +1205,44 @@ function normalizeMomentumTrajectory(
   event: RealtimeMomentumEvent,
   rotateForDisplay: boolean,
   halfWidth: number,
-  halfLength: number,
+  halfLength: number
 ): Array<{ x: number; y: number }> {
-  let rawPoints = (event.trajectoryPoints ?? []).filter((point) =>
-    Number.isFinite(point.lateralPosition) && Number.isFinite(point.longitudinalPosition)
+  let rawPoints = (event.trajectoryPoints ?? []).filter(
+    (point) =>
+      Number.isFinite(point.lateralPosition) &&
+      Number.isFinite(point.longitudinalPosition)
   )
   if (rawPoints.length === 0) {
     const startLateral = finiteCoordinate(event.trajectoryStartLateralPosition)
-    const startLongitudinal = finiteCoordinate(event.trajectoryStartLongitudinalPosition)
+    const startLongitudinal = finiteCoordinate(
+      event.trajectoryStartLongitudinalPosition
+    )
     const endLateral = finiteCoordinate(event.trajectoryEndLateralPosition)
-    const endLongitudinal = finiteCoordinate(event.trajectoryEndLongitudinalPosition)
-    if (startLateral != null && startLongitudinal != null && endLateral != null && endLongitudinal != null) {
+    const endLongitudinal = finiteCoordinate(
+      event.trajectoryEndLongitudinalPosition
+    )
+    if (
+      startLateral != null &&
+      startLongitudinal != null &&
+      endLateral != null &&
+      endLongitudinal != null
+    ) {
       rawPoints = [
-        { lateralPosition: startLateral, longitudinalPosition: startLongitudinal },
+        {
+          lateralPosition: startLateral,
+          longitudinalPosition: startLongitudinal,
+        },
         { lateralPosition: endLateral, longitudinalPosition: endLongitudinal },
       ]
     }
   }
   return rawPoints.map((point) => {
-    const lateral = rotateForDisplay ? -point.lateralPosition : point.lateralPosition
-    const longitudinal = rotateForDisplay ? -point.longitudinalPosition : point.longitudinalPosition
+    const lateral = rotateForDisplay
+      ? -point.lateralPosition
+      : point.lateralPosition
+    const longitudinal = rotateForDisplay
+      ? -point.longitudinalPosition
+      : point.longitudinalPosition
     return {
       x: normalize(longitudinal, -halfLength, halfLength),
       y: normalize(lateral, -halfWidth, halfWidth),
@@ -1243,7 +1251,9 @@ function normalizeMomentumTrajectory(
 }
 
 function frameMinute(frame: RealtimeFrame): number {
-  const clockTick = Number.isFinite(frame.displayTick) ? frame.displayTick : frame.tick
+  const clockTick = Number.isFinite(frame.displayTick)
+    ? frame.displayTick
+    : frame.tick
   return Math.floor(Math.max(0, clockTick) / 240)
 }
 
@@ -1253,7 +1263,7 @@ function oppositeTeam(team: TeamSide): TeamSide {
 
 function appendXgPoint(
   points: readonly XgTimelinePoint[],
-  point: XgTimelinePoint,
+  point: XgTimelinePoint
 ): XgTimelinePoint[] {
   const next = points.filter((entry) => entry.minute < point.minute)
   next.push(point)
@@ -1264,7 +1274,7 @@ function appendUnidentifiedGoals(
   events: MatchEvent[],
   frame: RealtimeFrame,
   team: TeamSide,
-  count: number,
+  count: number
 ) {
   for (let index = 0; index < count; index += 1) {
     events.push({
@@ -1297,9 +1307,11 @@ function toTeamStats(team: RealtimeTeam): TeamStats {
 
 function toFormationSnapshot(
   entry: RealtimeFormationTimelineEntry,
-  metadata: RealtimeMatchMetadata,
+  metadata: RealtimeMatchMetadata
 ): FormationSnapshot {
-  const playerMetadata = new Map(metadata.players.map((player) => [player.playerId, player]))
+  const playerMetadata = new Map(
+    metadata.players.map((player) => [player.playerId, player])
+  )
   return {
     tick: Math.max(0, entry.tick),
     minute: Math.floor(Math.max(0, entry.displayTick) / 240),
@@ -1309,11 +1321,16 @@ function toFormationSnapshot(
       return {
         id: player.playerId,
         uid,
-        name: details?.commonName || details?.displayName || `Player ${player.playerId}`,
-        fullName: `${details?.firstName ?? ""} ${details?.secondName ?? ""}`.trim()
-          || details?.displayName,
+        name:
+          details?.commonName ||
+          details?.displayName ||
+          `Player ${player.playerId}`,
+        fullName:
+          `${details?.firstName ?? ""} ${details?.secondName ?? ""}`.trim() ||
+          details?.displayName,
         portraitPath: details?.portraitPath,
-        portraitUrl: uid != null ? graphicsAssetUrl("person", uid, "portrait") : undefined,
+        portraitUrl:
+          uid != null ? graphicsAssetUrl("person", uid, "portrait") : undefined,
         team: player.team,
         shirtNumber: details?.shirtNumber,
         position: details?.position,
@@ -1334,9 +1351,11 @@ function toFormationSnapshot(
 
 function mergeFormationEntryIntoMetadata(
   metadata: RealtimeMatchMetadata,
-  entry: RealtimeFormationTimelineEntry,
+  entry: RealtimeFormationTimelineEntry
 ): RealtimeMatchMetadata {
-  const assignments = new Map(entry.players.map((player) => [player.playerId, player]))
+  const assignments = new Map(
+    entry.players.map((player) => [player.playerId, player])
+  )
   return {
     ...metadata,
     capturedTick: entry.tick,
@@ -1355,16 +1374,22 @@ function mergeFormationEntryIntoMetadata(
 
 function toPlayer(
   player: RealtimePlayer,
-  metadata?: RealtimePlayerMetadata,
+  metadata?: RealtimePlayerMetadata
 ): MatchPlayer {
   const uid = metadata?.uid
   return {
     id: player.playerId,
     uid,
-    name: metadata?.commonName || metadata?.displayName || `Player ${player.playerId}`,
-    fullName: `${metadata?.firstName ?? ""} ${metadata?.secondName ?? ""}`.trim() || metadata?.displayName,
+    name:
+      metadata?.commonName ||
+      metadata?.displayName ||
+      `Player ${player.playerId}`,
+    fullName:
+      `${metadata?.firstName ?? ""} ${metadata?.secondName ?? ""}`.trim() ||
+      metadata?.displayName,
     portraitPath: metadata?.portraitPath,
-    portraitUrl: uid != null ? graphicsAssetUrl("person", uid, "portrait") : undefined,
+    portraitUrl:
+      uid != null ? graphicsAssetUrl("person", uid, "portrait") : undefined,
     team: player.team,
     shirtNumber: metadata?.shirtNumber,
     position: metadata?.position,
@@ -1427,7 +1452,11 @@ function toPlayer(
   }
 }
 
-function graphicsAssetUrl(entityType: string, uid: number, imageType: string): string {
+function graphicsAssetUrl(
+  entityType: string,
+  uid: number,
+  imageType: string
+): string {
   return `${apiBase}/api/assets/${encodeURIComponent(entityType)}/${uid}/${encodeURIComponent(imageType)}`
 }
 

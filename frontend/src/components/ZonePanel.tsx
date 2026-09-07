@@ -1,20 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import * as h337 from "heatmap.js"
 
-import { CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { NativeTabs } from "@/components/uitripled/native-tabs-shadcnui"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { MatchPlayer, MatchSnapshot, PositionHeatmapRange, TeamSide } from "@/types/match"
+import {
+  combineHeatmapGrids,
+  getHeatmap,
+  getHeatmapColorScaleBounds,
+} from "@/api/heatmap"
+import { PixiHeatmap } from "@/components/heatmap/PixiHeatmap"
+import {
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { MultiStateButton } from "@/components/ui/multi-state-button"
+import type {
+  HeatmapPhase,
+  MatchPlayer,
+  MatchSnapshot,
+  PositionHeatmapRange,
+  TeamSide,
+} from "@/types/match"
 
 type ZonePanelProps = {
   match: MatchSnapshot
-}
-
-type HeatPoint = {
-  x: number
-  y: number
-  weight: number
 }
 
 type HeatLabel = {
@@ -27,93 +36,75 @@ type HeatLabel = {
 export function ZonePanel({ match }: ZonePanelProps) {
   const { t } = useTranslation()
   const [selectedTeam, setSelectedTeam] = useState<TeamSide>("home")
-  const [selectedRange, setSelectedRange] = useState<PositionHeatmapRange>("full")
+  const [selectedPhase, setSelectedPhase] = useState<HeatmapPhase>("all")
+  const [selectedRange, setSelectedRange] =
+    useState<PositionHeatmapRange>("full")
   const pitchHostRef = useRef<HTMLDivElement | null>(null)
-  const pitchSurfaceRef = useRef<HTMLDivElement | null>(null)
-  const heatmapHostRef = useRef<HTMLDivElement | null>(null)
   const [pitchSize, setPitchSize] = useState({ width: 0, height: 0 })
-  const teamColor = match[selectedTeam].color ?? (selectedTeam === "home" ? "#6cabdd" : "#ef0107")
+  const teamColor =
+    match[selectedTeam].color ??
+    (selectedTeam === "home" ? "#6cabdd" : "#ef0107")
 
-  const activePlayerIds = useMemo(
-    () => new Set(
-      match.players
-        .filter((player) => player.team === selectedTeam && player.isOnPitch)
-        .map((player) => player.id)
-    ),
+  const teamPlayers = useMemo(
+    () => match.players.filter((player) => player.team === selectedTeam),
     [match.players, selectedTeam]
   )
-
-  const selectedHeatmaps = useMemo(
-    () => match.positionHeatmaps.map((heatmap) => ({
-      ...heatmap,
-      ...heatmap.ranges[selectedRange],
-    })),
-    [match.positionHeatmaps, selectedRange]
-  )
-
-  const heatPoints = useMemo<HeatPoint[]>(
-    () => selectedHeatmaps
-      .filter((heatmap) => heatmap.team === selectedTeam && activePlayerIds.has(heatmap.playerId))
-      .flatMap((heatmap) => heatmap.points),
-    [activePlayerIds, selectedHeatmaps, selectedTeam]
-  )
+  const outfieldHeatmaps = useMemo(() => {
+    const forTeam = (team: TeamSide) =>
+      combineHeatmapGrids(
+        match.players
+          .filter((player) => player.team === team && !isGoalkeeper(player))
+          .map((player) =>
+            getHeatmap(match.heatmaps, {
+              scope: { type: "player", playerId: player.id },
+              phase: selectedPhase,
+              range: selectedRange,
+            })
+          )
+      )
+    return {
+      home: forTeam("home"),
+      away: forTeam("away"),
+    }
+  }, [match.heatmaps, match.players, selectedPhase, selectedRange])
+  const heatmapGrid = outfieldHeatmaps[selectedTeam]
+  const heatmapColorScale = useMemo(() => {
+    const bounds = getHeatmapColorScaleBounds([
+      outfieldHeatmaps.home,
+      outfieldHeatmaps.away,
+    ])
+    return {
+      maxCellShare: bounds.rawMaxCellShare,
+      sampleDivisor: heatmapGrid.sampleCount,
+      lutScale:
+        bounds.blurredMaxCellShare > 0
+          ? bounds.rawMaxCellShare / bounds.blurredMaxCellShare
+          : 1,
+    }
+  }, [heatmapGrid.sampleCount, outfieldHeatmaps.away, outfieldHeatmaps.home])
 
   const heatLabels = useMemo<HeatLabel[]>(
-    () => selectedHeatmaps
-      .filter((heatmap) => heatmap.team === selectedTeam && activePlayerIds.has(heatmap.playerId) && heatmap.sampleCount > 0)
-      .map((heatmap) => {
-        const player = match.players.find((entry) => entry.id === heatmap.playerId)
-        return player
-          ? {
-              x: heatmap.averageX,
-              y: heatmap.averageY,
-              sampleCount: heatmap.sampleCount,
-              player,
-            }
-          : null
-      })
-      .filter((label): label is HeatLabel => label != null),
-    [activePlayerIds, match.players, selectedHeatmaps, selectedTeam]
+    () =>
+      teamPlayers
+        .filter((player) => player.isOnPitch)
+        .map((player) => {
+          const grid = getHeatmap(match.heatmaps, {
+            scope: { type: "player", playerId: player.id },
+            phase: selectedPhase,
+            range: selectedRange,
+          })
+          return grid.sampleCount > 0
+            ? {
+                x: grid.averageX,
+                y: grid.averageY,
+                sampleCount: grid.sampleCount,
+                player,
+              }
+            : null
+        })
+        .filter((label): label is HeatLabel => label != null),
+    [match.heatmaps, selectedPhase, selectedRange, teamPlayers]
   )
-
-  useEffect(() => {
-    const host = heatmapHostRef.current
-
-    if (!host || pitchSize.width <= 1 || pitchSize.height <= 1) return
-
-    host.replaceChildren()
-    const radius = Math.max(12, Math.round(Math.min(pitchSize.width, pitchSize.height) * 0.11))
-    const heatmap = h337.create({
-      container: host,
-      radius,
-      blur: 0.88,
-      minOpacity: 0.08,
-      maxOpacity: 0.82,
-      gradient: {
-        0.15: "#2457ff",
-        0.35: "#16c8ff",
-        0.55: "#35e66f",
-        0.75: "#ffe14a",
-        0.9: "#ff8a2a",
-        1: "#ff2f45",
-      },
-    })
-
-    const max = Math.max(1, ...heatPoints.map((point) => point.weight))
-    heatmap.setData({
-      min: 0,
-      max,
-      data: heatPoints.map((point) => ({
-        x: Math.round((point.x / 100) * pitchSize.width),
-        y: Math.round((point.y / 100) * pitchSize.height),
-        value: point.weight,
-      })),
-    })
-
-    return () => {
-      host.replaceChildren()
-    }
-  }, [heatPoints, pitchSize])
 
   useEffect(() => {
     const host = pitchHostRef.current
@@ -158,82 +149,216 @@ export function ZonePanel({ match }: ZonePanelProps) {
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
-      <CardHeader className="shrink-0 grid-cols-[1fr_auto] items-center border-b px-3 py-2">
-        <CardTitle className="text-sm font-semibold">{t("panels.positionHeatmap")}</CardTitle>
-        <CardAction className="flex items-center gap-2">
-          <Select value={selectedRange} onValueChange={(value) => setSelectedRange(value as PositionHeatmapRange)}>
-            <SelectTrigger size="sm" className="h-7 w-auto min-w-20 max-w-28 px-2 text-[11px]" aria-label={t("panels.positionHeatmap")}>
-              <SelectValue>{t(`heatmapRange.${selectedRange}`)}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="full">{t("heatmapRange.full")}</SelectItem>
-              <SelectItem value="half">{t("heatmapRange.half")}</SelectItem>
-              <SelectItem value="recent15">{t("heatmapRange.recent15")}</SelectItem>
-            </SelectContent>
-          </Select>
-          <NativeTabs
+      <CardHeader className="shrink-0 grid-cols-[auto_1fr] items-center gap-2 border-b px-3 py-2">
+        <CardTitle className="text-sm font-semibold">
+          {t("panels.positionHeatmap")}
+        </CardTitle>
+        <CardAction className="flex min-w-0 flex-nowrap items-center justify-end gap-1.5">
+          <MultiStateButton
+            value={selectedRange}
+            onValueChange={setSelectedRange}
+            variant="outline"
+            size="sm"
+            className="min-w-14 px-2 text-[11px]"
+            aria-label={t("heatmap.range")}
+            contextMenuClassName="min-w-32"
+            states={
+              [
+                { value: "full", label: t("heatmapRange.full") },
+                { value: "half", label: t("heatmapRange.half") },
+                { value: "recent15", label: t("heatmapRange.recent15") },
+              ] satisfies Array<{ value: PositionHeatmapRange; label: string }>
+            }
+          />
+          <MultiStateButton
             value={selectedTeam}
-            onValueChange={(value) => setSelectedTeam(value as TeamSide)}
-            renderContent={false}
-            className="w-32 max-w-none"
-            listClassName="h-6"
-            triggerClassName="h-5 px-1.5 text-[10px]"
-            items={[
-              { id: "home", label: t("common.home"), content: null },
-              { id: "away", label: t("common.away"), content: null },
-            ]}
+            onValueChange={setSelectedTeam}
+            variant="outline"
+            size="sm"
+            className="min-w-12 px-2 text-[11px]"
+            aria-label={t("heatmap.team")}
+            contextMenuClassName="min-w-28"
+            states={
+              [
+                { value: "home", label: t("common.home") },
+                { value: "away", label: t("common.away") },
+              ] satisfies Array<{ value: TeamSide; label: string }>
+            }
+          />
+          <MultiStateButton
+            value={selectedPhase}
+            onValueChange={setSelectedPhase}
+            variant="outline"
+            size="sm"
+            className="min-w-12 px-2 text-[11px]"
+            aria-label={t("heatmap.phase")}
+            contextMenuClassName="min-w-40"
+            states={
+              [
+                { value: "all", label: t("heatmap.all") },
+                {
+                  value: "inPossession",
+                  label: t("heatmap.inPossession"),
+                  buttonLabel: t("heatmap.ip"),
+                },
+                {
+                  value: "outOfPossession",
+                  label: t("heatmap.outOfPossession"),
+                  buttonLabel: t("heatmap.oop"),
+                },
+              ] satisfies Array<{
+                value: HeatmapPhase
+                label: string
+                buttonLabel?: string
+              }>
+            }
           />
         </CardAction>
       </CardHeader>
 
       <CardContent className="flex min-h-0 flex-1 p-0">
-        <div ref={pitchHostRef} className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-3">
+        <div
+          ref={pitchHostRef}
+          className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-3"
+        >
           <div
-            ref={pitchSurfaceRef}
             className="relative shrink-0 overflow-hidden rounded-md bg-muted"
             style={{
               width: `${pitchSize.width}px`,
               height: `${pitchSize.height}px`,
             }}
           >
-            <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-              <div ref={heatmapHostRef} className="size-full" />
+            <div
+              className="pointer-events-none absolute inset-0"
+              aria-hidden="true"
+            >
+              {pitchSize.width > 1 && pitchSize.height > 1 && (
+                <PixiHeatmap
+                  grid={heatmapGrid}
+                  width={pitchSize.width}
+                  height={pitchSize.height}
+                  colorScale={heatmapColorScale}
+                />
+              )}
             </div>
 
-            <svg className="pointer-events-none absolute inset-0 size-full" viewBox="0 0 100 148" preserveAspectRatio="none" aria-hidden="true">
-              <rect x="1" y="1" width="98" height="146" rx="2" fill="none" stroke="currentColor" strokeWidth="0.8" className="text-foreground/40" />
-              <line x1="1" y1="74" x2="99" y2="74" stroke="currentColor" strokeWidth="0.6" className="text-foreground/35" />
-              <circle cx="50" cy="74" r="10" fill="none" stroke="currentColor" strokeWidth="0.6" className="text-foreground/35" />
-              <circle cx="50" cy="74" r="0.8" fill="currentColor" className="text-foreground/40" />
-              <rect x="30" y="1" width="40" height="18" fill="none" stroke="currentColor" strokeWidth="0.6" className="text-foreground/35" />
-              <rect x="30" y="129" width="40" height="18" fill="none" stroke="currentColor" strokeWidth="0.6" className="text-foreground/35" />
-              <rect x="39" y="1" width="22" height="7" fill="none" stroke="currentColor" strokeWidth="0.6" className="text-foreground/35" />
-              <rect x="39" y="140" width="22" height="7" fill="none" stroke="currentColor" strokeWidth="0.6" className="text-foreground/35" />
-              <path d="M38 19a15 15 0 0 0 24 0" fill="none" stroke="currentColor" strokeWidth="0.6" className="text-foreground/35" />
-              <path d="M38 129a15 15 0 0 1 24 0" fill="none" stroke="currentColor" strokeWidth="0.6" className="text-foreground/35" />
+            <svg
+              className="pointer-events-none absolute inset-0 size-full"
+              viewBox="0 0 100 148"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <rect
+                x="1"
+                y="1"
+                width="98"
+                height="146"
+                rx="2"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="0.8"
+                className="text-foreground/40"
+              />
+              <line
+                x1="1"
+                y1="74"
+                x2="99"
+                y2="74"
+                stroke="currentColor"
+                strokeWidth="0.6"
+                className="text-foreground/35"
+              />
+              <circle
+                cx="50"
+                cy="74"
+                r="10"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="0.6"
+                className="text-foreground/35"
+              />
+              <circle
+                cx="50"
+                cy="74"
+                r="0.8"
+                fill="currentColor"
+                className="text-foreground/40"
+              />
+              <rect
+                x="30"
+                y="1"
+                width="40"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="0.6"
+                className="text-foreground/35"
+              />
+              <rect
+                x="30"
+                y="129"
+                width="40"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="0.6"
+                className="text-foreground/35"
+              />
+              <rect
+                x="39"
+                y="1"
+                width="22"
+                height="7"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="0.6"
+                className="text-foreground/35"
+              />
+              <rect
+                x="39"
+                y="140"
+                width="22"
+                height="7"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="0.6"
+                className="text-foreground/35"
+              />
+              <path
+                d="M38 19a15 15 0 0 0 24 0"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="0.6"
+                className="text-foreground/35"
+              />
+              <path
+                d="M38 129a15 15 0 0 1 24 0"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="0.6"
+                className="text-foreground/35"
+              />
             </svg>
 
             <div className="pointer-events-none absolute inset-0">
               {heatLabels.map((label) => (
                 <span
                   key={`heat-player-${label.player.id}`}
-                  className="absolute z-10 -translate-x-1/2 -translate-y-1/2"
+                  className="absolute z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
                   style={{
                     left: `${label.x}%`,
                     top: `${label.y}%`,
                   }}
                   title={`${label.player.name} · ${t("heatmapRange.samples", { count: label.sampleCount })}`}
                 >
-                  <span className="flex flex-col items-center">
-                    <span
-                      className="flex size-7 items-center justify-center rounded-full border-2 border-background text-xs font-bold text-white shadow-sm"
-                      style={{ backgroundColor: teamColor }}
-                    >
-                      {label.player.shirtNumber ?? "?"}
-                    </span>
-                    <span className="mt-1 max-w-20 truncate whitespace-nowrap rounded-sm bg-background/85 px-1 py-0.5 text-[9px] font-medium leading-none text-foreground shadow-sm backdrop-blur-sm">
-                      {label.player.name}
-                    </span>
+                  <span
+                    className="flex size-7 items-center justify-center rounded-full border-2 border-background text-xs font-bold text-white shadow-sm"
+                    style={{ backgroundColor: teamColor }}
+                  >
+                    {label.player.shirtNumber ?? "?"}
+                  </span>
+                  <span className="mt-1 max-w-20 truncate text-[9px] leading-none font-medium whitespace-nowrap text-foreground drop-shadow-sm">
+                    {getPlayerSurname(label.player)}
                   </span>
                 </span>
               ))}
@@ -243,4 +368,30 @@ export function ZonePanel({ match }: ZonePanelProps) {
       </CardContent>
     </section>
   )
+}
+
+function isGoalkeeper(player: MatchPlayer) {
+  return (
+    [player.inPossession, player.outOfPossession].some((assignment) => {
+      if (!assignment) return false
+      const basePositionMask = assignment.positionMask & 0x0001ffff
+      return (
+        basePositionMask === 0x1 ||
+        isGoalkeeperCode(assignment.position) ||
+        isGoalkeeperCode(assignment.roleAbbreviation) ||
+        assignment.role.toUpperCase().includes("GOALKEEPER")
+      )
+    }) || isGoalkeeperCode(player.position)
+  )
+}
+
+function isGoalkeeperCode(value?: string) {
+  if (!value) return false
+  return ["GK", "SK", "LK", "BPGK", "NNGK"].includes(value.trim().toUpperCase())
+}
+
+function getPlayerSurname(player: MatchPlayer) {
+  const displayName = (player.fullName ?? player.name).trim()
+  const parts = displayName.split(/\s+/)
+  return parts.at(-1) ?? displayName
 }
