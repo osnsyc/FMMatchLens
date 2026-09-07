@@ -10,6 +10,7 @@ export type LocalArchiveSummary = {
   frameCount: number
   firstTick: number
   lastTick: number
+  matchDate?: string
   homeGoals: number
   awayGoals: number
   fileSizeBytes: number

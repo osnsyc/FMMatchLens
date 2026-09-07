@@ -15,6 +15,9 @@ internal sealed class MatchArchiveStore : IDisposable
     private string? _currentMatchId;
     private string? _currentHomeName;
     private string? _currentAwayName;
+    private string? _currentMatchDate;
+    private int _currentHomeGoals;
+    private int _currentAwayGoals;
 
     public MatchArchiveStore(string directory, ArchiveWriteOptions? options = null)
     {
@@ -38,6 +41,9 @@ internal sealed class MatchArchiveStore : IDisposable
                 _currentMatchId = matchId;
                 _currentHomeName = null;
                 _currentAwayName = null;
+                _currentMatchDate = null;
+                _currentHomeGoals = 0;
+                _currentAwayGoals = 0;
                 ArchiveDiagnostics.Debug($"GAME_MATCH archive opened: {path}.");
             }
             catch (Exception ex)
@@ -54,6 +60,8 @@ internal sealed class MatchArchiveStore : IDisposable
         {
             if (_archiveWriter is null || frame.MatchId != _currentMatchId) return;
             _archiveWriter.Append(frame);
+            _currentHomeGoals = frame.Home.Goals;
+            _currentAwayGoals = frame.Away.Goals;
         }
     }
 
@@ -66,6 +74,8 @@ internal sealed class MatchArchiveStore : IDisposable
                 _currentHomeName = metadata.Home.Name;
             if (!string.IsNullOrWhiteSpace(metadata.Away.Name) && metadata.Away.Name != "Away")
                 _currentAwayName = metadata.Away.Name;
+            if (!string.IsNullOrWhiteSpace(metadata.MatchDate))
+                _currentMatchDate = metadata.MatchDate;
             _archiveWriter.WriteMetadata(metadata);
         }
     }
@@ -78,6 +88,9 @@ internal sealed class MatchArchiveStore : IDisposable
             var path = GetPath(matchId);
             var homeName = _currentHomeName;
             var awayName = _currentAwayName;
+            var matchDate = _currentMatchDate;
+            var homeGoals = _currentHomeGoals;
+            var awayGoals = _currentAwayGoals;
             var finalized = false;
             try
             {
@@ -94,7 +107,7 @@ internal sealed class MatchArchiveStore : IDisposable
             }
 
             if (!finalized) return;
-            path = TryAppendTeamNames(path, matchId, homeName, awayName);
+            path = TrySetFinalFileName(path, matchId, matchDate, homeName, awayName, homeGoals, awayGoals);
             ArchiveDiagnostics.Info($"GAME_MATCH archive finalized and closed: {path}.");
         }
     }
@@ -142,17 +155,43 @@ internal sealed class MatchArchiveStore : IDisposable
     {
         var original = GetPath(matchId);
         if (File.Exists(original)) return original;
-        return Directory.EnumerateFiles(_directory, $"{matchId}-*.fmlens", SearchOption.TopDirectoryOnly)
+        var legacy = Directory.EnumerateFiles(_directory, $"{matchId}-*.fmlens", SearchOption.TopDirectoryOnly)
             .OrderByDescending(File.GetLastWriteTimeUtc)
-            .FirstOrDefault() ?? original;
+            .FirstOrDefault();
+        if (legacy is not null) return legacy;
+
+        foreach (var path in Directory.EnumerateFiles(_directory, "*.fmlens", SearchOption.TopDirectoryOnly)
+                     .OrderByDescending(File.GetLastWriteTimeUtc))
+        {
+            try
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                if (ArchiveReader.ReadHeader(stream).MatchId == matchId) return path;
+            }
+            catch (Exception ex) when (ex is InvalidDataException or EndOfStreamException or IOException or OverflowException)
+            {
+                // Ignore unrelated or incomplete archives while resolving by the embedded match id.
+            }
+        }
+
+        return original;
     }
 
-    private string TryAppendTeamNames(string path, string matchId, string? homeName, string? awayName)
+    private string TrySetFinalFileName(
+        string path,
+        string matchId,
+        string? matchDate,
+        string? homeName,
+        string? awayName,
+        int homeGoals,
+        int awayGoals)
     {
         if (string.IsNullOrWhiteSpace(homeName) || string.IsNullOrWhiteSpace(awayName)) return path;
         try
         {
-            var fileName = $"{matchId}-{SafeFileNamePart(homeName)}-vs-{SafeFileNamePart(awayName)}.fmlens";
+            var fileName = string.IsNullOrWhiteSpace(matchDate)
+                ? $"{matchId}-{SafeFileNamePart(homeName)}-vs-{SafeFileNamePart(awayName)}.fmlens"
+                : $"{SafeFileNamePart(matchDate)}-{SafeFileNamePart(homeName)}-vs-{SafeFileNamePart(awayName)}-{homeGoals}-{awayGoals}.fmlens";
             var renamedPath = Path.Combine(_directory, fileName);
             if (string.Equals(path, renamedPath, StringComparison.OrdinalIgnoreCase)) return path;
             File.Move(path, renamedPath);
@@ -185,6 +224,9 @@ internal sealed class MatchArchiveStore : IDisposable
         _currentMatchId = null;
         _currentHomeName = null;
         _currentAwayName = null;
+        _currentMatchDate = null;
+        _currentHomeGoals = 0;
+        _currentAwayGoals = 0;
     }
 }
 
@@ -199,6 +241,7 @@ internal sealed record MatchArchiveSummary(
     int LastTick,
     string? HomeName,
     string? AwayName,
+    string? MatchDate,
     int HomeGoals,
     int AwayGoals,
     long FileSizeBytes);

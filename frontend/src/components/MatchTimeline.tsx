@@ -45,6 +45,7 @@ type ArchiveSummary = {
   lastTick: number
   homeName?: string
   awayName?: string
+  matchDate?: string
   homeGoals: number
   awayGoals: number
   fileSizeBytes: number
@@ -88,7 +89,7 @@ type TimelineEvent = {
 }
 
 export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLive }: MatchTimelineProps) {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const [archives, setArchives] = useState<ArchiveSummary[]>([])
   const [selectedId, setSelectedId] = useState(
     initialLocalArchive ? localArchiveId(initialLocalArchive) : "",
@@ -121,7 +122,7 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
         const status = (await statusResponse.json()) as { matchId?: string }
         const activeMetadata = (await metadataResponse.json()) as RealtimeMatchMetadata | null
         setArchives(summaries.map((archive) => archive.matchId === status.matchId && activeMetadata
-          ? { ...archive, homeName: activeMetadata.home.name, awayName: activeMetadata.away.name }
+          ? { ...archive, homeName: activeMetadata.home.name, awayName: activeMetadata.away.name, matchDate: activeMetadata.matchDate }
           : archive))
       } catch {
         setArchives(summaries)
@@ -303,12 +304,12 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
     ...(localArchive
       ? [{
           value: localArchiveId(localArchive),
-          label: `${t("timeline.local")} · ${archiveOptionLabel(localArchive.archive, i18n.language, localArchive.metadata)}`,
+          label: `${t("timeline.local")} · ${archiveOptionLabel(localArchive.archive, localArchive.metadata)}`,
         }]
       : []),
     ...archives.map((archive) => ({
       value: archive.matchId,
-      label: archiveOptionLabel(archive, i18n.language),
+      label: archiveOptionLabel(archive),
     })),
   ]
   const selectedSourceValue = selectedId || "live"
@@ -474,23 +475,25 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
 }
 
 function archiveOptionLabel(
-  archive: Pick<ArchiveSummary, "matchId" | "fileName" | "startedUnixMilliseconds" | "homeGoals" | "awayGoals" | "homeName" | "awayName" | "fileSizeBytes">,
-  language: string,
+  archive: Pick<ArchiveSummary, "matchId" | "fileName" | "matchDate" | "homeGoals" | "awayGoals" | "homeName" | "awayName">,
   metadata?: RealtimeMatchMetadata,
 ) {
-  const fileNames = archiveTeamNamesFromFileName(archive.matchId, archive.fileName)
-  const homeName = archive.homeName ?? metadata?.home.name ?? fileNames?.home
-  const awayName = archive.awayName ?? metadata?.away.name ?? fileNames?.away
-  const matchup = homeName && awayName ? `${homeName} vs ${awayName} · ` : ""
-  const size = Number.isFinite(archive.fileSizeBytes) ? ` · ${(archive.fileSizeBytes / 1024 / 1024).toFixed(1)} MiB` : ""
-  return `${matchup}${new Date(archive.startedUnixMilliseconds).toLocaleString(language)} · ${archive.homeGoals}-${archive.awayGoals}${size}`
+  const fileMetadata = archiveMetadataFromFileName(archive.matchId, archive.fileName)
+  const homeName = archive.homeName ?? metadata?.home.name ?? fileMetadata?.home
+  const awayName = archive.awayName ?? metadata?.away.name ?? fileMetadata?.away
+  const matchDate = archive.matchDate ?? metadata?.matchDate ?? fileMetadata?.matchDate
+  const matchup = homeName && awayName ? `${homeName} vs ${awayName}` : undefined
+  return [matchDate, matchup, `${archive.homeGoals}:${archive.awayGoals}`].filter(Boolean).join(" ")
 }
 
-function archiveTeamNamesFromFileName(matchId: string, fileName?: string) {
+function archiveMetadataFromFileName(matchId: string, fileName?: string) {
   if (!fileName) return undefined
   const prefix = `${matchId}-`
   const suffix = ".fmlens"
-  if (!fileName.startsWith(prefix) || !fileName.toLowerCase().endsWith(suffix)) return undefined
+  if (!fileName.toLowerCase().endsWith(suffix)) return undefined
+  const dated = /^(\d{4}-\d{2}-\d{2})-(.+?)-vs-(.+)-\d+-\d+\.fmlens$/i.exec(fileName)
+  if (dated) return { matchDate: dated[1], home: dated[2], away: dated[3] }
+  if (!fileName.startsWith(prefix)) return undefined
   const matchup = fileName.slice(prefix.length, -suffix.length)
   const separator = matchup.indexOf("-vs-")
   if (separator <= 0 || separator >= matchup.length - 4) return undefined

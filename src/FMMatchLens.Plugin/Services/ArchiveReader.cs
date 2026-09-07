@@ -1,6 +1,7 @@
 using FMMatchLens.Plugin.Domain;
 using System.IO.Compression;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace FMMatchLens.Plugin.Services;
 
@@ -154,10 +155,10 @@ internal static class ArchiveReader
             }
 
             var info = new FileInfo(path);
-            var (homeName, awayName) = ResolveNames(header.MatchId, info.Name, metadata);
+            var (homeName, awayName, fileMatchDate) = ResolveFileMetadata(header.MatchId, info.Name, metadata);
             result = new ArchiveScanResult(
                 new MatchArchiveSummary(header.MatchId, info.Name, header.StartedUnixMilliseconds, endedAt, ended,
-                    totalFrames, firstTick, lastTick, homeName, awayName, homeGoals, awayGoals, info.Length),
+                    totalFrames, firstTick, lastTick, homeName, awayName, metadata?.MatchDate ?? fileMatchDate, homeGoals, awayGoals, info.Length),
                 metadata,
                 metadataTimeline.ToArray(),
                 frames);
@@ -308,15 +309,29 @@ internal static class ArchiveReader
         return new FinalSummary(frameCount, firstTick, lastTick, homeGoals, awayGoals);
     }
 
-    private static (string? Home, string? Away) ResolveNames(string matchId, string fileName, RealtimeMatchMetadata? metadata)
+    private static (string? Home, string? Away, string? MatchDate) ResolveFileMetadata(
+        string matchId,
+        string fileName,
+        RealtimeMatchMetadata? metadata)
     {
-        if (!string.IsNullOrWhiteSpace(metadata?.Home.Name) && !string.IsNullOrWhiteSpace(metadata.Away.Name)) return (metadata.Home.Name, metadata.Away.Name);
+        if (!string.IsNullOrWhiteSpace(metadata?.Home.Name) && !string.IsNullOrWhiteSpace(metadata.Away.Name))
+            return (metadata.Home.Name, metadata.Away.Name, null);
+
+        var namedMatch = Regex.Match(fileName,
+            @"^(?<date>\d{4}-\d{2}-\d{2})-(?<home>.+?)-vs-(?<away>.+)-\d+-\d+\.fmlens$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (namedMatch.Success)
+            return (namedMatch.Groups["home"].Value, namedMatch.Groups["away"].Value, namedMatch.Groups["date"].Value);
+
         var prefix = $"{matchId}-";
         const string suffix = ".fmlens";
-        if (!fileName.StartsWith(prefix, StringComparison.Ordinal) || !fileName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) return (null, null);
+        if (!fileName.StartsWith(prefix, StringComparison.Ordinal) || !fileName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            return (null, null, null);
         var matchup = fileName[prefix.Length..^suffix.Length];
         var separator = matchup.IndexOf("-vs-", StringComparison.Ordinal);
-        return separator <= 0 || separator >= matchup.Length - 4 ? (null, null) : (matchup[..separator], matchup[(separator + 4)..]);
+        return separator <= 0 || separator >= matchup.Length - 4
+            ? (null, null, null)
+            : (matchup[..separator], matchup[(separator + 4)..], null);
     }
 
     private static void ReadExactly(Stream stream, Span<byte> destination)

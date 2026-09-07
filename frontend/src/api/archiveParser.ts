@@ -130,6 +130,7 @@ export async function parseArchiveFile(buffer: ArrayBuffer, fileName: string): P
       frameCount: recovered ? frames.length : finalSummary?.frameCount ?? frames.length,
       firstTick: recovered ? frames[0].tick : finalSummary?.firstTick ?? frames[0].tick,
       lastTick: recovered ? last.tick : finalSummary?.lastTick ?? last.tick,
+      matchDate: metadata?.matchDate,
       homeGoals: recovered ? last.home.goals : finalSummary?.homeGoals ?? last.home.goals,
       awayGoals: recovered ? last.away.goals : finalSummary?.awayGoals ?? last.away.goals,
       fileSizeBytes: buffer.byteLength,
