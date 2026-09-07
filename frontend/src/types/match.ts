@@ -63,6 +63,7 @@ export type TacticalEventMetricId =
   | "blockedShots"
   | "passesCompleted"
   | "passesIncomplete"
+  | "keyPasses"
   | "crossesCompleted"
   | "crossesIncomplete"
   | "fouled"
@@ -72,12 +73,20 @@ export type TacticalEventMetricId =
   | "aerialsWon"
   | "aerialsLost"
   | "interceptions"
+  | "clearances"
+  | "defensiveBlocks"
   | "dribblesCompleted"
+  | "possessionGained"
+  | "possessionLost"
   | "touches"
+  | "offsides"
+  | "goalkeeperSavesHeld"
+  | "goalkeeperSavesParried"
 
 export type TacticalEventPoint = {
   id: string
   metricId: TacticalEventMetricId
+  metricIds?: TacticalEventMetricId[]
   playerId: number
   receiverPlayerId?: number
   team: TeamSide
@@ -86,8 +95,16 @@ export type TacticalEventPoint = {
   minute: number
   x: number
   y: number
+  anchorX?: number
+  anchorY?: number
+  trajectoryStartX?: number
+  trajectoryStartY?: number
+  trajectoryPoints?: Array<{ x: number; y: number }>
+  endX?: number
+  endY?: number
   nativeEventType: number
   flags: number
+  sequenceIndex?: number
 }
 
 export type PlayerStats = {

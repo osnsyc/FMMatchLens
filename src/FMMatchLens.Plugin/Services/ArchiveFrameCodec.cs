@@ -5,19 +5,20 @@ namespace FMMatchLens.Plugin.Services;
 
 internal static class ArchiveFrameCodec
 {
-    private const byte PayloadStructure = 1;
     private const byte RosterResetFlag = 1;
     private const byte PitchChangedFlag = 2;
     private const ulong AllTeamFields = (1UL << 23) - 1;
     private const ulong AllPlayerFields = (1UL << 39) - 1;
     private const int MaxFramesPerChunk = 4_096;
+    // Must match GameMatchTickHook.MaxStoredMomentumTrajectoryPoints. Lowering
+    // this wire limit later requires a new archive minor version or migration.
+    private const int MaxTrajectoryPoints = 4;
 
     public static byte[] Encode(IReadOnlyList<RealtimeTickFrame> frames)
     {
         if (frames.Count is 0 or > MaxFramesPerChunk) throw new ArgumentOutOfRangeException(nameof(frames));
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
-        writer.Write(PayloadStructure);
         RealtimeTickFrame? previous = null;
         foreach (var frame in frames)
         {
@@ -76,7 +77,7 @@ internal static class ArchiveFrameCodec
                 }
             }
 
-            WriteTail(writer, previous?.MomentumEvents, frame.MomentumEvents, WriteEvent);
+            WriteTail(writer, previous?.MomentumEvents, frame.MomentumEvents, WriteEvent, MomentumEventEquals);
             WriteTail(writer, previous?.Momentum, frame.Momentum, WriteMomentum);
             WriteTail(writer, previous?.RollingMomentum, frame.RollingMomentum, WriteMomentum);
             previous = frame;
@@ -87,13 +88,19 @@ internal static class ArchiveFrameCodec
     public static IReadOnlyList<RealtimeTickFrame> Decode(
         ReadOnlyMemory<byte> payload,
         string matchId,
-        int expectedFrameCount)
+        int expectedFrameCount,
+        ushort structureMinor)
     {
         if (expectedFrameCount is < 1 or > MaxFramesPerChunk) throw new ArchiveFormatException("invalid_count", "Chunk frame count is invalid.");
+        if (structureMinor < ArchiveWireFormat.FirstSupportedStructureMinor ||
+            structureMinor > ArchiveWireFormat.StructureMinor)
+            throw new ArchiveFormatException("unsupported_archive_structure", $"Archive structure {ArchiveWireFormat.StructureMajor}.{structureMinor} is not supported.");
         using var stream = new MemoryStream(payload.ToArray(), writable: false);
         using var reader = new BinaryReader(stream, Encoding.UTF8);
-        if (reader.ReadByte() != PayloadStructure)
-            throw new ArchiveFormatException("unsupported_payload_structure", "The chunk payload structure is not supported.");
+        // Structure 2.1 predates header-driven frame decoding and wrote a fixed
+        // payload marker. It remains readable, but 2.2+ must not add such a marker.
+        if (structureMinor == 1 && reader.ReadByte() != ArchiveWireFormat.Legacy21FramePayloadMarker)
+            throw new ArchiveFormatException("unsupported_payload_structure", "The legacy 2.1 frame payload marker is invalid.");
         var frames = new RealtimeTickFrame[expectedFrameCount];
         RealtimeTickFrame? previous = null;
         for (var frameIndex = 0; frameIndex < frames.Length; frameIndex++)
@@ -160,7 +167,7 @@ internal static class ArchiveFrameCodec
                 holderPlayerId = holder.PlayerId;
             }
             for (var index = 0; index < players.Length; index++) players[index] = players[index] with { IsBallHolder = players[index].PlayerId == holderPlayerId };
-            var events = ReadTail(reader, previous?.MomentumEvents, ReadEvent);
+            var events = ReadTail(reader, previous?.MomentumEvents, value => ReadEvent(value, structureMinor));
             var momentum = ReadTail(reader, previous?.Momentum, ReadMomentum);
             var rolling = ReadTail(reader, previous?.RollingMomentum, ReadMomentum);
             var frame = new RealtimeTickFrame(sequence, matchId, tick, displayTick, period, captured, possession, holderPlayerId,
@@ -326,11 +333,13 @@ internal static class ArchiveFrameCodec
         };
     }
 
-    private static void WriteTail<T>(BinaryWriter writer, IReadOnlyList<T>? previous, IReadOnlyList<T> current, Action<BinaryWriter, T> write)
+    private static void WriteTail<T>(BinaryWriter writer, IReadOnlyList<T>? previous, IReadOnlyList<T> current,
+        Action<BinaryWriter, T> write, Func<T, T, bool>? equals = null)
     {
         previous ??= Array.Empty<T>();
+        equals ??= EqualityComparer<T>.Default.Equals;
         var common = 0;
-        while (common < previous.Count && common < current.Count && EqualityComparer<T>.Default.Equals(previous[common], current[common])) common++;
+        while (common < previous.Count && common < current.Count && equals(previous[common], current[common])) common++;
         ArchiveBinary.WriteVarUInt64(writer, (ulong)common);
         ArchiveBinary.WriteVarUInt64(writer, (ulong)(current.Count - common));
         for (var index = common; index < current.Count; index++) write(writer, current[index]);
@@ -355,19 +364,72 @@ internal static class ArchiveFrameCodec
         ArchiveBinary.WriteVarInt64(writer, value.PlayerSlot); ArchiveBinary.WriteVarInt64(writer, value.PlayerId);
         ArchiveBinary.WriteVarInt64(writer, value.ReceiverPlayerSlot); ArchiveBinary.WriteVarInt64(writer, value.ReceiverPlayerId);
         ArchiveBinary.WriteVarInt64(writer, value.EventType); ArchiveBinary.WriteVarInt64(writer, value.Flags);
+        ArchiveBinary.WriteVarInt64(writer, value.SequenceIndex); ArchiveBinary.WriteVarInt64(writer, value.CompletionTick);
+        var trajectoryPoints = value.TrajectoryPoints ?? Array.Empty<NativeMomentumTrajectoryPoint>();
+        if (trajectoryPoints.Count > MaxTrajectoryPoints)
+            throw new ArchiveFormatException("invalid_count", "Event trajectory point count is invalid.");
+        ArchiveBinary.WriteVarUInt64(writer, (ulong)trajectoryPoints.Count);
+        foreach (var point in trajectoryPoints)
+        {
+            if (!float.IsFinite(point.LateralPosition) || !float.IsFinite(point.LongitudinalPosition))
+                throw new ArchiveFormatException("invalid_coordinate", "Event trajectory contains an invalid coordinate.");
+            writer.Write(point.LateralPosition);
+            writer.Write(point.LongitudinalPosition);
+        }
     }
 
-    private static NativeMomentumEventData ReadEvent(BinaryReader reader)
+    private static NativeMomentumEventData ReadEvent(BinaryReader reader, ushort structureMinor)
     {
         var eventIndex = checked((int)ArchiveBinary.ReadVarInt64(reader));
         var tick = checked((int)ArchiveBinary.ReadVarInt64(reader));
         var lateral = reader.ReadSingle(); var longitudinal = reader.ReadSingle();
         var team = reader.ReadByte();
         if (team > 1) throw new ArchiveFormatException("invalid_team", "Event team value is invalid.");
-        return new NativeMomentumEventData(eventIndex, tick, lateral, longitudinal, (TeamSide)team,
-            checked((int)ArchiveBinary.ReadVarInt64(reader)), checked((int)ArchiveBinary.ReadVarInt64(reader)),
-            checked((int)ArchiveBinary.ReadVarInt64(reader)), checked((int)ArchiveBinary.ReadVarInt64(reader)),
-            checked((int)ArchiveBinary.ReadVarInt64(reader)), checked((int)ArchiveBinary.ReadVarInt64(reader)));
+        var playerSlot = checked((int)ArchiveBinary.ReadVarInt64(reader));
+        var playerId = checked((int)ArchiveBinary.ReadVarInt64(reader));
+        var receiverPlayerSlot = checked((int)ArchiveBinary.ReadVarInt64(reader));
+        var receiverPlayerId = checked((int)ArchiveBinary.ReadVarInt64(reader));
+        var eventType = checked((int)ArchiveBinary.ReadVarInt64(reader));
+        var flags = checked((int)ArchiveBinary.ReadVarInt64(reader));
+        var sequenceIndex = 0;
+        var completionTick = 0;
+        NativeMomentumTrajectoryPoint[] trajectoryPoints = [];
+        if (structureMinor >= 2)
+        {
+            sequenceIndex = checked((int)ArchiveBinary.ReadVarInt64(reader));
+            completionTick = checked((int)ArchiveBinary.ReadVarInt64(reader));
+            var pointCount = checked((int)ArchiveBinary.ReadVarUInt64(reader, 2));
+            if (pointCount > MaxTrajectoryPoints)
+                throw new ArchiveFormatException("invalid_count", "Event trajectory point count is invalid.");
+            trajectoryPoints = new NativeMomentumTrajectoryPoint[pointCount];
+            for (var index = 0; index < pointCount; index++)
+            {
+                var pointLateral = reader.ReadSingle();
+                var pointLongitudinal = reader.ReadSingle();
+                if (!float.IsFinite(pointLateral) || !float.IsFinite(pointLongitudinal))
+                    throw new ArchiveFormatException("invalid_coordinate", "Event trajectory contains an invalid coordinate.");
+                trajectoryPoints[index] = new(pointLateral, pointLongitudinal);
+            }
+        }
+        return new NativeMomentumEventData(eventIndex, tick, lateral, longitudinal,
+            trajectoryPoints,
+            (TeamSide)team, playerSlot, playerId, receiverPlayerSlot, receiverPlayerId, eventType, flags,
+            sequenceIndex, completionTick);
+    }
+
+    private static bool MomentumEventEquals(NativeMomentumEventData left, NativeMomentumEventData right)
+    {
+        if (left.EventIndex != right.EventIndex || left.Tick != right.Tick ||
+            left.LateralPosition != right.LateralPosition || left.LongitudinalPosition != right.LongitudinalPosition ||
+            left.Team != right.Team || left.PlayerSlot != right.PlayerSlot || left.PlayerId != right.PlayerId ||
+            left.ReceiverPlayerSlot != right.ReceiverPlayerSlot || left.ReceiverPlayerId != right.ReceiverPlayerId ||
+            left.EventType != right.EventType || left.Flags != right.Flags ||
+            left.SequenceIndex != right.SequenceIndex || left.CompletionTick != right.CompletionTick)
+            return false;
+
+        var leftPoints = left.TrajectoryPoints ?? Array.Empty<NativeMomentumTrajectoryPoint>();
+        var rightPoints = right.TrajectoryPoints ?? Array.Empty<NativeMomentumTrajectoryPoint>();
+        return leftPoints.SequenceEqual(rightPoints);
     }
 
     private static void WriteMomentum(BinaryWriter writer, MomentumTickData value)

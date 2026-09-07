@@ -47,40 +47,114 @@ internal static class Offsets
     public static class MomentumEvent
     {
         public const int Size = 0x38;
+        public const int TrajectoryPointsBegin = 0x00;
+        public const int TrajectoryPointsEnd = 0x08;
+        public const int TrajectoryPointsCapacity = 0x10;
+        public const int TrajectoryPointSize = 0x08;
         public const int LateralPosition = 0x18;
         public const int LongitudinalPosition = 0x1C;
         public const int Tick = 0x22;
+        // Display-clock minute/second at event start. In the second half these exclude
+        // first-half stoppage ticks and resume at 45:xx instead of using raw event Tick.
+        // public const int EventMinute = 0x25;
+        // public const int EventSecond = 0x26;
+        // Zero-based index into Team.PlayerTable (+0x130)
         public const int PlayerSlot = 0x27;
         public const int Team = 0x28;
+        // Uses the same team-roster slot space as PlayerSlot; 0xFF means that
+        // the event has no receiver/destination player.
         public const int ReceiverPlayerSlot = 0x29;
         public const int EventType = 0x2A;
+        public const int SequenceIndex = 0x2C;
         public const int Flags = 0x30;
+        public const int CompletionTick = 0x32;
         public const int ReverseDirectionMask = 0x100;
+
+        // Present on completed ball-action records, including unsuccessful passes
+        // and saved shots. It does not by itself mean that the action succeeded.
+        public const ushort BallActionFlag = 0x01;
+        public const ushort CompletedFlag = BallActionFlag;
+        public const ushort KeyPassFlag = 0x02;
+        public const ushort AssistFlag = 0x04;
+        public const ushort ThrowInFlag = 0x08;
+        public const ushort AttackingFreeKickFlag = 0x10;
+        public const ushort DefensiveFreeKickFlag = 0x20;
 
         public const byte ShotGoal = 1;
         public const byte ShotMissedTarget = 2;
         public const byte ShotHitWoodwork = 3;
         public const byte ShotSaved = 4;
         public const byte ShotBlocked = 5;
+        public const byte PassIncompleteD = 6;
         public const byte PassCompleted = 7;
-        public const byte PassIncompleteA = 8;
+        public const byte PassTurnedOver = 8;
+        public const byte PassBlockedOrClearedCandidate = 9;
         public const byte PassIncompleteB = 10;
         public const byte PassIncompleteC = 11;
         public const byte CrossCompleted = 12;
         public const byte CrossIncompleteA = 13;
+        public const byte CrossInterceptedCandidate = CrossIncompleteA;
         public const byte CrossIncompleteB = 14;
         public const byte CrossIncompleteC = 15;
         public const byte CrossIncompleteD = 16;
+        public const byte CrossIncompleteE = 17;
         public const byte Fouled = 18;
         public const byte FoulCommittedA = 19;
         public const byte FoulCommittedB = 20;
+        public const byte FoulCommittedC = 21;
+        public const byte UnknownEvent22 = 22;
+        public const byte Offside = 23;
+        public const byte BallHandledOrKnockedAway = 24;
+        public const byte DefensiveShotBlock = 25;
         public const byte TackleWon = 26;
         public const byte TackleLost = 27;
         public const byte AerialWon = 28;
         public const byte AerialLost = 29;
+        public const byte UnknownEvent30 = 30;
         public const byte Interception = 31;
+        public const byte UnknownEvent32 = 32;
+        public const byte UnknownEvent33 = 33;
         public const byte DribbleCompleted = 34;
+        // Co-located auxiliary record on a user-confirmed Watkins headed goal.
+        // Keep as a candidate until another headed/non-headed goal comparison.
+        // public const byte HeadedGoalAuxiliaryCandidate = 35;
+        // public const byte GoalAuxiliaryCandidateB = 36;
+        public const byte GoalkeeperSaveHeld = 37;
+        public const byte GoalkeeperSaveParried = 38;
+        public const byte GoalkeeperActionC = 39;
+        public const byte UnknownEvent40 = 40;
+        public const byte UnknownEvent41 = 41;
+        public const byte UnknownEvent42 = 42;
+        public const byte UnknownEvent43 = 43;
+        public const byte UnknownEvent44 = 44;
+        public const byte UnknownEvent45 = 45;
+        public const byte UnknownEvent46 = 46;
+        public const byte HeaderAction = 47;
+        public const byte UnknownEvent48 = 48;
+        public const byte UnknownEvent49 = 49;
+        public const byte UnknownEvent50 = 50;
+        public const byte UnknownEvent51 = 51;
+        public const byte PossessionGained = 52;
+        public const byte PossessionLost = 53;
         public const byte Touch = 54;
+        public const byte UnknownEvent55 = 55;
+    }
+
+    // Input object consumed by FUN_1823073e0/FUN_182868850 while producing or
+    // annotating a MomentumEvent. These are not offsets inside the 0x38 output record.
+    public static class RawMomentumEvent
+    {
+        public const int Tick = 0x44;
+        public const int Flags = 0x64;
+        public const int EventType = 0x68;
+        public const int Team = 0x6A;
+        public const int PlayerSlot = 0x6B;
+    }
+
+    public static class MomentumEventTrajectoryPoint
+    {
+        public const int LateralPosition = 0x00;
+        public const int LongitudinalPosition = 0x04;
     }
 
     public static class MomentumWeightingTable
@@ -167,6 +241,7 @@ internal static class Offsets
         public const int PositionY = 0x84;
         public const int PositionXAlt = 0x140;
         public const int PositionYAlt = 0x144;
+        public const int PositionHistory = 0x170;
         public const int UnknownFloatArray = 0x180;
         public const int TimerStartTick = 0x200;
         public const int TimerEndTick = 0x208;
@@ -176,6 +251,16 @@ internal static class Offsets
         public const int OutOfPossessionPosition = 0xDE0;
         public const int OutOfPossessionRoleDuty = 0xE20;
         public const int Stats = 0x1800;
+    }
+
+    public static class PositionHistory
+    {
+        public const int PositionX = 0x0;
+        public const int PositionY = 0x4;
+        public const int PositionZ = 0x8; //unconfirmed
+        public const int Flags = 0xC; //unconfirmed
+        public const int Speed = 0x10; //speed
+        public const int Angle = 0x14; //angle (PositionX=0,PositionY=1)=0,clock+
     }
 
     public static class Person
@@ -284,6 +369,7 @@ internal static class Offsets
         public const int EventTimestamp = 0x78;
         public const int RatingTimes100 = 0x82;
         public const int TeamSideUnconfirmed = 0x87;
+        // public const int InjuryStateOrSeverityCandidate = 0x88; // 255 health, 13 slight injury
         public const int OverallPhysicalCondition = 0x89;
         public const int MatchSharpness = 0x8A;
         public const int Goals = 0x8B;

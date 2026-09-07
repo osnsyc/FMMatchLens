@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useId, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ArrowBigLeftDashIcon, ArrowBigRightDashIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
@@ -105,6 +105,14 @@ type MapPoint = {
   value: number
   x: number
   y: number
+  anchorX?: number
+  anchorY?: number
+  trajectoryStartX?: number
+  trajectoryStartY?: number
+  trajectoryPoints?: Array<{ x: number; y: number }>
+  endX?: number
+  endY?: number
+  showTrajectory: boolean
   size: number
   minute?: number
   tick?: number
@@ -122,6 +130,457 @@ type LaneShare = {
   zone: HorizontalZone
   count: number
   percentage: number
+}
+
+type ShotChain = {
+  id: string
+  shotEventId: string
+  team: TeamSide
+  events: TacticalEventPoint[]
+}
+
+const maxShotChainLookbackTicks = 120 // 30 seconds at four native ticks per second.
+const shotChainRestartFlags = 0x08 | 0x10 | 0x20
+
+function deduplicateTrajectoryPoints(points: Array<{ x: number; y: number }>) {
+  const unique: Array<{ x: number; y: number }> = []
+  for (const point of points) {
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue
+    if (unique.some((existing) => Math.hypot(existing.x - point.x, existing.y - point.y) < 0.01)) continue
+    unique.push(point)
+  }
+  return unique
+}
+
+function dribbleTrajectoryPoints(
+  trajectoryPoints: Array<{ x: number; y: number }> | undefined,
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number,
+) {
+  return deduplicateTrajectoryPoints(
+    trajectoryPoints && trajectoryPoints.length > 0
+      ? trajectoryPoints
+      : [{ x: startX, y: startY }, { x: endX, y: endY }]
+  )
+}
+
+function smoothTrajectoryPath(points: Array<{ x: number; y: number }>) {
+  if (points.length === 0) return ""
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`
+  if (points.length === 2) return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`
+
+  let path = `M ${points[0].x} ${points[0].y}`
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const before = points[Math.max(0, index - 1)]
+    const current = points[index]
+    const next = points[index + 1]
+    const after = points[Math.min(points.length - 1, index + 2)]
+    const control1X = current.x + (next.x - before.x) / 6
+    const control1Y = current.y + (next.y - before.y) / 6
+    const control2X = next.x - (after.x - current.x) / 6
+    const control2Y = next.y - (after.y - current.y) / 6
+    path += ` C ${control1X} ${control1Y} ${control2X} ${control2Y} ${next.x} ${next.y}`
+  }
+  return path
+}
+
+function DribbleTrajectory({
+  anchorX,
+  anchorY,
+  trajectoryStartX,
+  trajectoryStartY,
+  trajectoryPoints,
+  endX,
+  endY,
+  color,
+  markerEnd,
+  strokeWidth,
+  opacity,
+  connectorStrokeWidth,
+  connectorOpacity,
+}: {
+  anchorX?: number
+  anchorY?: number
+  trajectoryStartX?: number
+  trajectoryStartY?: number
+  trajectoryPoints?: Array<{ x: number; y: number }>
+  endX: number
+  endY: number
+  color: string
+  markerEnd: string
+  strokeWidth: number
+  opacity: number
+  connectorStrokeWidth: number
+  connectorOpacity: number
+}) {
+  const startX = trajectoryStartX ?? endX
+  const startY = trajectoryStartY ?? endY
+  const trajectory = dribbleTrajectoryPoints(trajectoryPoints, startX, startY, endX, endY)
+  if (trajectory.length < 2) return null
+
+  const trajectoryStart = trajectory[0]
+  const showConnector = anchorX != null && anchorY != null &&
+    Math.hypot(trajectoryStart.x - anchorX, trajectoryStart.y - anchorY) >= 0.25
+
+  return (
+    <>
+      {showConnector && (
+        <line
+          x1={anchorX}
+          y1={anchorY}
+          x2={trajectoryStart.x}
+          y2={trajectoryStart.y}
+          stroke={color}
+          strokeWidth={connectorStrokeWidth}
+          strokeLinecap="round"
+          strokeDasharray="3 2"
+          vectorEffect="non-scaling-stroke"
+          opacity={connectorOpacity}
+        />
+      )}
+      <path
+        d={smoothTrajectoryPath(trajectory)}
+        fill="none"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+        opacity={opacity}
+        markerEnd={markerEnd}
+      />
+    </>
+  )
+}
+
+function TrajectoryArrows({
+  points,
+  homeColor,
+  awayColor,
+}: {
+  points: MapPoint[]
+  homeColor: string
+  awayColor: string
+}) {
+  const markerPrefix = useId().replace(/:/g, "")
+  const arrows = points.filter((point) => {
+    if (!point.showTrajectory || point.endX == null || point.endY == null) return false
+    if (!Number.isFinite(point.endX) || !Number.isFinite(point.endY)) return false
+    if (point.metric.id === "dribblesCompleted" && point.trajectoryPoints?.length) {
+      const trajectory = deduplicateTrajectoryPoints(point.trajectoryPoints)
+      return trajectory.slice(1).some((current, index) =>
+        Math.hypot(current.x - trajectory[index].x, current.y - trajectory[index].y) >= 0.01
+      )
+    }
+    const startX = point.trajectoryStartX ?? point.x
+    const startY = point.trajectoryStartY ?? point.y
+    return Math.hypot(point.endX - startX, point.endY - startY) >= 0.5
+  })
+
+  if (arrows.length === 0) return null
+
+  return (
+    <svg
+      className="pointer-events-none absolute inset-0 z-[7] size-full overflow-visible"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <defs>
+        {(["home", "away"] as const).map((team) => {
+          const color = team === "home" ? homeColor : awayColor
+          return (
+            <marker
+              key={`${markerPrefix}-trajectory-marker-${team}`}
+              id={`${markerPrefix}-trajectory-marker-${team}`}
+              viewBox="0 0 6 6"
+              refX="5.5"
+              refY="3"
+              markerWidth="5"
+              markerHeight="5"
+              orient="auto"
+              markerUnits="strokeWidth"
+            >
+              <path d="M 0 0 L 6 3 L 0 6 Z" fill={color} />
+            </marker>
+          )
+        })}
+      </defs>
+
+      {arrows.map((point) => {
+        const color = point.team === "home" ? homeColor : awayColor
+        const markerEnd = `url(#${markerPrefix}-trajectory-marker-${point.team})`
+        if (point.metric.id === "dribblesCompleted") {
+          return (
+            <DribbleTrajectory
+              key={`trajectory-dribble-${point.id}`}
+              anchorX={point.anchorX}
+              anchorY={point.anchorY}
+              trajectoryStartX={point.trajectoryStartX ?? point.x}
+              trajectoryStartY={point.trajectoryStartY ?? point.y}
+              trajectoryPoints={point.trajectoryPoints}
+              endX={point.endX!}
+              endY={point.endY!}
+              color={color}
+              markerEnd={markerEnd}
+              strokeWidth={1.5}
+              opacity={0.78}
+              connectorStrokeWidth={1.25}
+              connectorOpacity={0.58}
+            />
+          )
+        }
+        const dashed = point.metric.variant === "outline" || point.metric.variant === "dashed"
+        const startX = point.trajectoryStartX ?? point.x
+        const startY = point.trajectoryStartY ?? point.y
+        return (
+          <line
+            key={`trajectory-line-${point.id}`}
+            x1={startX}
+            y1={startY}
+            x2={point.endX}
+            y2={point.endY}
+            stroke={color}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeDasharray={dashed ? "3 2" : undefined}
+            vectorEffect="non-scaling-stroke"
+            opacity="0.72"
+            markerEnd={markerEnd}
+          />
+        )
+      })}
+    </svg>
+  )
+}
+
+function ShotChainLines({
+  chains,
+  homeColor,
+  awayColor,
+}: {
+  chains: ShotChain[]
+  homeColor: string
+  awayColor: string
+}) {
+  const markerPrefix = useId().replace(/:/g, "")
+  if (chains.length === 0) return null
+
+  return (
+    <svg
+      className="pointer-events-none absolute inset-0 z-[6] size-full overflow-visible"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <defs>
+        {(["home", "away"] as const).map((team) => {
+          const color = team === "home" ? homeColor : awayColor
+          return (
+            <marker
+              key={`${markerPrefix}-shot-chain-marker-${team}`}
+              id={`${markerPrefix}-shot-chain-marker-${team}`}
+              viewBox="0 0 6 6"
+              refX="5.5"
+              refY="3"
+              markerWidth="4"
+              markerHeight="4"
+              orient="auto"
+              markerUnits="strokeWidth"
+            >
+              <path d="M 0 0 L 6 3 L 0 6 Z" fill={color} />
+            </marker>
+          )
+        })}
+      </defs>
+
+      {chains.flatMap((chain) => {
+        const color = chain.team === "home" ? homeColor : awayColor
+        const actions = chain.events.slice(0, -1)
+        const carrySegments = chain.events.slice(0, -1).map((event, index) => {
+          const next = chain.events[index + 1]
+          const fromX = event.endX ?? event.x
+          const fromY = event.endY ?? event.y
+          const nextX = next.trajectoryStartX ?? next.x
+          const nextY = next.trajectoryStartY ?? next.y
+          if (Math.hypot(nextX - fromX, nextY - fromY) < 0.5) return null
+
+          return (
+            <line
+              key={`${chain.id}-carry-${event.id}-${next.id}`}
+              x1={fromX}
+              y1={fromY}
+              x2={nextX}
+              y2={nextY}
+              stroke={color}
+              strokeWidth="1.25"
+              strokeLinecap="round"
+              strokeDasharray="4 3"
+              vectorEffect="non-scaling-stroke"
+              opacity="0.58"
+              markerEnd={`url(#${markerPrefix}-shot-chain-marker-${chain.team})`}
+            />
+          )
+        })
+
+        return [
+          ...actions.map((event) => {
+            if (event.endX == null || event.endY == null) return null
+            const dribble = event.nativeEventType === 34
+            if (dribble) {
+              return (
+                <DribbleTrajectory
+                  key={`${chain.id}-${event.id}`}
+                  anchorX={event.anchorX}
+                  anchorY={event.anchorY}
+                  trajectoryStartX={event.trajectoryStartX ?? event.x}
+                  trajectoryStartY={event.trajectoryStartY ?? event.y}
+                  trajectoryPoints={event.trajectoryPoints}
+                  endX={event.endX}
+                  endY={event.endY}
+                  color={color}
+                  markerEnd={`url(#${markerPrefix}-shot-chain-marker-${chain.team})`}
+                  strokeWidth={1.25}
+                  opacity={0.62}
+                  connectorStrokeWidth={1.1}
+                  connectorOpacity={0.52}
+                />
+              )
+            }
+            const startX = event.trajectoryStartX ?? event.x
+            const startY = event.trajectoryStartY ?? event.y
+            return (
+              <line
+                key={`${chain.id}-${event.id}`}
+                x1={startX}
+                y1={startY}
+                x2={event.endX}
+                y2={event.endY}
+                stroke={color}
+                strokeWidth="1.25"
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+                opacity="0.48"
+                markerEnd={`url(#${markerPrefix}-shot-chain-marker-${chain.team})`}
+              />
+            )
+          }),
+          ...carrySegments,
+        ]
+      })}
+    </svg>
+  )
+}
+
+function ShotChainNodes({
+  chains,
+  players,
+  renderedPointIds,
+  showNumbers,
+  homeColor,
+  awayColor,
+}: {
+  chains: ShotChain[]
+  players: MatchPlayer[]
+  renderedPointIds: Set<string>
+  showNumbers: boolean
+  homeColor: string
+  awayColor: string
+}) {
+  const { t } = useTranslation()
+  const playerById = new Map(players.map((player) => [player.id, player]))
+  const historicalEvents = new Map<string, TacticalEventPoint>()
+  for (const chain of chains) {
+    for (const event of chain.events.slice(0, -1)) {
+      if (!renderedPointIds.has(event.id)) historicalEvents.set(event.id, event)
+    }
+  }
+
+  return [...historicalEvents.values()].map((event) => {
+    const metricIds = event.metricIds ?? [event.metricId]
+    const metricId = metricIds.includes("keyPasses") ? "keyPasses" : event.metricId
+    const metric = metrics.find((candidate) => candidate.id === metricId)
+    if (!metric) return null
+
+    const player = playerById.get(event.playerId)
+    const receiver = event.receiverPlayerId == null
+      ? undefined
+      : playerById.get(event.receiverPlayerId)
+    const color = event.team === "home" ? homeColor : awayColor
+    const size = Math.max(13, 15 * (metric.scale ?? 1))
+    const hollow = metric.variant === "outline" || metric.variant === "dashed"
+    const metricLabel = t(`dataMap.events.${metric.id}`, { defaultValue: metric.label })
+
+    return (
+      <Tooltip
+        key={`shot-chain-node-${event.id}`}
+      >
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              className="absolute z-[9] flex -translate-x-1/2 -translate-y-1/2 items-center justify-center outline-none transition-transform hover:z-20 hover:scale-125 focus-visible:z-20 focus-visible:ring-2 focus-visible:ring-ring"
+              style={{
+                left: `${event.x}%`,
+                top: `${event.y}%`,
+                width: `${size}px`,
+                height: `${size}px`,
+              }}
+              aria-label={`${player?.name ?? t("dataMap.unknownPlayer")}, ${metricLabel}`}
+              onClick={(clickEvent) => clickEvent.stopPropagation()}
+            >
+              <MarkerGlyph
+                shape={metric.shape}
+                variant={metric.variant}
+                color={color}
+                size={size}
+              />
+              {showNumbers && size >= 11 && (
+                <span
+                  className="pointer-events-none absolute inset-0 flex items-center justify-center text-[7px] font-bold leading-none"
+                  style={{
+                    color: hollow ? color : "#fff",
+                    textShadow: hollow
+                      ? "0 0 3px var(--background)"
+                      : "0 1px 2px rgb(0 0 0 / 65%)",
+                  }}
+                >
+                  {player?.shirtNumber ?? ""}
+                </span>
+              )}
+            </button>
+          }
+        />
+
+        <TooltipContent>
+          <div className="space-y-1">
+            <div className="font-medium">
+              {player?.name ?? t("dataMap.unknownPlayer")} #{player?.shirtNumber ?? "-"}
+              {receiver && (
+                <span className="ml-1 text-muted-foreground">
+                  → {receiver.name} #{receiver.shirtNumber ?? "-"}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 text-xs">
+              <MarkerGlyph
+                shape={metric.shape}
+                variant={metric.variant}
+                color={color}
+                size={11}
+              />
+              <span>{metricLabel}</span>
+            </div>
+            <div className="text-[10px] tabular-nums text-muted-foreground">
+              {formatMatchTick(event.displayTick)}
+            </div>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    )
+  })
 }
 
 /* =========================================================
@@ -206,6 +665,7 @@ const metrics: DataMetric[] = [
 
   { id: "passesCompleted", label: "Completed passes", group: "distribution", shape: "circle", variant: "solid", scale: 0.65 },
   { id: "passesIncomplete", label: "Incomplete passes", group: "distribution", shape: "circle", variant: "outline", scale: 0.65 },
+  { id: "keyPasses", label: "Key passes", group: "distribution", shape: "circle", variant: "gold", scale: 0.8 },
   { id: "crossesCompleted", label: "Completed crosses", group: "distribution", shape: "circle", variant: "double", scale: 0.8 },
   { id: "crossesIncomplete", label: "Incomplete crosses", group: "distribution", shape: "circle", variant: "dashed", scale: 0.8 },
 
@@ -215,10 +675,19 @@ const metrics: DataMetric[] = [
   { id: "aerialsLost", label: "Aerial duels lost", group: "defensive", shape: "triangle", variant: "dashed", scale: 0.8 },
 
   { id: "interceptions", label: "Interceptions", group: "defensive", shape: "triangle", variant: "double", scale: 0.8 },
+  { id: "clearances", label: "Clearances", group: "defensive", shape: "triangle", variant: "gold", scale: 0.8 },
+  { id: "defensiveBlocks", label: "Defensive blocks", group: "defensive", shape: "triangle", variant: "dashed", scale: 0.8 },
   { id: "dribblesCompleted", label: "Completed dribbles", group: "possession", shape: "triangle-down", variant: "solid", scale: 0.8 },
+  { id: "possessionGained", label: "Possession gained", group: "possession", shape: "triangle-down", variant: "gold", scale: 0.8 },
+  { id: "possessionLost", label: "Possession lost", group: "possession", shape: "triangle-down", variant: "outline", scale: 0.8 },
+  { id: "touches", label: "Specific touches", group: "possession", shape: "triangle-down", variant: "white", scale: 0.7 },
 
   { id: "foulsCommitted", label: "Fouls committed", group: "discipline", shape: "pentagon", variant: "dashed", scale: 0.85 },
   { id: "fouled", label: "Fouled", group: "discipline", shape: "pentagon", variant: "white", scale: 0.85 },
+  { id: "offsides", label: "Offsides", group: "discipline", shape: "pentagon", variant: "outline", scale: 0.85 },
+
+  { id: "goalkeeperSavesHeld", label: "Saves held", group: "goalkeeping", shape: "diamond", variant: "solid", scale: 0.9 },
+  { id: "goalkeeperSavesParried", label: "Saves parried", group: "goalkeeping", shape: "diamond", variant: "outline", scale: 0.9 },
 
 ]
 
@@ -249,6 +718,8 @@ export function TacticalBoard({
     showNumbers,
     setShowNumbers,
   ] = useState(true)
+
+  const [selectedShotId, setSelectedShotId] = useState<string | null>(null)
 
   const [
     showAttackFocus,
@@ -327,7 +798,11 @@ export function TacticalBoard({
         const receiver = event.receiverPlayerId == null
           ? undefined
           : playerById.get(event.receiverPlayerId)
-        const metric = metricById.get(event.metricId)
+        const eventMetricIds = event.metricIds ?? [event.metricId]
+        const metric = [...eventMetricIds]
+          .reverse()
+          .map((metricId) => metricById.get(metricId))
+          .find((candidate) => candidate != null)
         if (!metric) return []
         const counterpartEvent = counterpartByEventId.get(event.id)
         const counterpartMetric = counterpartEvent == null
@@ -343,6 +818,15 @@ export function TacticalBoard({
           value: 1,
           x: event.x,
           y: event.y,
+          anchorX: event.anchorX,
+          anchorY: event.anchorY,
+          trajectoryStartX: event.trajectoryStartX,
+          trajectoryStartY: event.trajectoryStartY,
+          trajectoryPoints: event.trajectoryPoints,
+          endX: event.endX,
+          endY: event.endY,
+          showTrajectory: metric.id === "dribblesCompleted" ||
+            metric.group === "shots" || metric.group === "distribution",
           size: Math.max(15, 17 * (metric.scale ?? 1)),
           minute: event.minute,
           tick: event.tick,
@@ -364,6 +848,30 @@ export function TacticalBoard({
       selectedMetrics,
       selectedMetricList,
     ])
+
+  const activeSelectedShotId = selectedShotId != null && points.some((point) => point.id === selectedShotId)
+    ? selectedShotId
+    : null
+
+  const visibleShotChains = useMemo(
+    () => activeSelectedShotId == null
+      ? []
+      : buildShotChains(match.tacticalEvents, selectedMetrics)
+          .filter((chain) => chain.shotEventId === activeSelectedShotId),
+    [activeSelectedShotId, match.tacticalEvents, selectedMetrics]
+  )
+
+  const visiblePoints = useMemo(
+    () => activeSelectedShotId == null
+      ? points
+      : points.filter((point) => point.id === activeSelectedShotId),
+    [activeSelectedShotId, points]
+  )
+
+  const renderedPointIds = useMemo(
+    () => new Set(visiblePoints.map((point) => point.id)),
+    [visiblePoints]
+  )
 
   const toggleMetric = (
     metric: DataMetric
@@ -596,7 +1104,10 @@ export function TacticalBoard({
             </aside>
 
             <div className="tactical-pitch-viewport flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden">
-              <div className="tactical-pitch relative shrink-0 overflow-hidden rounded-md bg-muted">
+              <div
+                className="tactical-pitch relative shrink-0 overflow-hidden rounded-md bg-muted"
+                onClick={() => setSelectedShotId(null)}
+              >
               <div className="pointer-events-none absolute inset-0 bg-primary/[0.025]" />
 
               <PitchSvg />
@@ -605,7 +1116,7 @@ export function TacticalBoard({
                   team's attacking half (vertical zones 3–5). Show the raw
                   event-count split across its relative left/centre/right
                   thirds; deliberately do not multiply by momentum weight. */}
-              {showAttackFocus && (
+              {showAttackFocus && activeSelectedShotId == null && (
               <div className="pointer-events-none absolute inset-0 z-[5]" aria-hidden="true">
                 <div className="absolute inset-x-0 top-1/3 border-t-2 border-dashed border-foreground/15" />
                 <div className="absolute inset-x-0 top-2/3 border-t-2 border-dashed border-foreground/15" />
@@ -644,7 +1155,27 @@ export function TacticalBoard({
                   =========================================== */}
 
               <div className="absolute inset-0">
-                {points.map(
+                <ShotChainLines
+                  chains={visibleShotChains}
+                  homeColor={match.home.color ?? "#6cabdd"}
+                  awayColor={match.away.color ?? "#ef0107"}
+                />
+                <TrajectoryArrows
+                  points={visiblePoints}
+                  homeColor={match.home.color ?? "#6cabdd"}
+                  awayColor={match.away.color ?? "#ef0107"}
+                />
+                {activeSelectedShotId != null && (
+                  <ShotChainNodes
+                    chains={visibleShotChains}
+                    players={match.players}
+                    renderedPointIds={renderedPointIds}
+                    showNumbers={showNumbers}
+                    homeColor={match.home.color ?? "#6cabdd"}
+                    awayColor={match.away.color ?? "#ef0107"}
+                  />
+                )}
+                {visiblePoints.map(
                   (point) => {
                     const teamColor =
                       point.team ===
@@ -708,6 +1239,10 @@ export function TacticalBoard({
                                 height: `${point.size}px`,
                               }}
                               aria-label={`${point.player?.name ?? t("dataMap.unknownPlayer")}, ${metricLabel(point.metric)}: ${point.value}`}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                if (point.metric.group === "shots") setSelectedShotId(point.id)
+                              }}
                             >
                               <MarkerGlyph
                                 shape={
@@ -875,6 +1410,63 @@ export function TacticalBoard({
 function formatMatchTick(tick: number) {
   const seconds = Math.floor(Math.max(0, tick) / 4)
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
+}
+
+function buildShotChains(
+  events: TacticalEventPoint[],
+  selectedMetrics: Record<string, boolean>,
+): ShotChain[] {
+  const ordered = [...events].sort((left, right) => {
+    const leftOrder = left.sequenceIndex ?? left.tick
+    const rightOrder = right.sequenceIndex ?? right.tick
+    return leftOrder - rightOrder || left.tick - right.tick
+  })
+  const chains: ShotChain[] = []
+
+  for (let shotIndex = 0; shotIndex < ordered.length; shotIndex += 1) {
+    const shot = ordered[shotIndex]
+    if (!isShotEvent(shot.nativeEventType) || !selectedMetrics[shot.metricId]) continue
+
+    const previousActions: TacticalEventPoint[] = []
+    for (let index = shotIndex - 1; index >= 0; index -= 1) {
+      const candidate = ordered[index]
+      if (shot.tick - candidate.tick > maxShotChainLookbackTicks || isShotChainBoundary(candidate.nativeEventType)) break
+
+      const passOrDribble = isPassEvent(candidate.nativeEventType) || candidate.nativeEventType === 34
+      if (!passOrDribble) continue
+      if (candidate.team !== shot.team) break
+
+      previousActions.unshift(candidate)
+      const restart = (candidate.flags & shotChainRestartFlags) !== 0
+      if (previousActions.length === 3 || restart) break
+    }
+    if (previousActions.length === 0) continue
+
+    chains.push({
+      id: `shot-chain-${shot.id}`,
+      shotEventId: shot.id,
+      team: shot.team,
+      events: [...previousActions, shot],
+    })
+  }
+
+  return chains
+}
+
+function isShotEvent(eventType: number) {
+  return eventType >= 1 && eventType <= 5
+}
+
+function isPassEvent(eventType: number) {
+  return eventType >= 6 && eventType <= 17
+}
+
+function isShotChainBoundary(eventType: number) {
+  return isShotEvent(eventType) ||
+    (eventType >= 18 && eventType <= 21) ||
+    eventType === 23 ||
+    eventType === 52 ||
+    eventType === 53
 }
 
 function calculateMomentumLaneShares(events: TacticalEventPoint[]): Record<TeamSide, LaneShare[]> {

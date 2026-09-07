@@ -29,13 +29,35 @@ internal readonly record struct NativeMomentumEventData(
     int Tick,
     float LateralPosition,
     float LongitudinalPosition,
+    IReadOnlyList<NativeMomentumTrajectoryPoint> TrajectoryPoints,
     TeamSide Team,
     int PlayerSlot,
     int PlayerId,
     int ReceiverPlayerSlot,
     int ReceiverPlayerId,
     int EventType,
-    int Flags);
+    int Flags,
+    int SequenceIndex,
+    int CompletionTick)
+{
+    // TrajectoryPoints is the authoritative representation. Keeping endpoints as
+    // computed JSON properties prevents live frames and archive v3 from disagreeing.
+    public float? TrajectoryStartLateralPosition =>
+        TrajectoryPoints is { Count: > 0 } points ? points[0].LateralPosition : null;
+
+    public float? TrajectoryStartLongitudinalPosition =>
+        TrajectoryPoints is { Count: > 0 } points ? points[0].LongitudinalPosition : null;
+
+    public float? TrajectoryEndLateralPosition =>
+        TrajectoryPoints is { Count: > 0 } points ? points[^1].LateralPosition : null;
+
+    public float? TrajectoryEndLongitudinalPosition =>
+        TrajectoryPoints is { Count: > 0 } points ? points[^1].LongitudinalPosition : null;
+}
+
+internal readonly record struct NativeMomentumTrajectoryPoint(
+    float LateralPosition,
+    float LongitudinalPosition);
 
 internal readonly record struct MomentumTickData(
     float Value,

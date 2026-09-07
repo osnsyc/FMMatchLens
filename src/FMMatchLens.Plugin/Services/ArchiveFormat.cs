@@ -24,6 +24,16 @@ internal sealed record ArchiveWriteOptions(
 internal static class ArchiveWireFormat
 {
     internal static readonly byte[] Magic = Encoding.ASCII.GetBytes("FMLENS2\0");
+
+    // The chunked archive format introduced by commit b28a3d2 is 2.1.
+    // Momentum-event sequence/completion fields and trajectories define 2.2.
+    // The file-header version is the sole authority for payload decoding; do not
+    // add an independent version byte inside ArchiveFrameCodec payloads.
+    internal const ushort StructureMajor = 2;
+    internal const ushort FirstSupportedStructureMinor = 1;
+    internal const ushort StructureMinor = 2;
+    internal const byte Legacy21BlockStructure = 1;
+    internal const byte Legacy21FramePayloadMarker = 1;
 }
 
 internal sealed class ArchiveFormatException : IOException

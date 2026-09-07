@@ -26,15 +26,12 @@ internal sealed record ArchiveBlockIndexEntry(
 
 internal sealed class ArchiveWriter : IDisposable
 {
-    internal const ushort StructureMajor = 2;
-    internal const ushort StructureMinor = 1;
     internal const byte MetadataRecord = 1;
     internal const byte ChunkRecord = 2;
     internal const byte FinalIndexRecord = 3;
     internal const byte EndRecord = 4;
     internal const byte MetadataDeltaRecord = 5;
     internal const uint BlockMagic = 0x324b4c42;
-    internal const byte BlockStructure = 1;
     internal const int MaxUncompressedChunkBytes = 16 * 1024 * 1024;
     internal const int MaxCompressedChunkBytes = 16 * 1024 * 1024;
 
@@ -306,8 +303,8 @@ internal sealed class ArchiveWriter : IDisposable
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
         writer.Write(ArchiveWireFormat.Magic);
-        writer.Write(StructureMajor);
-        writer.Write(StructureMinor);
+        writer.Write(ArchiveWireFormat.StructureMajor);
+        writer.Write(ArchiveWireFormat.StructureMinor);
         writer.Write(0u);
         var flags = QuantizedCoordinatesFlag | CapturedTimeDeltasFlag | StatisticDeltasFlag | FinalIndexFlag | EventEndpointsFlag;
         if (options.Compression == ArchiveCompression.Deflate) flags |= DeflateFlag;
@@ -343,7 +340,6 @@ internal sealed class ArchiveWriter : IDisposable
         {
             headerWriter.Write(ChunkRecord);
             headerWriter.Write(BlockMagic);
-            headerWriter.Write(BlockStructure);
             headerWriter.Write((ushort)compression);
             headerWriter.Write(frames[0].Tick);
             headerWriter.Write(frames[^1].Tick);

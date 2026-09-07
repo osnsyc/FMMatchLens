@@ -90,6 +90,14 @@ export type RealtimeMomentumEvent = {
   tick: number
   lateralPosition: number
   longitudinalPosition: number
+  trajectoryStartLateralPosition?: number | null
+  trajectoryStartLongitudinalPosition?: number | null
+  trajectoryEndLateralPosition?: number | null
+  trajectoryEndLongitudinalPosition?: number | null
+  trajectoryPoints?: Array<{
+    lateralPosition: number
+    longitudinalPosition: number
+  }> | null
   team: TeamSide
   playerSlot: number
   playerId: number
@@ -97,6 +105,8 @@ export type RealtimeMomentumEvent = {
   receiverPlayerId: number
   eventType: number
   flags: number
+  sequenceIndex: number
+  completionTick: number
 }
 
 export type RealtimeMomentumPoint = {
@@ -313,23 +323,42 @@ class LiveDerivations {
     for (const item of frame.momentumEvents) {
       const metricId = nativeMomentumEventMetric(item.eventType)
       if (!metricId) continue
+      const metricIds = nativeMomentumEventMetricIds(item, metricId)
       const rotateForDisplay = nativeMomentumEventNeedsDisplayRotation(item)
-      const lateral = rotateForDisplay ? -item.lateralPosition : item.lateralPosition
-      const longitudinal = rotateForDisplay ? -item.longitudinalPosition : item.longitudinalPosition
+      const rawStartLateral = finiteCoordinate(item.trajectoryStartLateralPosition)
+      const rawStartLongitudinal = finiteCoordinate(item.trajectoryStartLongitudinalPosition)
+      const rawEndLateral = finiteCoordinate(item.trajectoryEndLateralPosition)
+      const rawEndLongitudinal = finiteCoordinate(item.trajectoryEndLongitudinalPosition)
+      const anchorLateral = rotateForDisplay ? -item.lateralPosition : item.lateralPosition
+      const anchorLongitudinal = rotateForDisplay ? -item.longitudinalPosition : item.longitudinalPosition
+      const trajectoryStartLateral = rawStartLateral == null ? undefined : rotateForDisplay ? -rawStartLateral : rawStartLateral
+      const trajectoryStartLongitudinal = rawStartLongitudinal == null ? undefined : rotateForDisplay ? -rawStartLongitudinal : rawStartLongitudinal
+      const endLateral = rawEndLateral == null ? undefined : rotateForDisplay ? -rawEndLateral : rawEndLateral
+      const endLongitudinal = rawEndLongitudinal == null ? undefined : rotateForDisplay ? -rawEndLongitudinal : rawEndLongitudinal
+      const trajectoryPoints = normalizeMomentumTrajectory(item, rotateForDisplay, halfWidth, halfLength)
       const displayTick = nativeMomentumEventDisplayTick(frame, item)
       this.tactical.set(item.eventIndex, {
         id: `${frame.matchId}-native-momentum-${item.eventIndex}`,
         metricId,
+        metricIds,
         playerId: item.playerId,
         receiverPlayerId: item.receiverPlayerId || undefined,
         team: item.team,
         tick: item.tick,
         displayTick,
         minute: Math.floor(displayTick / 240),
-        x: normalize(longitudinal, -halfLength, halfLength),
-        y: normalize(lateral, -halfWidth, halfWidth),
+        x: normalize(anchorLongitudinal, -halfLength, halfLength),
+        y: normalize(anchorLateral, -halfWidth, halfWidth),
+        anchorX: normalize(anchorLongitudinal, -halfLength, halfLength),
+        anchorY: normalize(anchorLateral, -halfWidth, halfWidth),
+        trajectoryStartX: trajectoryStartLongitudinal == null ? undefined : normalize(trajectoryStartLongitudinal, -halfLength, halfLength),
+        trajectoryStartY: trajectoryStartLateral == null ? undefined : normalize(trajectoryStartLateral, -halfWidth, halfWidth),
+        trajectoryPoints,
+        endX: endLongitudinal == null ? undefined : normalize(endLongitudinal, -halfLength, halfLength),
+        endY: endLateral == null ? undefined : normalize(endLateral, -halfWidth, halfWidth),
         nativeEventType: item.eventType,
         flags: item.flags,
+        sequenceIndex: item.sequenceIndex,
       })
     }
   }
@@ -1062,23 +1091,42 @@ export function buildTacticalEvents(
     for (const item of frame.momentumEvents) {
       const metricId = nativeMomentumEventMetric(item.eventType)
       if (!metricId) continue
+      const metricIds = nativeMomentumEventMetricIds(item, metricId)
       const rotateForDisplay = nativeMomentumEventNeedsDisplayRotation(item)
-      const lateral = rotateForDisplay ? -item.lateralPosition : item.lateralPosition
-      const longitudinal = rotateForDisplay ? -item.longitudinalPosition : item.longitudinalPosition
+      const rawStartLateral = finiteCoordinate(item.trajectoryStartLateralPosition)
+      const rawStartLongitudinal = finiteCoordinate(item.trajectoryStartLongitudinalPosition)
+      const rawEndLateral = finiteCoordinate(item.trajectoryEndLateralPosition)
+      const rawEndLongitudinal = finiteCoordinate(item.trajectoryEndLongitudinalPosition)
+      const anchorLateral = rotateForDisplay ? -item.lateralPosition : item.lateralPosition
+      const anchorLongitudinal = rotateForDisplay ? -item.longitudinalPosition : item.longitudinalPosition
+      const trajectoryStartLateral = rawStartLateral == null ? undefined : rotateForDisplay ? -rawStartLateral : rawStartLateral
+      const trajectoryStartLongitudinal = rawStartLongitudinal == null ? undefined : rotateForDisplay ? -rawStartLongitudinal : rawStartLongitudinal
+      const endLateral = rawEndLateral == null ? undefined : rotateForDisplay ? -rawEndLateral : rawEndLateral
+      const endLongitudinal = rawEndLongitudinal == null ? undefined : rotateForDisplay ? -rawEndLongitudinal : rawEndLongitudinal
+      const trajectoryPoints = normalizeMomentumTrajectory(item, rotateForDisplay, halfWidth, halfLength)
       const displayTick = nativeMomentumEventDisplayTick(frame, item)
       events.set(item.eventIndex, {
         id: `${frame.matchId}-native-momentum-${item.eventIndex}`,
         metricId,
+        metricIds,
         playerId: item.playerId,
         receiverPlayerId: item.receiverPlayerId || undefined,
         team: item.team,
         tick: item.tick,
         displayTick,
         minute: Math.floor(displayTick / 240),
-        x: normalize(longitudinal, -halfLength, halfLength),
-        y: normalize(lateral, -halfWidth, halfWidth),
+        x: normalize(anchorLongitudinal, -halfLength, halfLength),
+        y: normalize(anchorLateral, -halfWidth, halfWidth),
+        anchorX: normalize(anchorLongitudinal, -halfLength, halfLength),
+        anchorY: normalize(anchorLateral, -halfWidth, halfWidth),
+        trajectoryStartX: trajectoryStartLongitudinal == null ? undefined : normalize(trajectoryStartLongitudinal, -halfLength, halfLength),
+        trajectoryStartY: trajectoryStartLateral == null ? undefined : normalize(trajectoryStartLateral, -halfWidth, halfWidth),
+        trajectoryPoints,
+        endX: endLongitudinal == null ? undefined : normalize(endLongitudinal, -halfLength, halfLength),
+        endY: endLateral == null ? undefined : normalize(endLateral, -halfWidth, halfWidth),
         nativeEventType: item.eventType,
         flags: item.flags,
+        sequenceIndex: item.sequenceIndex,
       })
     }
   }
@@ -1094,26 +1142,47 @@ function nativeMomentumEventMetric(eventType: number): TacticalEventPoint["metri
     case 4: return "shotsOnTarget"
     case 5: return "blockedShots"
     case 7: return "passesCompleted"
+    case 6:
     case 8:
+    case 9:
     case 10:
     case 11: return "passesIncomplete"
     case 12: return "crossesCompleted"
     case 13:
     case 14:
     case 15:
-    case 16: return "crossesIncomplete"
+    case 16:
+    case 17: return "crossesIncomplete"
     case 18: return "fouled"
     case 19:
-    case 20: return "foulsCommitted"
+    case 20:
+    case 21: return "foulsCommitted"
+    case 23: return "offsides"
+    case 24: return "clearances"
+    case 25: return "defensiveBlocks"
     case 26: return "tacklesWon"
     case 27: return "tacklesLost"
     case 28: return "aerialsWon"
     case 29: return "aerialsLost"
     case 31: return "interceptions"
     case 34: return "dribblesCompleted"
+    case 37: return "goalkeeperSavesHeld"
+    case 38: return "goalkeeperSavesParried"
+    case 52: return "possessionGained"
+    case 53: return "possessionLost"
     case 54: return "touches"
     default: return undefined
   }
+}
+
+function nativeMomentumEventMetricIds(
+  item: RealtimeMomentumEvent,
+  primaryMetricId: TacticalEventPoint["metricId"],
+): TacticalEventPoint["metricId"][] {
+  const isPassOrCross = item.eventType >= 6 && item.eventType <= 17
+  return isPassOrCross && (item.flags & 0x02) !== 0
+    ? [primaryMetricId, "keyPasses"]
+    : [primaryMetricId]
 }
 
 function nativeMomentumEventNeedsDisplayRotation(item: RealtimeMomentumEvent): boolean {
@@ -1135,6 +1204,41 @@ function nativeMomentumEventDisplayTick(frame: RealtimeFrame, item: RealtimeMome
 
 function validPitchHalf(value: number): number | undefined {
   return Number.isFinite(value) && value > 0 ? value : undefined
+}
+
+function finiteCoordinate(value: number | null | undefined): number | undefined {
+  return value != null && Number.isFinite(value) ? value : undefined
+}
+
+function normalizeMomentumTrajectory(
+  event: RealtimeMomentumEvent,
+  rotateForDisplay: boolean,
+  halfWidth: number,
+  halfLength: number,
+): Array<{ x: number; y: number }> {
+  let rawPoints = (event.trajectoryPoints ?? []).filter((point) =>
+    Number.isFinite(point.lateralPosition) && Number.isFinite(point.longitudinalPosition)
+  )
+  if (rawPoints.length === 0) {
+    const startLateral = finiteCoordinate(event.trajectoryStartLateralPosition)
+    const startLongitudinal = finiteCoordinate(event.trajectoryStartLongitudinalPosition)
+    const endLateral = finiteCoordinate(event.trajectoryEndLateralPosition)
+    const endLongitudinal = finiteCoordinate(event.trajectoryEndLongitudinalPosition)
+    if (startLateral != null && startLongitudinal != null && endLateral != null && endLongitudinal != null) {
+      rawPoints = [
+        { lateralPosition: startLateral, longitudinalPosition: startLongitudinal },
+        { lateralPosition: endLateral, longitudinalPosition: endLongitudinal },
+      ]
+    }
+  }
+  return rawPoints.map((point) => {
+    const lateral = rotateForDisplay ? -point.lateralPosition : point.lateralPosition
+    const longitudinal = rotateForDisplay ? -point.longitudinalPosition : point.longitudinalPosition
+    return {
+      x: normalize(longitudinal, -halfLength, halfLength),
+      y: normalize(lateral, -halfWidth, halfWidth),
+    }
+  })
 }
 
 function frameMinute(frame: RealtimeFrame): number {

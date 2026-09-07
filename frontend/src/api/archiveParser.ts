@@ -13,20 +13,25 @@ import type { PlayerAttributes, PlayerPositionFamiliarities, PlayerProfile, Play
 import { playerPositionLabels } from "@/types/match"
 
 const magic = "FMLENS2\0"
-const supportedStructure = 2
+const archiveStructureMajor = 2
+const firstSupportedStructureMinor = 1
+const archiveStructureMinor = 2
+const legacy21FramePayloadMarker = 1
+const legacy21BlockStructure = 1
 const metadataRecord = 1
 const chunkRecord = 2
 const finalIndexRecord = 3
 const endRecord = 4
 const metadataDeltaRecord = 5
 const blockMagic = 0x324b4c42
-const blockStructure = 1
 const maxRecordBytes = 4 * 1024 * 1024
 const maxChunkBytes = 16 * 1024 * 1024
 const allTeamFields = (1n << 23n) - 1n
 const allPlayerFields = (1n << 39n) - 1n
 
 type ArchiveHeader = {
+  structureMajor: number
+  structureMinor: number
   matchId: string
   startedUnixMilliseconds: number
   headerLength: number
@@ -80,7 +85,7 @@ export async function parseArchiveFile(buffer: ArrayBuffer, fileName: string): P
         metadata = decoded.metadata
         metadataTimeline.push(decoded.metadata)
       } else if (recordType === chunkRecord) {
-        blocks.push(readBlock(reader, recordStart))
+        blocks.push(readBlock(reader, recordStart, header.structureMinor))
       } else if (recordType === finalIndexRecord) {
         finalSummary = readFinalIndex(readRecordPayload(reader, maxRecordBytes), blocks)
       } else if (recordType === endRecord) {
@@ -102,7 +107,7 @@ export async function parseArchiveFile(buffer: ArrayBuffer, fileName: string): P
   for (const block of blocks) {
     try {
       const payload = await decompressBlock(block)
-      frames.push(...readFrames(payload, header.matchId, block.frameCount, block.startTick, block.endTick))
+      frames.push(...readFrames(payload, header.matchId, block.frameCount, block.startTick, block.endTick, header.structureMinor))
     } catch (error) {
       blockError = error
       break
@@ -138,9 +143,11 @@ export async function parseArchiveFile(buffer: ArrayBuffer, fileName: string): P
 function readHeader(reader: ArchiveBufferReader): ArchiveHeader {
   if (reader.readAscii(magic.length) !== magic) throw new ArchiveError("不是有效的 FMMatchLens 存档")
   const major = reader.readUint16()
-  reader.readUint16()
+  const minor = reader.readUint16()
   const headerLength = reader.readUint32()
-  if (major !== supportedStructure) throw new ArchiveError(`不支持的存档结构 ${major}`)
+  if (major !== archiveStructureMajor || minor < firstSupportedStructureMinor || minor > archiveStructureMinor) {
+    throw new ArchiveError(`不支持的存档结构 ${major}.${minor}`)
+  }
   if (headerLength < 36 || headerLength > 64 * 1024 || headerLength > reader.length) throw new ArchiveError("文件头长度无效")
   const headerBytes = reader.bytes.subarray(0, headerLength)
   const expectedCrc = new DataView(headerBytes.buffer, headerBytes.byteOffset, headerBytes.byteLength).getUint32(headerLength - 4, true)
@@ -157,17 +164,19 @@ function readHeader(reader: ArchiveBufferReader): ArchiveHeader {
   if (coordinateEncoding !== 1) throw new ArchiveError(`不支持坐标编码 ${coordinateEncoding}`)
   if (compression > 1) throw new ArchiveError(`不支持压缩算法 ${compression}`)
   reader.offset = headerLength
-  return { matchId, startedUnixMilliseconds, headerLength }
+  return { structureMajor: major, structureMinor: minor, matchId, startedUnixMilliseconds, headerLength }
 }
 
-function readBlock(reader: ArchiveBufferReader, recordStart: number): BlockReference {
-  const headerTail = reader.readBytes(29)
+function readBlock(reader: ArchiveBufferReader, recordStart: number, structureMinor: number): BlockReference {
+  const legacy21 = structureMinor === 1
+  const headerTailLength = legacy21 ? 29 : 28
+  const headerTail = reader.readBytes(headerTailLength)
   const expectedHeaderCrc = reader.readUint32()
-  const completeHeader = reader.bytes.subarray(recordStart, recordStart + 30)
+  const completeHeader = reader.bytes.subarray(recordStart, recordStart + headerTailLength + 1)
   if (crc32(completeHeader) !== expectedHeaderCrc) throw new ArchiveError("数据块头 CRC 校验失败")
   const header = new ArchiveBufferReader(headerTail)
   if (header.readUint32() !== blockMagic) throw new ArchiveError("数据块标识无效")
-  if (header.readByte() !== blockStructure) throw new ArchiveError("不支持的数据块结构")
+  if (legacy21 && header.readByte() !== legacy21BlockStructure) throw new ArchiveError("2.1 数据块结构标记无效")
   const compression = header.readUint16()
   const startTick = header.readInt32()
   const endTick = header.readInt32()
@@ -213,9 +222,18 @@ async function decompressBlock(block: BlockReference) {
   return payload
 }
 
-function readFrames(payload: Uint8Array, matchId: string, frameCount: number, startTick: number, endTick: number) {
+function readFrames(
+  payload: Uint8Array,
+  matchId: string,
+  frameCount: number,
+  startTick: number,
+  endTick: number,
+  structureMinor: number,
+) {
   const reader = new ArchiveBufferReader(payload)
-  if (reader.readByte() !== 1) throw new ArchiveError("不支持的帧载荷版本")
+  if (structureMinor === 1 && reader.readByte() !== legacy21FramePayloadMarker) {
+    throw new ArchiveError("2.1 帧载荷标记无效")
+  }
   const frames: RealtimeFrame[] = []
   let previous: RealtimeFrame | undefined
   for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
@@ -262,7 +280,7 @@ function readFrames(payload: Uint8Array, matchId: string, frameCount: number, st
     if (holderSlotValue > 0 && !holder) throw new ArchiveError("持球球员 Slot 无效")
     const ballHolderPlayerId = holder?.playerId
     players = players.map((player) => ({ ...player, isBallHolder: player.playerId === ballHolderPlayerId }))
-    const momentumEvents = readTail(reader, previous?.momentumEvents, readEvent)
+    const momentumEvents = readTail(reader, previous?.momentumEvents, (value) => readEvent(value, structureMinor))
     const momentum = readTail(reader, previous?.momentum, readMomentum)
     const rollingMomentum = readTail(reader, previous?.rollingMomentum, readMomentum)
     const frame: RealtimeFrame = {
@@ -349,18 +367,38 @@ function readTail<T>(reader: ArchiveBufferReader, previous: readonly T[] | undef
   return result
 }
 
-function readEvent(reader: ArchiveBufferReader): RealtimeMomentumEvent {
+function readEvent(reader: ArchiveBufferReader, structureMinor: number): RealtimeMomentumEvent {
   const eventIndex = reader.readVarInt()
   const tick = reader.readVarInt()
   const lateralPosition = reader.readFloat32()
   const longitudinalPosition = reader.readFloat32()
   const teamRaw = reader.readByte()
   if (teamRaw > 1) throw new ArchiveError("事件所属球队无效")
-  return {
+  const result: RealtimeMomentumEvent = {
     eventIndex, tick, lateralPosition, longitudinalPosition, team: teamRaw === 1 ? "away" : "home",
     playerSlot: reader.readVarInt(), playerId: reader.readVarInt(), receiverPlayerSlot: reader.readVarInt(),
     receiverPlayerId: reader.readVarInt(), eventType: reader.readVarInt(), flags: reader.readVarInt(),
+    sequenceIndex: 0, completionTick: 0,
   }
+  if (structureMinor >= 2) {
+    result.sequenceIndex = reader.readVarInt()
+    result.completionTick = reader.readVarInt()
+    const pointCount = reader.readVarUint()
+    if (pointCount > 4) throw new ArchiveError("事件轨迹点数量无效")
+    result.trajectoryPoints = Array.from({ length: pointCount }, () => ({
+      lateralPosition: reader.readFloat32(),
+      longitudinalPosition: reader.readFloat32(),
+    }))
+    if (pointCount > 0) {
+      const start = result.trajectoryPoints[0]
+      const end = result.trajectoryPoints[pointCount - 1]
+      result.trajectoryStartLateralPosition = start.lateralPosition
+      result.trajectoryStartLongitudinalPosition = start.longitudinalPosition
+      result.trajectoryEndLateralPosition = end.lateralPosition
+      result.trajectoryEndLongitudinalPosition = end.longitudinalPosition
+    }
+  }
+  return result
 }
 
 function readMomentum(reader: ArchiveBufferReader): RealtimeMomentumPoint {

@@ -17,6 +17,12 @@ internal sealed class GameMatchTickHook : IDisposable
     private const int PreviousMatchTickForEpochReset = 12_000;
     private const int NewMatchTickForEpochReset = 4_096;
     private const int EpochResetConfirmationRecords = 3;
+    // Only the newest four native trajectory points are retained. If the native
+    // vector is longer, earlier path segments and turns are intentionally lost;
+    // the event anchor remains available separately as the logical action origin.
+    // Keep this limit in sync with ArchiveFrameCodec.MaxTrajectoryPoints.
+    private const int MaxStoredMomentumTrajectoryPoints = 4;
+    private const int MonitoredMomentumEventCount = 4;
 
     private readonly int _instructionOffset;
     private readonly RealtimeMatchTimeline _timeline;
@@ -401,7 +407,7 @@ internal sealed class GameMatchTickHook : IDisposable
             }
 
             ResolveDerivedTeamStats(frame);
-            ResolveMomentumEventPlayerIds(frame);
+            ResolveMomentumEventPlayerIds(frame, record.HomeTeam, record.AwayTeam);
 
             _realtimeFrames.Publish(frame);
             published = true;
@@ -457,7 +463,6 @@ internal sealed class GameMatchTickHook : IDisposable
 
         var eventCount = (int)(length / Offsets.MomentumEvent.Size);
         if (eventCount == 0) return;
-        var lastSignature = ReadNativeEventSignature(begin + (eventCount - 1) * Offsets.MomentumEvent.Size);
 
         lock (_nativeMomentumGate)
         {
@@ -475,13 +480,33 @@ internal sealed class GameMatchTickHook : IDisposable
             }
             else if (eventCount > state.EventCount)
             {
-                // The former tail is mutable. Copy it once more together with the
-                // newly appended records; consumers replace duplicate event indices.
-                start = Math.Max(0, state.EventCount - 1);
+                start = state.EventCount;
+                // A later shot/result may backfill any of the four former tail
+                // records. Only re-publish from the earliest one that changed.
+                for (var eventIndex = state.SignatureStart;
+                     eventIndex < state.SignatureStart + state.SignatureCount;
+                     eventIndex++)
+                {
+                    var signature = ReadNativeEventSignature(begin + eventIndex * Offsets.MomentumEvent.Size);
+                    if (!state.TryGetSignature(eventIndex, out var previousSignature) ||
+                        signature != previousSignature)
+                    {
+                        start = Math.Min(start, eventIndex);
+                    }
+                }
             }
-            else if (lastSignature != state.LastSignature)
+            else
             {
-                start = eventCount - 1;
+                var monitoredStart = Math.Max(0, eventCount - MonitoredMomentumEventCount);
+                for (var eventIndex = monitoredStart; eventIndex < eventCount; eventIndex++)
+                {
+                    var signature = ReadNativeEventSignature(begin + eventIndex * Offsets.MomentumEvent.Size);
+                    if (!state.TryGetSignature(eventIndex, out var previousSignature) ||
+                        signature != previousSignature)
+                    {
+                        start = Math.Min(start, eventIndex);
+                    }
+                }
             }
 
             var processedEventCount = eventCount;
@@ -497,68 +522,109 @@ internal sealed class GameMatchTickHook : IDisposable
                     if (!IsPublishedMomentumEventType(eventType)) continue;
 
                     var rawTeam = Marshal.ReadByte(address + Offsets.MomentumEvent.Team);
+                    if (rawTeam > (byte)TeamSide.Away) continue;
+                    TryReadMomentumEventTrajectory(address, out var trajectoryPoints);
                     frame.MomentumEvents[frame.MomentumEventCount++] = new NativeMomentumEventData(
                         EventIndex: eventIndex,
                         Tick: unchecked((ushort)Marshal.ReadInt16(address + Offsets.MomentumEvent.Tick)),
                         LateralPosition: ReadFloatDirect(address + Offsets.MomentumEvent.LateralPosition),
                         LongitudinalPosition: ReadFloatDirect(address + Offsets.MomentumEvent.LongitudinalPosition),
+                        TrajectoryPoints: trajectoryPoints,
                         Team: rawTeam == 0 ? TeamSide.Home : TeamSide.Away,
                         PlayerSlot: Marshal.ReadByte(address + Offsets.MomentumEvent.PlayerSlot),
                         PlayerId: 0,
                         ReceiverPlayerSlot: Marshal.ReadByte(address + Offsets.MomentumEvent.ReceiverPlayerSlot),
                         ReceiverPlayerId: 0,
                         EventType: eventType,
-                        Flags: unchecked((ushort)Marshal.ReadInt16(address + Offsets.MomentumEvent.Flags)));
+                        Flags: unchecked((ushort)Marshal.ReadInt16(address + Offsets.MomentumEvent.Flags)),
+                        SequenceIndex: Marshal.ReadInt32(address + Offsets.MomentumEvent.SequenceIndex),
+                        CompletionTick: unchecked((ushort)Marshal.ReadInt16(address + Offsets.MomentumEvent.CompletionTick)));
                 }
             }
 
             state.Source = source;
             state.Begin = begin;
             state.EventCount = processedEventCount;
-            state.LastSignature = lastSignature;
+            state.UpdateSignatures(begin, processedEventCount);
         }
     }
 
     private static bool IsPublishedMomentumEventType(byte eventType)
     {
-        return eventType is
-            >= Offsets.MomentumEvent.ShotGoal and <= Offsets.MomentumEvent.ShotBlocked or
-            Offsets.MomentumEvent.PassCompleted or
-            Offsets.MomentumEvent.PassIncompleteA or
-            Offsets.MomentumEvent.PassIncompleteB or
-            Offsets.MomentumEvent.PassIncompleteC or
-            >= Offsets.MomentumEvent.CrossCompleted and <= Offsets.MomentumEvent.CrossIncompleteD or
-            Offsets.MomentumEvent.Fouled or
-            Offsets.MomentumEvent.FoulCommittedA or
-            Offsets.MomentumEvent.FoulCommittedB or
-            >= Offsets.MomentumEvent.TackleWon and <= Offsets.MomentumEvent.AerialLost or
-            Offsets.MomentumEvent.Interception or
-            Offsets.MomentumEvent.DribbleCompleted or
-            Offsets.MomentumEvent.Touch;
+        // Preserve every output currently reachable from FUN_183cf0930. The UI
+        // may ignore unnamed types, but archives retain them for later mapping.
+        return eventType is >= Offsets.MomentumEvent.ShotGoal and <= Offsets.MomentumEvent.UnknownEvent55;
     }
 
-    private static void ResolveMomentumEventPlayerIds(RawRealtimeTickFrame frame)
+    private static bool TryReadMomentumEventTrajectory(
+        nint address,
+        out NativeMomentumTrajectoryPoint[] points)
+    {
+        points = Array.Empty<NativeMomentumTrajectoryPoint>();
+
+        if (!TryGetMomentumEventTrajectory(address, out var begin, out var nativeCount))
+        {
+            return false;
+        }
+
+        var storedCount = Math.Min(nativeCount, MaxStoredMomentumTrajectoryPoints);
+        var result = new NativeMomentumTrajectoryPoint[storedCount];
+        var firstStoredIndex = nativeCount - storedCount;
+        for (var index = 0; index < storedCount; index++)
+        {
+            var sourceIndex = firstStoredIndex + index;
+            var point = begin + sourceIndex * Offsets.MomentumEvent.TrajectoryPointSize;
+            if (!VirtualMemory.IsReadable(point, Offsets.MomentumEvent.TrajectoryPointSize))
+            {
+                return false;
+            }
+            var lateral = ReadFloatDirect(point + Offsets.MomentumEventTrajectoryPoint.LateralPosition);
+            var longitudinal = ReadFloatDirect(point + Offsets.MomentumEventTrajectoryPoint.LongitudinalPosition);
+            if (!float.IsFinite(lateral) || !float.IsFinite(longitudinal) ||
+                Math.Abs(lateral) > 1_000 || Math.Abs(longitudinal) > 1_000)
+            {
+                return false;
+            }
+
+            result[index] = new NativeMomentumTrajectoryPoint(lateral, longitudinal);
+        }
+
+        points = result;
+        return true;
+    }
+
+    private static bool TryGetMomentumEventTrajectory(nint address, out nint begin, out int pointCount)
+    {
+        begin = Marshal.ReadIntPtr(address + Offsets.MomentumEvent.TrajectoryPointsBegin);
+        var end = Marshal.ReadIntPtr(address + Offsets.MomentumEvent.TrajectoryPointsEnd);
+        var length = (long)end - (long)begin;
+        if (begin == default || length < Offsets.MomentumEvent.TrajectoryPointSize ||
+            length % Offsets.MomentumEvent.TrajectoryPointSize != 0 || length > int.MaxValue)
+        {
+            pointCount = 0;
+            return false;
+        }
+
+        pointCount = checked((int)(length / Offsets.MomentumEvent.TrajectoryPointSize));
+        return true;
+    }
+
+    private void ResolveMomentumEventPlayerIds(
+        RawRealtimeTickFrame frame,
+        nint homeTeam,
+        nint awayTeam)
     {
         for (var eventIndex = 0; eventIndex < frame.MomentumEventCount; eventIndex++)
         {
             var item = frame.MomentumEvents[eventIndex];
-            var teamSlot = 0;
-            var playerId = 0;
-            var receiverPlayerId = 0;
-            var resolveReceiver = item.EventType is
-                Offsets.MomentumEvent.PassCompleted or Offsets.MomentumEvent.CrossCompleted;
-            for (var playerIndex = 0; playerIndex < frame.PlayerCount; playerIndex++)
-            {
-                var player = frame.Players[playerIndex];
-                if (player.Team != item.Team) continue;
-                if (teamSlot == item.PlayerSlot) playerId = player.PlayerId;
-                if (resolveReceiver && teamSlot == item.ReceiverPlayerSlot)
-                    receiverPlayerId = player.PlayerId;
-                teamSlot++;
-
-                if (playerId > 0 &&
-                    (!resolveReceiver || item.ReceiverPlayerSlot == byte.MaxValue || receiverPlayerId > 0)) break;
-            }
+            var team = item.Team == TeamSide.Home ? homeTeam : awayTeam;
+            var playerId = TryResolveMomentumEventPlayerId(team, item.PlayerSlot, out var actorId)
+                ? actorId
+                : 0;
+            var receiverPlayerId = item.ReceiverPlayerSlot != byte.MaxValue &&
+                                   TryResolveMomentumEventPlayerId(team, item.ReceiverPlayerSlot, out var receiverId)
+                ? receiverId
+                : 0;
 
             frame.MomentumEvents[eventIndex] = item with
             {
@@ -568,6 +634,26 @@ internal sealed class GameMatchTickHook : IDisposable
         }
     }
 
+    private bool TryResolveMomentumEventPlayerId(nint team, int slot, out int playerId)
+    {
+        playerId = 0;
+        if (team == default || slot is < 0 or >= RawRealtimeTickFrame.MaxPlayers ||
+            !_memoryReader.TryReadByte(team + Offsets.Team.PlayerCount, out var playerCount) ||
+            slot >= playerCount ||
+            !_memoryReader.TryReadPointer(team + Offsets.Team.PlayerTable + slot * IntPtr.Size, out var matchPlayer) ||
+            matchPlayer == default ||
+            !_memoryReader.TryReadPointer(matchPlayer + Offsets.MatchPlayer.Stats, out var stats) ||
+            stats == default ||
+            !_memoryReader.TryReadInt32(stats + Offsets.PlayerStats.Id, out playerId) ||
+            playerId <= 0)
+        {
+            playerId = 0;
+            return false;
+        }
+
+        return true;
+    }
+
     private static ulong ReadNativeEventSignature(nint address)
     {
         if (!VirtualMemory.IsReadable(address, Offsets.MomentumEvent.Size)) return 0;
@@ -575,9 +661,18 @@ internal sealed class GameMatchTickHook : IDisposable
         hash = (hash ^ unchecked((ushort)Marshal.ReadInt16(address + Offsets.MomentumEvent.Tick))) * 1099511628211UL;
         hash = (hash ^ Marshal.ReadByte(address + Offsets.MomentumEvent.PlayerSlot)) * 1099511628211UL;
         hash = (hash ^ Marshal.ReadByte(address + Offsets.MomentumEvent.Team)) * 1099511628211UL;
+        hash = (hash ^ Marshal.ReadByte(address + Offsets.MomentumEvent.ReceiverPlayerSlot)) * 1099511628211UL;
         hash = (hash ^ Marshal.ReadByte(address + Offsets.MomentumEvent.EventType)) * 1099511628211UL;
+        hash = (hash ^ unchecked((uint)Marshal.ReadInt32(address + Offsets.MomentumEvent.SequenceIndex))) * 1099511628211UL;
+        hash = (hash ^ unchecked((ushort)Marshal.ReadInt16(address + Offsets.MomentumEvent.Flags))) * 1099511628211UL;
+        hash = (hash ^ unchecked((ushort)Marshal.ReadInt16(address + Offsets.MomentumEvent.CompletionTick))) * 1099511628211UL;
         hash = (hash ^ unchecked((uint)Marshal.ReadInt32(address + Offsets.MomentumEvent.LateralPosition))) * 1099511628211UL;
-        return (hash ^ unchecked((uint)Marshal.ReadInt32(address + Offsets.MomentumEvent.LongitudinalPosition))) * 1099511628211UL;
+        hash = (hash ^ unchecked((uint)Marshal.ReadInt32(address + Offsets.MomentumEvent.LongitudinalPosition))) * 1099511628211UL;
+        var trajectoryCount = TryGetMomentumEventTrajectory(address, out _, out var pointCount)
+            ? unchecked((uint)pointCount)
+            : uint.MaxValue;
+        hash = (hash ^ trajectoryCount) * 1099511628211UL;
+        return hash;
     }
 
     private bool TryReadPlayerFrame(nint matchPlayer, int slot, nint ballHolder, out PlayerTickData player)
@@ -1488,10 +1583,37 @@ internal sealed class GameMatchTickHook : IDisposable
 
     private sealed class NativeMomentumCaptureState
     {
+        private readonly ulong[] _signatures = new ulong[MonitoredMomentumEventCount];
+
         public nint Source;
         public nint Begin;
         public int EventCount;
-        public ulong LastSignature;
+        public int SignatureStart;
+        public int SignatureCount;
+
+        public bool TryGetSignature(int eventIndex, out ulong signature)
+        {
+            var offset = eventIndex - SignatureStart;
+            if (offset < 0 || offset >= SignatureCount)
+            {
+                signature = 0;
+                return false;
+            }
+
+            signature = _signatures[offset];
+            return true;
+        }
+
+        public void UpdateSignatures(nint begin, int eventCount)
+        {
+            SignatureStart = Math.Max(0, eventCount - MonitoredMomentumEventCount);
+            SignatureCount = eventCount - SignatureStart;
+            for (var index = 0; index < SignatureCount; index++)
+            {
+                _signatures[index] = ReadNativeEventSignature(
+                    begin + (SignatureStart + index) * Offsets.MomentumEvent.Size);
+            }
+        }
     }
 
     private sealed class RawFrameTickComparer : IComparer<RawRealtimeTickFrame>

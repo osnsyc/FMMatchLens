@@ -70,7 +70,7 @@ internal static class ArchiveReader
                             metadataTimeline.Add(metadata);
                             break;
                         case ArchiveWriter.ChunkRecord:
-                            var block = ReadBlockReference(stream, reader, recordStart);
+                            var block = ReadBlockReference(stream, reader, recordStart, header.StructureMinor);
                             blocks.Add(block);
                             stream.Position = checked(block.PayloadOffset + block.CompressedLength);
                             break;
@@ -111,7 +111,7 @@ internal static class ArchiveReader
                 IReadOnlyList<RealtimeTickFrame> decoded;
                 try
                 {
-                    decoded = DecodeBlock(stream, block, header.MatchId);
+                    decoded = DecodeBlock(stream, block, header);
                 }
                 catch (Exception ex) when (ex is InvalidDataException or EndOfStreamException or IOException)
                 {
@@ -143,7 +143,7 @@ internal static class ArchiveReader
             {
                 try
                 {
-                    var lastFrames = DecodeBlock(stream, summaryBlocks[^1], header.MatchId);
+                    var lastFrames = DecodeBlock(stream, summaryBlocks[^1], header);
                     homeGoals = lastFrames[^1].Home.Goals;
                     awayGoals = lastFrames[^1].Away.Goals;
                 }
@@ -192,7 +192,10 @@ internal static class ArchiveReader
         var major = reader.ReadUInt16();
         var minor = reader.ReadUInt16();
         _ = reader.ReadUInt32();
-        if (major != ArchiveWriter.StructureMajor) throw new ArchiveFormatException("unsupported_archive_structure", $"Archive structure {major} is not supported.");
+        if (major != ArchiveWireFormat.StructureMajor ||
+            minor < ArchiveWireFormat.FirstSupportedStructureMinor ||
+            minor > ArchiveWireFormat.StructureMinor)
+            throw new ArchiveFormatException("unsupported_archive_structure", $"Archive structure {major}.{minor} is not supported.");
         var flags = reader.ReadUInt64();
         var matchId = ArchiveBinary.ReadString(reader);
         var started = reader.ReadInt64();
@@ -206,19 +209,26 @@ internal static class ArchiveReader
         return new ArchiveHeader(major, minor, flags, matchId, started, coordinateEncoding, chunkTicks, (ArchiveCompression)compressionValue, headerLength);
     }
 
-    private static BlockReference ReadBlockReference(Stream stream, BinaryReader reader, long recordStart)
+    private static BlockReference ReadBlockReference(
+        Stream stream,
+        BinaryReader reader,
+        long recordStart,
+        ushort structureMinor)
     {
-        var remainingHeader = reader.ReadBytes(29);
-        if (remainingHeader.Length != 29) throw new EndOfStreamException();
+        var legacy21 = structureMinor == 1;
+        var remainingHeaderLength = legacy21 ? 29 : 28;
+        var remainingHeader = reader.ReadBytes(remainingHeaderLength);
+        if (remainingHeader.Length != remainingHeaderLength) throw new EndOfStreamException();
         var expectedHeaderCrc = reader.ReadUInt32();
-        var headerBytes = new byte[30];
+        var headerBytes = new byte[remainingHeaderLength + 1];
         headerBytes[0] = ArchiveWriter.ChunkRecord;
         remainingHeader.CopyTo(headerBytes, 1);
         if (ArchiveBinary.Crc32(headerBytes) != expectedHeaderCrc) throw new ArchiveFormatException("block_header_crc_mismatch", "Archive block header CRC does not match.");
         using var headerStream = new MemoryStream(remainingHeader, writable: false);
         using var headerReader = new BinaryReader(headerStream, Encoding.UTF8);
         if (headerReader.ReadUInt32() != ArchiveWriter.BlockMagic) throw new ArchiveFormatException("invalid_block_magic", "Archive block magic is invalid.");
-        if (headerReader.ReadByte() != ArchiveWriter.BlockStructure) throw new ArchiveFormatException("unsupported_block_structure", "Archive block structure is not supported.");
+        if (legacy21 && headerReader.ReadByte() != ArchiveWireFormat.Legacy21BlockStructure)
+            throw new ArchiveFormatException("unsupported_block_structure", "The legacy 2.1 block structure marker is invalid.");
         var compressionValue = headerReader.ReadUInt16();
         if (compressionValue > (ushort)ArchiveCompression.Deflate) throw new ArchiveFormatException("unsupported_compression", $"Block compression {compressionValue} is not supported.");
         var startTick = headerReader.ReadInt32();
@@ -235,7 +245,7 @@ internal static class ArchiveReader
         return new BlockReference(recordStart, startTick, endTick, frameCount, rawLength, compressedLength, payloadCrc, (ArchiveCompression)compressionValue, payloadOffset);
     }
 
-    private static IReadOnlyList<RealtimeTickFrame> DecodeBlock(Stream stream, BlockReference block, string matchId)
+    private static IReadOnlyList<RealtimeTickFrame> DecodeBlock(Stream stream, BlockReference block, ArchiveHeader header)
     {
         stream.Position = block.PayloadOffset;
         var compressed = new byte[block.CompressedLength];
@@ -267,7 +277,7 @@ internal static class ArchiveReader
         }
         if (raw.Length != block.UncompressedLength) throw new ArchiveFormatException("decompressed_length_mismatch", "Archive block decompressed length does not match its header.");
         if (ArchiveBinary.Crc32(raw) != block.PayloadCrc) throw new ArchiveFormatException("payload_crc_mismatch", "Archive block payload CRC does not match.");
-        var frames = ArchiveFrameCodec.Decode(raw, matchId, block.FrameCount);
+        var frames = ArchiveFrameCodec.Decode(raw, header.MatchId, block.FrameCount, header.StructureMinor);
         if (frames[0].Tick != block.StartTick || frames[^1].Tick != block.EndTick) throw new ArchiveFormatException("block_range_mismatch", "Decoded block range does not match its header.");
         return frames;
     }
