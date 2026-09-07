@@ -259,7 +259,6 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
       setLoadFailed(false)
       setArchiveError("")
       setSelectedId(matchId)
-      onLive()
       return
     }
 
@@ -272,7 +271,7 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
     setLoadFailed(false)
     setArchiveError("")
     setSelectedId(matchId)
-    onLive()
+    if (matchId === "") onLive()
   }
 
   const openLocalArchive = async (file: File) => {
@@ -281,7 +280,6 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
     setLoading(true)
     setLoadFailed(false)
     setArchiveError("")
-    onLive()
 
     try {
       if (!file.name.toLowerCase().endsWith(".fmlens")) throw new Error(t("timeline.chooseArchive"))
@@ -293,10 +291,6 @@ export function MatchTimeline({ match, initialLocalArchive, onReplayFrame, onLiv
       setFrameIndex(0)
       setSelectedId(localArchiveId(parsed))
     } catch (error) {
-      setFrames([])
-      setMetadata(undefined)
-      setMetadataTimeline([])
-      setSelectedId("")
       setLoadFailed(true)
       setArchiveError(error instanceof Error ? error.message : t("timeline.localArchiveReadFailed"))
     } finally {
