@@ -258,8 +258,14 @@ export function MatchStatsPanel({
       }
     }
 
+    const homeShare =
+      home / total
+
+    const awayShare =
+      away / total
+
     return {
-      gridTemplateColumns: `${home}fr ${away}fr`,
+      gridTemplateColumns: `${homeShare}fr ${awayShare}fr`,
     }
   }
 
