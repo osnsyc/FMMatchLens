@@ -3,9 +3,10 @@ import { useTranslation } from "react-i18next"
 import {
   Area,
   Bar,
-  CartesianGrid,
   Cell,
   ComposedChart,
+  Label,
+  ReferenceDot,
   ReferenceLine,
   XAxis,
   YAxis,
@@ -13,8 +14,9 @@ import {
 
 import { CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart"
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { NativeTabs } from "@/components/uitripled/native-tabs-shadcnui"
-import type { MatchSnapshot, TacticalEventPoint, XgTimelinePoint } from "@/types/match"
+import type { MatchSnapshot, TacticalEventPoint, TeamSide, XgTimelinePoint } from "@/types/match"
 
 type MomentumProps = {
   match: MatchSnapshot
@@ -37,6 +39,13 @@ type MomentumBar = MomentumPoint & {
   endMinute: number
 }
 
+type GoalMarker = {
+  id: string
+  minute: number
+  team: TeamSide
+  title: string
+}
+
 const eventWeights: Partial<Record<TacticalEventPoint["metricId"], number>> = {
   goals: 0.5,
   shotsOnTarget: 0.32,
@@ -44,6 +53,8 @@ const eventWeights: Partial<Record<TacticalEventPoint["metricId"], number>> = {
   hitWoodwork: 0.4,
   blockedShots: 0.1,
 }
+
+const momentumYTicks = [-1, -0.5, 0, 0.5, 1]
 
 export function Momentum({ match }: MomentumProps) {
   const { t } = useTranslation()
@@ -54,6 +65,7 @@ export function Momentum({ match }: MomentumProps) {
   const hasNativeMomentum = nativeBarPoints.length > 0
   const minutePoints = useMemo(() => buildLineMomentum(match), [match])
   const linePoints = useMemo(() => splitAtZeroCrossings(minutePoints), [minutePoints])
+  const goalMarkers = useMemo(() => buildGoalMarkers(match, t("squad.goal")), [match, t])
   const bars = useMemo(
     () => hasNativeMomentum ? buildNativeBars(nativeBarPoints) : buildFiveMinuteBars(minutePoints),
     [hasNativeMomentum, minutePoints, nativeBarPoints],
@@ -90,17 +102,6 @@ export function Momentum({ match }: MomentumProps) {
       <CardContent className="flex min-h-0 flex-1 flex-col p-0">
         <ChartContainer config={chartConfig} className="min-h-0 flex-1 px-2 py-2">
           <ComposedChart data={data} margin={{ top: 4, right: 12, bottom: 4, left: 0 }}>
-            <defs>
-              <linearGradient id="momentum-positive-fill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={homeColor} stopOpacity={1} />
-                <stop offset="50%" stopColor={homeColor} stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="momentum-negative-fill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="50%" stopColor={awayColor} stopOpacity={0} />
-                <stop offset="100%" stopColor={awayColor} stopOpacity={1} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis
               dataKey="minute"
               type="number"
@@ -112,15 +113,39 @@ export function Momentum({ match }: MomentumProps) {
             />
             <YAxis
               type="number"
-              domain={[-1, 1]}
-              ticks={[-1, -0.5, 0, 0.5, 1]}
+              domain={[-1.18, 1.18]}
+              ticks={momentumYTicks}
               allowDataOverflow
               tickLine={false}
               axisLine={false}
               tickFormatter={(value) => Number(value).toFixed(value === 0 ? 0 : 1)}
               width={28}
             />
+            {momentumYTicks.filter((tick) => tick !== 0).map((tick) => (
+              <ReferenceLine
+                key={tick}
+                y={tick}
+                stroke="var(--border)"
+                strokeDasharray="3 3"
+              />
+            ))}
             <ReferenceLine y={0} stroke="var(--border)" strokeWidth={1.2} />
+            {goalMarkers.map((marker) => {
+              const markerY = marker.team === "home" ? 1.1 : -1.1
+              return (
+                <ReferenceLine
+                  key={`${marker.id}-line`}
+                  segment={[
+                    { x: marker.minute, y: 0 },
+                    { x: marker.minute, y: markerY },
+                  ]}
+                  stroke={marker.team === "home" ? homeColor : awayColor}
+                  strokeOpacity={0.7}
+                  strokeDasharray="3 3"
+                  ifOverflow="visible"
+                />
+              )
+            })}
             <ChartTooltip
               cursor={{ stroke: "var(--border)", strokeDasharray: "3 3" }}
               content={(
@@ -138,7 +163,8 @@ export function Momentum({ match }: MomentumProps) {
                   dataKey="positive"
                   type="monotone"
                   stroke="var(--color-positive)"
-                  fill="url(#momentum-positive-fill)"
+                  fill={homeColor}
+                  fillOpacity={0.5}
                   strokeWidth={2}
                   dot={false}
                   activeDot={{ r: 3 }}
@@ -148,7 +174,8 @@ export function Momentum({ match }: MomentumProps) {
                   dataKey="negative"
                   type="monotone"
                   stroke="var(--color-negative)"
-                  fill="url(#momentum-negative-fill)"
+                  fill={awayColor}
+                  fillOpacity={0.5}
                   strokeWidth={2}
                   dot={false}
                   activeDot={{ r: 3 }}
@@ -162,6 +189,33 @@ export function Momentum({ match }: MomentumProps) {
                 ))}
               </Bar>
             )}
+
+            {goalMarkers.map((marker) => {
+              const isHome = marker.team === "home"
+              const markerY = isHome ? 1.1 : -1.1
+              const color = isHome ? homeColor : awayColor
+              return (
+                <ReferenceDot
+                  key={`${marker.id}-icon`}
+                  x={marker.minute}
+                  y={markerY}
+                  r={1}
+                  fill="transparent"
+                  stroke="transparent"
+                  ifOverflow="visible"
+                >
+                  <Label
+                    content={(
+                      <GoalMarkerLabel
+                        color={color}
+                        title={marker.title}
+                        side={isHome ? "top" : "bottom"}
+                      />
+                    )}
+                  />
+                </ReferenceDot>
+              )
+            })}
           </ComposedChart>
         </ChartContainer>
       </CardContent>
@@ -271,6 +325,75 @@ function buildFiveMinuteBars(points: readonly MomentumPoint[]): MomentumBar[] {
     bars.push({ ...toMomentumPoint(startMinute + 2.5, value), startMinute, endMinute })
   }
   return bars
+}
+
+function buildGoalMarkers(match: MatchSnapshot, goalLabel: string): GoalMarker[] {
+  return match.events
+    .filter((event) => event.type === "goal" || event.type === "own_goal")
+    .map((event) => {
+      const player = match.players.find((candidate) => candidate.id === event.playerId)
+      const eventTeam = event.team ?? player?.team
+      if (!eventTeam) return null
+      const team = event.type === "own_goal"
+        ? eventTeam === "home" ? "away" : "home"
+        : eventTeam
+      return {
+        id: event.id,
+        minute: event.minute,
+        team,
+        title: `${formatMinute(event.minute)} · ${goalLabel}${player ? ` · ${player.name}` : ""}`,
+      }
+    })
+    .filter((marker): marker is GoalMarker => marker != null)
+}
+
+function GoalMarkerLabel({
+  color,
+  title,
+  side,
+  viewBox,
+}: {
+  color: string
+  title: string
+  side: "top" | "bottom"
+  viewBox?: unknown
+}) {
+  const point = viewBox && typeof viewBox === "object" && "x" in viewBox && "y" in viewBox
+    ? viewBox as { x?: number; y?: number }
+    : null
+  if (point?.x == null || point.y == null) return null
+
+  return (
+    <foreignObject
+      x={point.x - 8}
+      y={point.y - 8}
+      width="16"
+      height="16"
+      style={{ overflow: "visible" }}
+    >
+      <HoverCard>
+        <HoverCardTrigger
+          render={(
+            <button
+              type="button"
+              aria-label={title}
+              className="flex size-4 cursor-help items-center justify-center rounded-full border bg-background shadow-sm outline-none transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring"
+              style={{ borderColor: color }}
+            />
+          )}
+        >
+          <img src="./goal.svg" alt="" aria-hidden="true" className="size-3" />
+        </HoverCardTrigger>
+        <HoverCardContent
+          side={side}
+          sideOffset={6}
+          className="w-auto max-w-72 whitespace-nowrap px-2.5 py-1.5 font-medium"
+        >
+          {title}
+        </HoverCardContent>
+      </HoverCard>
+    </foreignObject>
+  )
 }
 
 function toMomentumPoint(
