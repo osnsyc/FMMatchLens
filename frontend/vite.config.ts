@@ -5,10 +5,15 @@ import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url))
-const projectProperties = readFileSync(new URL("../Directory.Build.props", import.meta.url), "utf8")
+const projectProperties = readFileSync(
+  new URL("../Directory.Build.props", import.meta.url),
+  "utf8"
+)
 
 function readProjectProperty(name: string) {
-  const match = projectProperties.match(new RegExp(`<${name}>([^<]+)</${name}>`))
+  const match = projectProperties.match(
+    new RegExp(`<${name}>([^<]+)</${name}>`)
+  )
   if (!match) throw new Error(`Directory.Build.props is missing ${name}`)
   return match[1].trim()
 }
@@ -21,11 +26,13 @@ const githubProjectUrl = readProjectProperty("GitHubProjectUrl")
 const koFiUrl = readProjectProperty("KoFiUrl")
 const koFiLabel = readProjectProperty("KoFiLabel")
 const packageVersion = JSON.parse(
-  readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+  readFileSync(new URL("./package.json", import.meta.url), "utf8")
 ) as { version: string }
 
 if (packageVersion.version !== appVersion) {
-  throw new Error(`Version mismatch: Directory.Build.props=${appVersion}, frontend/package.json=${packageVersion.version}`)
+  throw new Error(
+    `Version mismatch: Directory.Build.props=${appVersion}, frontend/package.json=${packageVersion.version}`
+  )
 }
 
 // https://vite.dev/config/
@@ -58,14 +65,22 @@ export default defineConfig({
           if (!context.bundle) return html
           return html.replace(
             /<script type="module" crossorigin src=/g,
-            "<script defer src=",
+            "<script defer src="
           )
         },
       },
     },
   ],
   build: {
-    rollupOptions: {
+    // The desktop release intentionally ships as one classic-script bundle.
+    // Keep the warning threshold aligned with that file:// deployment model.
+    chunkSizeWarningLimit: 2048,
+    rolldownOptions: {
+      checks: {
+        // Pixi and Vite contain guarded import.meta fallbacks. Rolldown replaces
+        // them with an empty object for IIFE output, which is expected here.
+        emptyImportMeta: false,
+      },
       output: {
         // Browsers block external ES modules loaded from file:// because their
         // origin is opaque. A single IIFE bundle can be loaded as a classic
