@@ -144,6 +144,14 @@ export type RealtimeTeamMetadata = {
   foregroundColour?: number
   outlineColour?: number
   logoPath?: string
+  manager?: RealtimeManagerMetadata
+}
+
+export type RealtimeManagerMetadata = {
+  uid?: number
+  firstName?: string
+  secondName?: string
+  isHumanControlled: boolean
 }
 
 export type RealtimeMatchMetadata = {
@@ -776,6 +784,7 @@ export function toMatchSnapshot(
       name: metadata?.home.name || "Home",
       color: argbToCss(metadata?.home.foregroundColour),
       logoPath: metadata?.home.logoPath,
+      manager: metadata?.home.manager,
       logoUrl:
         homeClubUid != null
           ? graphicsAssetUrl("club", homeClubUid, "logo")
@@ -788,6 +797,7 @@ export function toMatchSnapshot(
       name: metadata?.away.name || "Away",
       color: argbToCss(metadata?.away.foregroundColour),
       logoPath: metadata?.away.logoPath,
+      manager: metadata?.away.manager,
       logoUrl:
         awayClubUid != null
           ? graphicsAssetUrl("club", awayClubUid, "logo")

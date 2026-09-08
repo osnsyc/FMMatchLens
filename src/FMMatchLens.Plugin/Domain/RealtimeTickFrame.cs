@@ -153,7 +153,14 @@ internal readonly record struct RealtimeTeamMetadata(
     uint? BackgroundColour,
     uint? ForegroundColour,
     uint? OutlineColour,
-    string? LogoPath);
+    string? LogoPath,
+    RealtimeManagerMetadata? Manager = null);
+
+internal readonly record struct RealtimeManagerMetadata(
+    uint? Uid,
+    string? FirstName,
+    string? SecondName,
+    bool IsHumanControlled);
 
 internal readonly record struct RealtimePlayerMetadata(
     int Slot,

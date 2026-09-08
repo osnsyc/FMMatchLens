@@ -171,6 +171,9 @@ internal static class Offsets
 
     public static class Team
     {
+        // Pointer to the team's manager wrapper. Manager.Person resolves to the
+        // shared Person subobject for both human managers and AI staff.
+        public const int Manager = 0x528;
         public const int PlayerTable = 0x130;
         public const int PlayerCount = 0x632;
         public const int UniqueId = 0x2C;
@@ -182,6 +185,21 @@ internal static class Offsets
         public const int DbTeam = 0xA8;
         public const int PlayerListUnconfirmed = 0x200;
         public const int TeamBase = 0x588;
+    }
+
+    public static class Manager
+    {
+        public const int Person = 0x28;
+    }
+
+    public static class Rtti
+    {
+        // MSVC object layout: [person] is the vftable, [vftable-8] points to
+        // RTTI metadata, whose +4 field is the complete-object/subobject offset.
+        public const int Metadata = -0x08;
+        public const int SubobjectOffset = 0x04;
+        public const uint HumanManagerPersonOffset = 0x450;
+        public const uint StaffPersonOffset = 0x100;
     }
 
     public static class StadiumColour

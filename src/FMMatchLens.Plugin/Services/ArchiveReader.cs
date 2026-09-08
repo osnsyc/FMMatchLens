@@ -54,7 +54,19 @@ internal static class ArchiveReader
                             var decodedMetadata = ArchiveMetadataCodec.Decode(metadataPayload, header.MatchId, header.StartedUnixMilliseconds);
                             if (decodedMetadata.Revision <= metadataRevision) throw new ArchiveFormatException("invalid_metadata_revision", "Metadata revisions are not strictly increasing.");
                             metadataRevision = decodedMetadata.Revision;
-                            metadata = decodedMetadata.Metadata;
+                            metadata = metadata is null
+                                ? decodedMetadata.Metadata
+                                : decodedMetadata.Metadata with
+                                {
+                                    Home = decodedMetadata.Metadata.Home with
+                                    {
+                                        Manager = decodedMetadata.Metadata.Home.Manager ?? metadata.Home.Manager
+                                    },
+                                    Away = decodedMetadata.Metadata.Away with
+                                    {
+                                        Manager = decodedMetadata.Metadata.Away.Manager ?? metadata.Away.Manager
+                                    }
+                                };
                             metadataTimeline.Add(metadata);
                             break;
                         case ArchiveWriter.MetadataDeltaRecord:

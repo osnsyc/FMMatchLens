@@ -15,7 +15,7 @@ import { playerPositionLabels } from "@/types/match"
 const magic = "FMLENS2\0"
 const archiveStructureMajor = 2
 const firstSupportedStructureMinor = 1
-const archiveStructureMinor = 2
+const archiveStructureMinor = 3
 const legacy21FramePayloadMarker = 1
 const legacy21BlockStructure = 1
 const metadataRecord = 1
@@ -75,8 +75,14 @@ export async function parseArchiveFile(buffer: ArrayBuffer, fileName: string): P
         const decoded = readMetadata(readRecordPayload(reader, maxRecordBytes), header)
         if (decoded.revision <= metadataRevision) throw new ArchiveError("元数据修订序号不是严格递增")
         metadataRevision = decoded.revision
-        metadata = decoded.metadata
-        metadataTimeline.push(decoded.metadata)
+        metadata = metadata
+          ? {
+              ...decoded.metadata,
+              home: { ...decoded.metadata.home, manager: decoded.metadata.home.manager ?? metadata.home.manager },
+              away: { ...decoded.metadata.away, manager: decoded.metadata.away.manager ?? metadata.away.manager },
+            }
+          : decoded.metadata
+        metadataTimeline.push(metadata)
       } else if (recordType === metadataDeltaRecord) {
         if (!metadata) throw new ArchiveError("Metadata 增量缺少完整基线")
         const decoded = readMetadataDelta(readRecordPayload(reader, maxRecordBytes), header, metadata)
@@ -414,8 +420,8 @@ function readMetadata(payload: Uint8Array, header: ArchiveHeader) {
   if (stringCount > 16_384) throw new ArchiveError("元数据字符串表过大")
   const strings: Array<string | undefined> = [undefined]
   for (let index = 0; index < stringCount; index += 1) strings.push(reader.readString())
-  const home = readTeamMetadata(reader, strings)
-  const away = readTeamMetadata(reader, strings)
+  let home = readTeamMetadata(reader, strings)
+  let away = readTeamMetadata(reader, strings)
   const playerCount = reader.readVarUint()
   if (playerCount > 255) throw new ArchiveError("元数据球员数量过大")
   const players = Array.from({ length: playerCount }, () => readPlayerMetadata(reader, strings))
@@ -424,8 +430,12 @@ function readMetadata(payload: Uint8Array, header: ArchiveHeader) {
   let matchDate: string | undefined
   if (!reader.atEnd) {
     const extensionFlags = reader.readByte()
-    if (extensionFlags === 0 || (extensionFlags & ~0x01) !== 0) throw new ArchiveError("元数据包含未知扩展字段")
+    if (extensionFlags === 0 || (extensionFlags & ~0x03) !== 0) throw new ArchiveError("元数据包含未知扩展字段")
     if ((extensionFlags & 0x01) !== 0) matchDate = reader.readString()
+    if ((extensionFlags & 0x02) !== 0) {
+      home = { ...home, manager: readManagerMetadata(reader, strings) }
+      away = { ...away, manager: readManagerMetadata(reader, strings) }
+    }
   }
   if (!reader.atEnd) throw new ArchiveError("元数据包含多余字节")
   const metadata: RealtimeMatchMetadata = { matchId: header.matchId, startedUnixMilliseconds: header.startedUnixMilliseconds, capturedTick, matchDate, home, away, players }
@@ -443,8 +453,12 @@ function readMetadataDelta(payload: Uint8Array, header: ArchiveHeader, previous:
 
   const teamFlags = reader.readByte()
   if ((teamFlags & ~0x03) !== 0) throw new ArchiveError("Metadata 增量含有未知球队字段")
-  const home = (teamFlags & 0x01) !== 0 ? readTeamMetadata(reader, strings) : previous.home
-  const away = (teamFlags & 0x02) !== 0 ? readTeamMetadata(reader, strings) : previous.away
+  const home = (teamFlags & 0x01) !== 0
+    ? { ...readTeamMetadata(reader, strings), manager: previous.home.manager }
+    : previous.home
+  const away = (teamFlags & 0x02) !== 0
+    ? { ...readTeamMetadata(reader, strings), manager: previous.away.manager }
+    : previous.away
   const players = [...previous.players]
   const deltaCount = reader.readVarUint()
   if (deltaCount > 255) throw new ArchiveError("Metadata 增量球员数量过大")
@@ -490,6 +504,16 @@ function readTeamMetadata(reader: ArchiveBufferReader, strings: Array<string | u
     uid: readNullableUint(reader), clubUid: readNullableUint(reader), name: readStringId(reader, strings) ?? "",
     backgroundColour: readNullableUint(reader), foregroundColour: readNullableUint(reader), outlineColour: readNullableUint(reader),
     logoPath: readStringId(reader, strings),
+  }
+}
+
+function readManagerMetadata(reader: ArchiveBufferReader, strings: Array<string | undefined>) {
+  if (!reader.readBoolean()) return undefined
+  return {
+    uid: readNullableUint(reader),
+    firstName: readStringId(reader, strings),
+    secondName: readStringId(reader, strings),
+    isHumanControlled: reader.readBoolean(),
   }
 }
 

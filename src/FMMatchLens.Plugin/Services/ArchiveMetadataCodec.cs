@@ -19,7 +19,8 @@ internal static class ArchiveMetadataCodec
     private const byte AwayTeamFlag = 1 << 1;
     private const byte AllTeamDeltaFlags = HomeTeamFlag | AwayTeamFlag;
     private const byte MatchDateExtensionFlag = 1 << 0;
-    private const byte AllMetadataExtensionFlags = MatchDateExtensionFlag;
+    private const byte TeamManagersExtensionFlag = 1 << 1;
+    private const byte AllMetadataExtensionFlags = MatchDateExtensionFlag | TeamManagersExtensionFlag;
 
     private readonly record struct PlayerDelta(
         RealtimePlayerMetadata Player,
@@ -50,10 +51,18 @@ internal static class ArchiveMetadataCodec
         WriteTeam(writer, metadata.Away, ids);
         ArchiveBinary.WriteVarUInt64(writer, (ulong)metadata.Players.Count);
         foreach (var player in metadata.Players.OrderBy(item => item.Slot)) WritePlayer(writer, player, ids);
-        if (!string.IsNullOrWhiteSpace(metadata.MatchDate))
+        var extensionFlags = (byte)(
+            (!string.IsNullOrWhiteSpace(metadata.MatchDate) ? MatchDateExtensionFlag : 0) |
+            (metadata.Home.Manager.HasValue || metadata.Away.Manager.HasValue ? TeamManagersExtensionFlag : 0));
+        if (extensionFlags != 0)
         {
-            writer.Write(MatchDateExtensionFlag);
-            ArchiveBinary.WriteString(writer, metadata.MatchDate);
+            writer.Write(extensionFlags);
+            if ((extensionFlags & MatchDateExtensionFlag) != 0) ArchiveBinary.WriteString(writer, metadata.MatchDate!);
+            if ((extensionFlags & TeamManagersExtensionFlag) != 0)
+            {
+                WriteManager(writer, metadata.Home.Manager, ids);
+                WriteManager(writer, metadata.Away.Manager, ids);
+            }
         }
         return stream.ToArray();
     }
@@ -87,6 +96,11 @@ internal static class ArchiveMetadataCodec
                 throw new ArchiveFormatException("unknown_metadata_extension", "Metadata contains unknown extension fields.");
             if ((extensionFlags & MatchDateExtensionFlag) != 0)
                 matchDate = ArchiveBinary.ReadString(reader);
+            if ((extensionFlags & TeamManagersExtensionFlag) != 0)
+            {
+                home = home with { Manager = ReadManager(reader, strings) };
+                away = away with { Manager = ReadManager(reader, strings) };
+            }
         }
         if (stream.Position != stream.Length) throw new ArchiveFormatException("trailing_data", "Metadata record contains trailing bytes.");
         return (revision, new RealtimeMatchMetadata(matchId, startedUnixMilliseconds, capturedTick, home, away, players, matchDate));
@@ -125,8 +139,10 @@ internal static class ArchiveMetadataCodec
             }
         }
 
-        var homeChanged = previous.Home != incoming.Home;
-        var awayChanged = previous.Away != incoming.Away;
+        // Managers are a static, one-time archive snapshot. Do not turn later
+        // memory refreshes into repeated metadata deltas.
+        var homeChanged = (previous.Home with { Manager = null }) != (incoming.Home with { Manager = null });
+        var awayChanged = (previous.Away with { Manager = null }) != (incoming.Away with { Manager = null });
         if (!homeChanged && !awayChanged && deltas.Count == 0)
         {
             encoding = default!;
@@ -141,8 +157,8 @@ internal static class ArchiveMetadataCodec
             incoming.MatchId,
             incoming.StartedUnixMilliseconds,
             incoming.CapturedTick,
-            homeChanged ? incoming.Home : previous.Home,
-            awayChanged ? incoming.Away : previous.Away,
+            homeChanged ? incoming.Home with { Manager = previous.Home.Manager } : previous.Home,
+            awayChanged ? incoming.Away with { Manager = previous.Away.Manager } : previous.Away,
             players,
             incoming.MatchDate ?? previous.MatchDate);
         var strings = BuildDeltaStringTable(effective, deltas, homeChanged, awayChanged);
@@ -188,8 +204,12 @@ internal static class ArchiveMetadataCodec
         var teamFlags = reader.ReadByte();
         if ((teamFlags & ~AllTeamDeltaFlags) != 0)
             throw new ArchiveFormatException("unknown_metadata_delta_field", "Metadata delta contains unknown team fields.");
-        var home = (teamFlags & HomeTeamFlag) != 0 ? ReadTeam(reader, strings) : previous.Home;
-        var away = (teamFlags & AwayTeamFlag) != 0 ? ReadTeam(reader, strings) : previous.Away;
+        var home = (teamFlags & HomeTeamFlag) != 0
+            ? ReadTeam(reader, strings) with { Manager = previous.Home.Manager }
+            : previous.Home;
+        var away = (teamFlags & AwayTeamFlag) != 0
+            ? ReadTeam(reader, strings) with { Manager = previous.Away.Manager }
+            : previous.Away;
         var players = previous.Players.ToDictionary(player => player.PlayerId);
         var deltaCount = checked((int)ArchiveBinary.ReadVarUInt64(reader, 5));
         if (deltaCount > byte.MaxValue) throw new ArchiveFormatException("invalid_count", "Metadata delta has too many players.");
@@ -250,8 +270,10 @@ internal static class ArchiveMetadataCodec
         bool awayChanged)
     {
         var values = new SortedSet<string>(StringComparer.Ordinal);
-        if (homeChanged) AddTeam(metadata.Home, values);
-        if (awayChanged) AddTeam(metadata.Away, values);
+        // Delta team records intentionally exclude the one-time manager snapshot,
+        // including its names in the delta string table.
+        if (homeChanged) Add(values, metadata.Home.Name, metadata.Home.LogoPath);
+        if (awayChanged) Add(values, metadata.Away.Name, metadata.Away.LogoPath);
         foreach (var delta in deltas)
         {
             if (delta.IsFull)
@@ -301,7 +323,11 @@ internal static class ArchiveMetadataCodec
         return (revision, capturedTick, strings);
     }
 
-    private static void AddTeam(RealtimeTeamMetadata team, ISet<string> values) => Add(values, team.Name, team.LogoPath);
+    private static void AddTeam(RealtimeTeamMetadata team, ISet<string> values)
+    {
+        Add(values, team.Name, team.LogoPath);
+        if (team.Manager is { } manager) Add(values, manager.FirstName, manager.SecondName);
+    }
 
     private static void AddAssignment(PlayerTacticalAssignment? assignment, ISet<string> values)
     {
@@ -342,6 +368,29 @@ internal static class ArchiveMetadataCodec
         ReadNullableUInt(reader),
         ReadNullableUInt(reader),
         ReadStringId(reader, strings));
+
+    private static void WriteManager(
+        BinaryWriter writer,
+        RealtimeManagerMetadata? manager,
+        IReadOnlyDictionary<string, int> ids)
+    {
+        writer.Write(manager.HasValue);
+        if (!manager.HasValue) return;
+        WriteNullableUInt(writer, manager.Value.Uid);
+        WriteStringId(writer, manager.Value.FirstName, ids);
+        WriteStringId(writer, manager.Value.SecondName, ids);
+        writer.Write(manager.Value.IsHumanControlled);
+    }
+
+    private static RealtimeManagerMetadata? ReadManager(BinaryReader reader, IReadOnlyList<string> strings)
+    {
+        if (!reader.ReadBoolean()) return null;
+        return new RealtimeManagerMetadata(
+            ReadNullableUInt(reader),
+            ReadStringId(reader, strings),
+            ReadStringId(reader, strings),
+            reader.ReadBoolean());
+    }
 
     private static void WritePlayer(BinaryWriter writer, RealtimePlayerMetadata player, IReadOnlyDictionary<string, int> ids)
     {

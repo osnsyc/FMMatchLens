@@ -52,6 +52,8 @@ internal sealed class ArchiveWriter : IDisposable
     private long _lastSealTimestamp;
     private uint _metadataRevision;
     private RealtimeMatchMetadata? _metadataSnapshot;
+    private bool _homeManagerArchived;
+    private bool _awayManagerArchived;
     private int _maxQueueDepth;
     private bool _accepting = true;
     private bool _completed;
@@ -112,8 +114,22 @@ internal sealed class ArchiveWriter : IDisposable
             if (!_accepting || _failure is not null || metadata.MatchId != _matchId) return;
             if (_metadataSnapshot is null)
             {
-                var payload = ArchiveMetadataCodec.Encode(metadata, ++_metadataRevision);
+                var archiveMetadata = PrepareFullMetadata(metadata);
+                var payload = ArchiveMetadataCodec.Encode(archiveMetadata, ++_metadataRevision);
                 if (ArchiveMetadataCodec.HasCompleteStaticPlayerSnapshot(metadata)) _metadataSnapshot = metadata;
+                EnqueueLocked(new MetadataWorkItem(MetadataRecord, payload));
+                return;
+            }
+
+            if ((!_homeManagerArchived && metadata.Home.Manager.HasValue) ||
+                (!_awayManagerArchived && metadata.Away.Manager.HasValue))
+            {
+                // A transient read failure may make the player snapshot complete
+                // before a manager is available. Emit one new full baseline when
+                // the missing static manager data becomes readable.
+                var archiveMetadata = PrepareFullMetadata(metadata);
+                var payload = ArchiveMetadataCodec.Encode(archiveMetadata, ++_metadataRevision);
+                _metadataSnapshot = metadata;
                 EnqueueLocked(new MetadataWorkItem(MetadataRecord, payload));
                 return;
             }
@@ -133,6 +149,19 @@ internal sealed class ArchiveWriter : IDisposable
             var payload = ArchiveMetadataCodec.Encode(metadata, ++_metadataRevision);
             EnqueueLocked(new MetadataWorkItem(MetadataRecord, payload));
         }
+    }
+
+    private RealtimeMatchMetadata PrepareFullMetadata(RealtimeMatchMetadata metadata)
+    {
+        var homeManager = _homeManagerArchived ? null : metadata.Home.Manager;
+        var awayManager = _awayManagerArchived ? null : metadata.Away.Manager;
+        if (homeManager.HasValue) _homeManagerArchived = true;
+        if (awayManager.HasValue) _awayManagerArchived = true;
+        return metadata with
+        {
+            Home = metadata.Home with { Manager = homeManager },
+            Away = metadata.Away with { Manager = awayManager }
+        };
     }
 
     public void Complete(long endedUnixMilliseconds)

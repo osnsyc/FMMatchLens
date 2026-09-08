@@ -273,6 +273,13 @@ export type FormationSnapshot = {
   players: MatchPlayer[]
 }
 
+export type MatchManager = {
+  uid?: number
+  firstName?: string
+  secondName?: string
+  isHumanControlled: boolean
+}
+
 export type MatchSnapshot = {
   matchId?: string
   clock: {
@@ -291,6 +298,7 @@ export type MatchSnapshot = {
     color?: string
     logoPath?: string
     logoUrl?: string
+    manager?: MatchManager
     formation?: string
     stats: TeamStats
   }
@@ -301,6 +309,7 @@ export type MatchSnapshot = {
     color?: string
     logoPath?: string
     logoUrl?: string
+    manager?: MatchManager
     formation?: string
     stats: TeamStats
   }

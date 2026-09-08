@@ -954,7 +954,32 @@ internal sealed class GameMatchTickHook : IDisposable
             ReadUInt32(team + Offsets.Team.BackgroundColour),
             ReadUInt32(team + Offsets.Team.ForegroundColour),
             ReadUInt32(team + Offsets.Team.OutlineColour),
-            null);
+            null,
+            ReadManagerMetadata(team));
+    }
+
+    private RealtimeManagerMetadata? ReadManagerMetadata(nint team)
+    {
+        if (team == default ||
+            !_memoryReader.TryReadPointer(team + Offsets.Team.Manager, out var manager) ||
+            manager == default ||
+            !_memoryReader.TryReadPointer(manager + Offsets.Manager.Person, out var person) ||
+            person == default ||
+            !_memoryReader.TryReadPointer(person, out var virtualFunctionTable) ||
+            virtualFunctionTable == default ||
+            !_memoryReader.TryReadPointer(virtualFunctionTable + Offsets.Rtti.Metadata, out var rttiMetadata) ||
+            rttiMetadata == default ||
+            !_memoryReader.TryReadUInt32(rttiMetadata + Offsets.Rtti.SubobjectOffset, out var subobjectOffset) ||
+            subobjectOffset is not (Offsets.Rtti.HumanManagerPersonOffset or Offsets.Rtti.StaffPersonOffset))
+        {
+            return null;
+        }
+
+        return new RealtimeManagerMetadata(
+            ReadUid(person + Offsets.Person.Uid),
+            ReadPersonName(person, Offsets.Person.FirstName),
+            ReadPersonName(person, Offsets.Person.SecondName),
+            subobjectOffset == Offsets.Rtti.HumanManagerPersonOffset);
     }
 
     private IReadOnlyDictionary<string, int>? ReadPlayerPositionFamiliarities(nint person)

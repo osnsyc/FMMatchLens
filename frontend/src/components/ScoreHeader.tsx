@@ -10,7 +10,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { BrandIcon } from "@/components/BrandIcon"
 import { changeLanguage, type SupportedLanguage } from "@/i18n"
-import type { MatchSnapshot } from "@/types/match"
+import type { MatchManager, MatchSnapshot } from "@/types/match"
 import { ThemeToggle } from "@/components/ThemeToggle"
 
 function initials(name: string) {
@@ -44,7 +44,7 @@ export function ScoreHeader({ match }: { match: MatchSnapshot }) {
       </div>
 
       <div className="flex items-center justify-center gap-3" aria-label="match score">
-        <TeamName name={match.home.name} uid={match.home.uid} color={homeColor} align="right" />
+        <TeamName name={match.home.name} uid={match.home.uid} manager={match.home.manager} color={homeColor} align="right" />
         {match.home.logoUrl ? (
           <img src={match.home.logoUrl} alt={match.home.name} className="size-12 shrink-0 object-contain" />
         ) : (
@@ -63,7 +63,7 @@ export function ScoreHeader({ match }: { match: MatchSnapshot }) {
         ) : (
           <span className="flex size-12 shrink-0 items-center justify-center text-sm font-semibold" style={{ color: awayColor }}>{initials(match.away.name)}</span>
         )}
-        <TeamName name={match.away.name} uid={match.away.uid} color={awayColor} align="left" />
+        <TeamName name={match.away.name} uid={match.away.uid} manager={match.away.manager} color={awayColor} align="left" />
       </div>
 
       <div className="flex min-w-0 items-center justify-end gap-3 justify-self-end">
@@ -98,17 +98,37 @@ function formatMatchClock(match: MatchSnapshot) {
   return `${plannedSeconds / 60}(+${extraMinutes}:${String(extraRemainder).padStart(2, "0")})`
 }
 
-function TeamName({ name, uid, color, align }: { name: string; uid?: number; color: string; align: "left" | "right" }) {
+function TeamName({
+  name,
+  uid,
+  manager,
+  color,
+  align,
+}: {
+  name: string
+  uid?: number
+  manager?: MatchManager
+  color: string
+  align: "left" | "right"
+}) {
   const label = (
     <span className="font-fm-universe block truncate text-base leading-10" style={{ color }} title={name}>{name}</span>
   )
+  const managerName = [manager?.firstName, manager?.secondName].filter(Boolean).join(" ") || "Unknown"
 
   return (
     <div className={`hidden w-32 min-w-0 sm:block ${align === "right" ? "text-right" : "text-left"}`}>
-      {uid == null ? label : (
+      {uid == null && !manager ? label : (
         <Tooltip>
           <TooltipTrigger render={label} />
-          <TooltipContent>UID {uid}</TooltipContent>
+          <TooltipContent>
+            <div className="space-y-0.5 text-xs">
+              {uid != null && <div>Team UID: {uid}</div>}
+              {manager && <div>Manager: {managerName}</div>}
+              {manager?.uid != null && <div>Manager UID: {manager.uid}</div>}
+              {manager && <div>Control: {manager.isHumanControlled ? "Human" : "AI"}</div>}
+            </div>
+          </TooltipContent>
         </Tooltip>
       )}
     </div>
