@@ -36,6 +36,9 @@ type HeatLabel = {
 export function ZonePanel({ match }: ZonePanelProps) {
   const { t } = useTranslation()
   const [selectedTeam, setSelectedTeam] = useState<TeamSide>("home")
+  const [selectedPlayerByTeam, setSelectedPlayerByTeam] = useState<
+    Record<TeamSide, number | null>
+  >({ home: null, away: null })
   const [selectedPhase, setSelectedPhase] = useState<HeatmapPhase>("all")
   const [selectedRange, setSelectedRange] =
     useState<PositionHeatmapRange>("full")
@@ -48,6 +51,9 @@ export function ZonePanel({ match }: ZonePanelProps) {
   const teamPlayers = useMemo(
     () => match.players.filter((player) => player.team === selectedTeam),
     [match.players, selectedTeam]
+  )
+  const selectedPlayer = teamPlayers.find(
+    (player) => player.id === selectedPlayerByTeam[selectedTeam]
   )
   const outfieldHeatmaps = useMemo(() => {
     const forTeam = (team: TeamSide) =>
@@ -67,12 +73,19 @@ export function ZonePanel({ match }: ZonePanelProps) {
       away: forTeam("away"),
     }
   }, [match.heatmaps, match.players, selectedPhase, selectedRange])
-  const heatmapGrid = outfieldHeatmaps[selectedTeam]
+  const heatmapGrid = selectedPlayer
+    ? getHeatmap(match.heatmaps, {
+        scope: { type: "player", playerId: selectedPlayer.id },
+        phase: selectedPhase,
+        range: selectedRange,
+      })
+    : outfieldHeatmaps[selectedTeam]
   const heatmapColorScale = useMemo(() => {
-    const bounds = getHeatmapColorScaleBounds([
-      outfieldHeatmaps.home,
-      outfieldHeatmaps.away,
-    ])
+    const bounds = getHeatmapColorScaleBounds(
+      selectedPlayer
+        ? [heatmapGrid]
+        : [outfieldHeatmaps.home, outfieldHeatmaps.away]
+    )
     return {
       maxCellShare: bounds.rawMaxCellShare,
       sampleDivisor: heatmapGrid.sampleCount,
@@ -81,7 +94,12 @@ export function ZonePanel({ match }: ZonePanelProps) {
           ? bounds.rawMaxCellShare / bounds.blurredMaxCellShare
           : 1,
     }
-  }, [heatmapGrid.sampleCount, outfieldHeatmaps.away, outfieldHeatmaps.home])
+  }, [
+    heatmapGrid,
+    outfieldHeatmaps.away,
+    outfieldHeatmaps.home,
+    selectedPlayer,
+  ])
 
   const heatLabels = useMemo<HeatLabel[]>(
     () =>
@@ -227,6 +245,12 @@ export function ZonePanel({ match }: ZonePanelProps) {
               width: `${pitchSize.width}px`,
               height: `${pitchSize.height}px`,
             }}
+            onClick={() => {
+              setSelectedPlayerByTeam((current) => ({
+                ...current,
+                [selectedTeam]: null,
+              }))
+            }}
           >
             <div
               className="pointer-events-none absolute inset-0"
@@ -342,17 +366,30 @@ export function ZonePanel({ match }: ZonePanelProps) {
 
             <div className="pointer-events-none absolute inset-0">
               {heatLabels.map((label) => (
-                <span
+                <button
+                  type="button"
                   key={`heat-player-${label.player.id}`}
-                  className="absolute z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
+                  className="pointer-events-auto absolute z-10 flex -translate-x-1/2 -translate-y-1/2 cursor-pointer flex-col items-center rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   style={{
                     left: `${label.x}%`,
                     top: `${label.y}%`,
                   }}
                   title={`${label.player.name} · ${t("heatmapRange.samples", { count: label.sampleCount })}`}
+                  aria-pressed={selectedPlayer?.id === label.player.id}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setSelectedPlayerByTeam((current) => ({
+                      ...current,
+                      [selectedTeam]: label.player.id,
+                    }))
+                  }}
                 >
                   <span
-                    className="flex size-7 items-center justify-center rounded-full border-2 border-background text-xs font-bold text-white shadow-sm"
+                    className={`flex size-7 items-center justify-center rounded-full border-2 border-background text-xs font-bold text-white shadow-sm transition-transform hover:scale-110 ${
+                      selectedPlayer?.id === label.player.id
+                        ? "ring-2 ring-ring ring-offset-1 ring-offset-background"
+                        : ""
+                    }`}
                     style={{ backgroundColor: teamColor }}
                   >
                     {label.player.shirtNumber ?? "?"}
@@ -360,7 +397,7 @@ export function ZonePanel({ match }: ZonePanelProps) {
                   <span className="mt-1 max-w-20 truncate text-[9px] leading-none font-medium whitespace-nowrap text-foreground drop-shadow-sm">
                     {getPlayerSurname(label.player)}
                   </span>
-                </span>
+                </button>
               ))}
             </div>
           </div>
