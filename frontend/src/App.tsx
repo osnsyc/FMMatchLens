@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   Coffee01Icon,
@@ -24,6 +24,7 @@ import { ScoreHeader } from "@/components/ScoreHeader"
 import { SquadPanel } from "@/components/SquadPanel"
 import { TacticalBoard } from "@/components/TacticalBoard"
 import { ThemeToggle } from "@/components/ThemeToggle"
+import { useTheme } from "@/components/theme-provider"
 import { XgTimeline } from "@/components/XgTimeline"
 import { ZonePanel } from "@/components/ZonePanel"
 import {
@@ -52,6 +53,7 @@ import type {
 
 export function App() {
   const { t, i18n } = useTranslation()
+  const { resolvedTheme } = useTheme()
   const [replayMatch, setReplayMatch] = useState<MatchSnapshot | null>(null)
   const realtimeMatch = useRealtimeMatch(replayMatch === null)
   const [startupArchive, setStartupArchive] = useState<ParsedLocalArchive>()
@@ -134,7 +136,26 @@ export function App() {
       document.documentElement.lang = value
     }
   }
-  const match = replayMatch ?? realtimeMatch
+  const sourceMatch = replayMatch ?? realtimeMatch
+  const match = useMemo(() => {
+    if (!sourceMatch) return null
+
+    return {
+      ...sourceMatch,
+      home: {
+        ...sourceMatch.home,
+        color:
+          sourceMatch.home.themeColors?.[resolvedTheme] ??
+          sourceMatch.home.color,
+      },
+      away: {
+        ...sourceMatch.away,
+        color:
+          sourceMatch.away.themeColors?.[resolvedTheme] ??
+          sourceMatch.away.color,
+      },
+    }
+  }, [sourceMatch, resolvedTheme])
   if (!match) {
     return (
       <main className="relative flex h-svh w-full items-center justify-center overflow-hidden bg-background p-6">

@@ -126,7 +126,8 @@
    FM26 palette
    ========================================================= */
 
-:root {
+:root,
+.light {
   --fm-midnight: #0a0f1e;
   --fm-twilight: #6e0fd7;
   --fm-horizon: #af78ff;

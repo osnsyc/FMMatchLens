@@ -280,6 +280,11 @@ export type MatchManager = {
   isHumanControlled: boolean
 }
 
+export type TeamThemeColors = {
+  light: string
+  dark: string
+}
+
 export type MatchSnapshot = {
   matchId?: string
   clock: {
@@ -296,6 +301,7 @@ export type MatchSnapshot = {
     clubUid?: number
     name: string
     color?: string
+    themeColors?: TeamThemeColors
     logoPath?: string
     logoUrl?: string
     manager?: MatchManager
@@ -307,6 +313,7 @@ export type MatchSnapshot = {
     clubUid?: number
     name: string
     color?: string
+    themeColors?: TeamThemeColors
     logoPath?: string
     logoUrl?: string
     manager?: MatchManager

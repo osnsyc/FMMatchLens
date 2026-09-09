@@ -418,7 +418,7 @@ export function FormationPitch({ match }: FormationPitchProps) {
                         render={<div className="flex max-w-36 flex-col items-center text-center" />}
                       >
                         <Avatar className="size-6 overflow-visible shadow-sm" style={{ backgroundColor: teamColor }}>
-                          <AvatarFallback className="bg-transparent text-[10px] font-bold text-white">
+                          <AvatarFallback className="bg-transparent text-[10px] font-bold text-background">
                             {player.shirtNumber ?? "?"}
                           </AvatarFallback>
                           {player.status?.subbedOnMinute != null && (

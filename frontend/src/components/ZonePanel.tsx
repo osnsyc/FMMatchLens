@@ -385,7 +385,7 @@ export function ZonePanel({ match }: ZonePanelProps) {
                   }}
                 >
                   <span
-                    className={`flex size-7 items-center justify-center rounded-full border-2 border-background text-xs font-bold text-white shadow-sm transition-transform hover:scale-110 ${
+                    className={`flex size-7 items-center justify-center rounded-full border-2 border-background text-xs font-bold text-background shadow-sm transition-transform hover:scale-110 ${
                       selectedPlayer?.id === label.player.id
                         ? "ring-2 ring-ring ring-offset-1 ring-offset-background"
                         : ""

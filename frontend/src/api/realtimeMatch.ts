@@ -1,6 +1,7 @@
 import { startTransition, useEffect, useRef, useState } from "react"
 
 import { HeatmapDerivations } from "@/api/heatmap"
+import { selectTeamThemeColors } from "@/lib/teamColors"
 
 import type {
   FormationSnapshot,
@@ -767,6 +768,10 @@ export function toMatchSnapshot(
   )
   const homeClubUid = metadata?.home.clubUid
   const awayClubUid = metadata?.away.clubUid
+  const teamThemeColors = selectTeamThemeColors(
+    metadata?.home,
+    metadata?.away
+  )
 
   return {
     matchId: frame.matchId,
@@ -783,7 +788,8 @@ export function toMatchSnapshot(
       uid: metadata?.home.uid,
       clubUid: homeClubUid,
       name: metadata?.home.name || "Home",
-      color: argbToCss(metadata?.home.foregroundColour),
+      color: teamThemeColors.home.dark,
+      themeColors: teamThemeColors.home,
       logoPath: metadata?.home.logoPath,
       manager: metadata?.home.manager,
       logoUrl:
@@ -796,7 +802,8 @@ export function toMatchSnapshot(
       uid: metadata?.away.uid,
       clubUid: awayClubUid,
       name: metadata?.away.name || "Away",
-      color: argbToCss(metadata?.away.foregroundColour),
+      color: teamThemeColors.away.dark,
+      themeColors: teamThemeColors.away,
       logoPath: metadata?.away.logoPath,
       manager: metadata?.away.manager,
       logoUrl:
@@ -1474,10 +1481,4 @@ function graphicsAssetUrl(
 function normalize(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return 50
   return Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100))
-}
-
-function argbToCss(argb?: number): string | undefined {
-  if (argb == null || !Number.isFinite(argb) || argb === 0) return undefined
-  const rgb = (argb >>> 0) & 0x00ffffff
-  return `#${rgb.toString(16).padStart(6, "0").toUpperCase()}`
 }
