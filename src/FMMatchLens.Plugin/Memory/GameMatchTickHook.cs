@@ -690,7 +690,7 @@ internal sealed class GameMatchTickHook : IDisposable
         }
     }
 
-    private bool TryResolveMomentumEventPlayerId(nint team, int slot, out int playerId)
+    private bool TryResolveMomentumEventPlayerId(nint team, int slot, out long playerId)
     {
         playerId = 0;
         if (team == default || slot is < 0 or >= RawRealtimeTickFrame.MaxPlayers ||
@@ -698,15 +698,13 @@ internal sealed class GameMatchTickHook : IDisposable
             slot >= playerCount ||
             !_memoryReader.TryReadPointer(team + Offsets.Team.PlayerTable + slot * IntPtr.Size, out var matchPlayer) ||
             matchPlayer == default ||
-            !_memoryReader.TryReadPointer(matchPlayer + Offsets.MatchPlayer.Stats, out var stats) ||
-            stats == default ||
-            !_memoryReader.TryReadInt32(stats + Offsets.PlayerStats.Id, out playerId) ||
-            playerId <= 0)
+            !TryReadPlayerUid(matchPlayer, out var uid))
         {
             playerId = 0;
             return false;
         }
 
+        playerId = uid;
         return true;
     }
 
@@ -740,12 +738,15 @@ internal sealed class GameMatchTickHook : IDisposable
         }
 
         var stats = Marshal.ReadIntPtr(matchPlayer + Offsets.MatchPlayer.Stats);
-        if (stats == default || !VirtualMemory.IsReadable(stats + Offsets.PlayerStats.Id, Offsets.PlayerStats.ShotsFaced - Offsets.PlayerStats.Id + 1))
+        if (stats == default || !VirtualMemory.IsReadable(
+                stats + Offsets.PlayerStats.NonUniqueMatchStatKey,
+                Offsets.PlayerStats.ShotsFaced - Offsets.PlayerStats.NonUniqueMatchStatKey + 1))
         {
             return false;
         }
 
-        var playerId = Marshal.ReadInt32(stats + Offsets.PlayerStats.Id);
+        var playerUid = TryReadPlayerUid(matchPlayer, out var uid) ? uid : (uint?)null;
+        var playerId = playerUid.HasValue ? playerUid.Value : FallbackPlayerIdentity(slot);
         var team = ReadByteDirect(stats + Offsets.PlayerStats.TeamSideUnconfirmed) == 1 ? TeamSide.Away : TeamSide.Home;
         var starterFlag = ReadByteDirect(stats + Offsets.PlayerStats.StarterSubstituteFlag);
         var subbedOn = ReadByteDirect(stats + Offsets.PlayerStats.SubbedOnMinute);
@@ -753,7 +754,7 @@ internal sealed class GameMatchTickHook : IDisposable
 
         player = new PlayerTickData(
             Slot: slot,
-            PlayerId: playerId != 0 ? playerId : slot + 1,
+            PlayerId: playerId,
             Team: team,
             IsBallHolder: matchPlayer == ballHolder,
             X: ReadFloatDirect(matchPlayer + Offsets.MatchPlayer.PositionX),
@@ -894,10 +895,8 @@ internal sealed class GameMatchTickHook : IDisposable
             _memoryReader.TryReadPointer(matchPlayer + Offsets.MatchPlayer.Person, out var person);
             _memoryReader.TryReadPointer(matchPlayer + Offsets.MatchPlayer.Stats, out var stats);
             _memoryReader.TryReadPointer(person + Offsets.Person.FullContract, out var fullContract);
-            var playerId = stats != default && _memoryReader.TryReadInt32(stats + Offsets.PlayerStats.Id, out var id)
-                ? id
-                : slot + 1;
             var playerUid = ReadUid(person + Offsets.Person.Uid);
+            var playerId = playerUid.HasValue ? playerUid.Value : FallbackPlayerIdentity(slot);
             var shirtNumber = fullContract != default &&
                 _memoryReader.TryReadByte(fullContract + Offsets.FullContract.SquadNumber, out var number) && number > 0
                     ? number
@@ -949,6 +948,18 @@ internal sealed class GameMatchTickHook : IDisposable
                 state.MatchDate);
         }
     }
+
+    private bool TryReadPlayerUid(nint matchPlayer, out uint uid)
+    {
+        uid = 0;
+        return matchPlayer != default &&
+               _memoryReader.TryReadPointer(matchPlayer + Offsets.MatchPlayer.Person, out var person) &&
+               person != default &&
+               _memoryReader.TryReadUInt32(person + Offsets.Person.Uid, out uid) &&
+               uid != 0;
+    }
+
+    private static long FallbackPlayerIdentity(int slot) => -(long)(slot + 1);
 
     private string? ReadTemporaryMatchDate(nint match)
     {

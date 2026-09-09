@@ -397,7 +397,9 @@ internal static class Offsets
 
     public static class PlayerStats
     {
-        public const int Id = 0x18;
+        // Observed to repeat between different players, even within one team.
+        // This is not a database identity; use MatchPlayer.Person -> Person.Uid.
+        public const int NonUniqueMatchStatKey = 0x18;
         public const int Xg = 0x1C;
         public const int XgRelatedUnconfirmed = 0x20;
         public const int Xa = 0x24;

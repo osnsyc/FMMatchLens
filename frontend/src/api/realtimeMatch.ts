@@ -177,6 +177,7 @@ type RealtimeFrameSlice = {
 }
 
 type RealtimeFormationPlayerSnapshot = {
+  slot: number
   playerId: number
   team: TeamSide
   isSubstitute: boolean
@@ -761,8 +762,8 @@ export function toMatchSnapshot(
     : frame.tick
   const minute = Math.floor(Math.max(0, clockTick) / 240)
   const second = Math.floor(Math.max(0, clockTick) / 4) % 60
-  const playerMetadata = new Map(
-    metadata?.players.map((player) => [player.playerId, player]) ?? []
+  const playerMetadataBySlot = new Map(
+    metadata?.players.map((player) => [player.slot, player]) ?? []
   )
   const homeClubUid = metadata?.home.clubUid
   const awayClubUid = metadata?.away.clubUid
@@ -805,7 +806,7 @@ export function toMatchSnapshot(
       stats: toTeamStats(frame.away),
     },
     players: frame.players.map((player) =>
-      toPlayer(player, playerMetadata.get(player.playerId))
+      toPlayer(player, playerMetadataBySlot.get(player.slot))
     ),
     events: [...events],
     heatmaps,
@@ -1319,17 +1320,17 @@ function toFormationSnapshot(
   entry: RealtimeFormationTimelineEntry,
   metadata: RealtimeMatchMetadata
 ): FormationSnapshot {
-  const playerMetadata = new Map(
-    metadata.players.map((player) => [player.playerId, player])
+  const playerMetadataBySlot = new Map(
+    metadata.players.map((player) => [player.slot, player])
   )
   return {
     tick: Math.max(0, entry.tick),
     minute: Math.floor(Math.max(0, entry.displayTick) / 240),
     players: entry.players.map((player) => {
-      const details = playerMetadata.get(player.playerId)
+      const details = playerMetadataBySlot.get(player.slot)
       const uid = details?.uid
       return {
-        id: player.playerId,
+        id: uid ?? player.playerId,
         uid,
         name:
           details?.commonName ||
@@ -1363,14 +1364,14 @@ function mergeFormationEntryIntoMetadata(
   metadata: RealtimeMatchMetadata,
   entry: RealtimeFormationTimelineEntry
 ): RealtimeMatchMetadata {
-  const assignments = new Map(
-    entry.players.map((player) => [player.playerId, player])
+  const assignmentsBySlot = new Map(
+    entry.players.map((player) => [player.slot, player])
   )
   return {
     ...metadata,
     capturedTick: entry.tick,
     players: metadata.players.map((player) => {
-      const assignment = assignments.get(player.playerId)
+      const assignment = assignmentsBySlot.get(player.slot)
       return assignment
         ? {
             ...player,
@@ -1388,7 +1389,7 @@ function toPlayer(
 ): MatchPlayer {
   const uid = metadata?.uid
   return {
-    id: player.playerId,
+    id: uid ?? player.playerId,
     uid,
     name:
       metadata?.commonName ||

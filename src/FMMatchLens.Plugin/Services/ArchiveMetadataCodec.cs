@@ -81,12 +81,13 @@ internal static class ArchiveMetadataCodec
         if (playerCount > byte.MaxValue) throw new ArchiveFormatException("invalid_count", "Metadata has too many players.");
         var players = new RealtimePlayerMetadata[playerCount];
         var slots = new HashSet<int>();
-        var playerIds = new HashSet<int>();
+        var playerUids = new HashSet<uint>();
         for (var index = 0; index < playerCount; index++)
         {
             players[index] = ReadPlayer(reader, strings);
             if (!slots.Add(players[index].Slot)) throw new ArchiveFormatException("duplicate_slot", "Metadata contains a duplicate player slot.");
-            if (!playerIds.Add(players[index].PlayerId)) throw new ArchiveFormatException("duplicate_player", "Metadata contains a duplicate player id.");
+            if (players[index].Uid is { } uid && !playerUids.Add(uid))
+                throw new ArchiveFormatException("duplicate_player_uid", "Metadata contains a duplicate player UID.");
         }
         string? matchDate = null;
         if (stream.Position < stream.Length)
@@ -112,14 +113,14 @@ internal static class ArchiveMetadataCodec
         uint revision,
         out ArchiveMetadataDeltaEncoding encoding)
     {
-        var effectivePlayers = previous.Players.ToDictionary(player => player.PlayerId);
+        var effectivePlayers = previous.Players.ToDictionary(player => player.Slot);
         var deltas = new List<PlayerDelta>();
         var newPlayerCount = 0;
         foreach (var player in incoming.Players.OrderBy(player => player.Slot))
         {
-            if (!effectivePlayers.TryGetValue(player.PlayerId, out var existing))
+            if (!effectivePlayers.TryGetValue(player.Slot, out var existing))
             {
-                effectivePlayers[player.PlayerId] = player;
+                effectivePlayers[player.Slot] = player;
                 deltas.Add(new PlayerDelta(player, IsFull: true, InPossessionChanged: false, OutOfPossessionChanged: false));
                 newPlayerCount++;
                 continue;
@@ -134,7 +135,7 @@ internal static class ArchiveMetadataCodec
                     InPossession = player.InPossession,
                     OutOfPossession = player.OutOfPossession
                 };
-                effectivePlayers[player.PlayerId] = tacticalPlayer;
+                effectivePlayers[player.Slot] = tacticalPlayer;
                 deltas.Add(new PlayerDelta(tacticalPlayer, IsFull: false, inPossessionChanged, outOfPossessionChanged));
             }
         }
@@ -210,7 +211,7 @@ internal static class ArchiveMetadataCodec
         var away = (teamFlags & AwayTeamFlag) != 0
             ? ReadTeam(reader, strings) with { Manager = previous.Away.Manager }
             : previous.Away;
-        var players = previous.Players.ToDictionary(player => player.PlayerId);
+        var players = previous.Players.ToDictionary(player => player.Slot);
         var deltaCount = checked((int)ArchiveBinary.ReadVarUInt64(reader, 5));
         if (deltaCount > byte.MaxValue) throw new ArchiveFormatException("invalid_count", "Metadata delta has too many players.");
         for (var index = 0; index < deltaCount; index++)
@@ -222,15 +223,19 @@ internal static class ArchiveMetadataCodec
             if ((flags & FullPlayerFlag) != 0)
             {
                 var player = ReadPlayer(reader, strings);
-                if (!players.TryAdd(player.PlayerId, player))
-                    throw new ArchiveFormatException("duplicate_player", "Metadata delta adds an existing player id.");
+                if (!players.TryAdd(player.Slot, player))
+                    throw new ArchiveFormatException("duplicate_slot", "Metadata delta adds an existing player slot.");
                 continue;
             }
 
-            var playerId = checked((int)ArchiveBinary.ReadVarInt64(reader));
-            if (!players.TryGetValue(playerId, out var existing))
+            var playerId = ArchiveBinary.ReadVarInt64(reader);
+            var matches = players.Where(entry => entry.Value.PlayerId == playerId).Take(2).ToArray();
+            if (matches.Length == 0)
                 throw new ArchiveFormatException("unknown_player", "Metadata delta references an unknown player id.");
-            players[playerId] = existing with
+            if (matches.Length > 1)
+                throw new ArchiveFormatException("ambiguous_player", "Metadata delta references a non-unique legacy player id.");
+            var (slot, existing) = matches[0];
+            players[slot] = existing with
             {
                 InPossession = (flags & InPossessionFlag) != 0 ? ReadAssignment(reader, strings) : existing.InPossession,
                 OutOfPossession = (flags & OutOfPossessionFlag) != 0 ? ReadAssignment(reader, strings) : existing.OutOfPossession
@@ -415,7 +420,7 @@ internal static class ArchiveMetadataCodec
     private static RealtimePlayerMetadata ReadPlayer(BinaryReader reader, IReadOnlyList<string> strings)
     {
         var slot = checked((int)ArchiveBinary.ReadVarUInt64(reader, 5));
-        var playerId = checked((int)ArchiveBinary.ReadVarInt64(reader));
+        var playerId = ArchiveBinary.ReadVarInt64(reader);
         var uid = ReadNullableUInt(reader);
         var team = ReadTeamSide(reader);
         var shirt = ReadNullableInt(reader);

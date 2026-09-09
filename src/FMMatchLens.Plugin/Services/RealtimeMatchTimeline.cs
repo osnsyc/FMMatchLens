@@ -155,7 +155,7 @@ internal sealed class RealtimeMatchTimeline
                     players.Select(player => new RealtimePlayerMetadata(
                         player.Slot,
                         player.PlayerId,
-                        null,
+                        player.PlayerId is > 0 and <= uint.MaxValue ? (uint)player.PlayerId : null,
                         player.Team,
                         null,
                         null,
@@ -294,14 +294,15 @@ internal sealed class RealtimeMatchTimeline
     private static RealtimeFormationTimelineEntry ToFormationTimelineEntry(
         RealtimeMetadataTimelineEntry entry)
     {
-        var metadataPlayers = entry.Metadata.Players.ToDictionary(player => player.PlayerId);
+        var metadataPlayers = entry.Metadata.Players.ToDictionary(player => player.Slot);
         var players = entry.Frame?.Players
             .Where(player => player.IsOnPitch || player.SubbedOffMinute > 0)
-            .Where(player => metadataPlayers.ContainsKey(player.PlayerId))
+            .Where(player => metadataPlayers.ContainsKey(player.Slot))
             .Select(framePlayer =>
         {
-            var player = metadataPlayers[framePlayer.PlayerId];
+            var player = metadataPlayers[framePlayer.Slot];
             return new RealtimeFormationPlayerSnapshot(
+                framePlayer.Slot,
                 player.PlayerId,
                 player.Team,
                 framePlayer.IsSubstitute,
@@ -390,14 +391,14 @@ internal sealed class RealtimeMatchTimeline
         if (left is null) return false;
         var leftPlayers = left.Players
             .Where(player => player.IsOnPitch)
-            .Select(player => (player.Team, player.PlayerId))
+            .Select(player => (player.Team, player.Slot))
             .OrderBy(player => player.Team)
-            .ThenBy(player => player.PlayerId);
+            .ThenBy(player => player.Slot);
         var rightPlayers = right.Players
             .Where(player => player.IsOnPitch)
-            .Select(player => (player.Team, player.PlayerId))
+            .Select(player => (player.Team, player.Slot))
             .OrderBy(player => player.Team)
-            .ThenBy(player => player.PlayerId);
+            .ThenBy(player => player.Slot);
         return leftPlayers.SequenceEqual(rightPlayers);
     }
 
@@ -406,10 +407,10 @@ internal sealed class RealtimeMatchTimeline
         RealtimeMatchMetadata right)
     {
         if (left.Players.Count != right.Players.Count) return false;
-        var leftPlayers = left.Players.ToDictionary(player => player.PlayerId);
+        var leftPlayers = left.Players.ToDictionary(player => player.Slot);
         foreach (var player in right.Players)
         {
-            if (!leftPlayers.TryGetValue(player.PlayerId, out var previous) ||
+            if (!leftPlayers.TryGetValue(player.Slot, out var previous) ||
                 previous.Team != player.Team ||
                 previous.ShirtNumber != player.ShirtNumber ||
                 previous.DisplayName != player.DisplayName ||
@@ -426,17 +427,18 @@ internal sealed class RealtimeMatchTimeline
         RealtimeMatchMetadata current,
         RealtimeMatchMetadata incoming)
     {
-        var players = current.Players.ToDictionary(player => player.PlayerId);
+        var players = current.Players.ToDictionary(player => player.Slot);
         foreach (var player in incoming.Players)
         {
-            if (!players.TryGetValue(player.PlayerId, out var existing))
+            if (!players.TryGetValue(player.Slot, out var existing))
             {
-                players[player.PlayerId] = player;
+                players[player.Slot] = player;
                 continue;
             }
 
-            players[player.PlayerId] = existing with
+            players[player.Slot] = existing with
             {
+                PlayerId = player.PlayerId > 0 ? player.PlayerId : existing.PlayerId,
                 Uid = player.Uid ?? existing.Uid,
                 Team = player.Team,
                 ShirtNumber = player.ShirtNumber ?? existing.ShirtNumber,
@@ -627,7 +629,8 @@ internal sealed record RealtimeMetadataTimelineEntry(
     RealtimeTickFrame? Frame);
 
 internal sealed record RealtimeFormationPlayerSnapshot(
-    int PlayerId,
+    int Slot,
+    long PlayerId,
     TeamSide Team,
     bool IsSubstitute,
     bool IsOnPitch,

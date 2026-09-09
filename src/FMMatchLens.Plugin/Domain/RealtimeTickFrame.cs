@@ -14,7 +14,7 @@ internal sealed record RealtimeTickFrame(
     int Period,
     long CapturedUnixMilliseconds,
     TeamSide? PossessionTeam,
-    int? BallHolderPlayerId,
+    long? BallHolderPlayerId,
     float HalfPitchWidth,
     float HalfPitchLength,
     IReadOnlyList<NativeMomentumEventData> MomentumEvents,
@@ -32,9 +32,9 @@ internal readonly record struct NativeMomentumEventData(
     IReadOnlyList<NativeMomentumTrajectoryPoint> TrajectoryPoints,
     TeamSide Team,
     int PlayerSlot,
-    int PlayerId,
+    long PlayerId,
     int ReceiverPlayerSlot,
-    int ReceiverPlayerId,
+    long ReceiverPlayerId,
     int EventType,
     int Flags,
     int SequenceIndex,
@@ -92,7 +92,9 @@ internal readonly record struct TeamTickData(
 
 internal readonly record struct PlayerTickData(
     int Slot,
-    int PlayerId,
+    // Kept as PlayerId in the API/archive schema for compatibility. Its value is
+    // the FM database Person.Uid; a negative slot-derived value means UID unreadable.
+    long PlayerId,
     TeamSide Team,
     bool IsBallHolder,
     float X,
@@ -164,7 +166,8 @@ internal readonly record struct RealtimeManagerMetadata(
 
 internal readonly record struct RealtimePlayerMetadata(
     int Slot,
-    int PlayerId,
+    // Compatibility alias for Uid used by frame/event relationships.
+    long PlayerId,
     uint? Uid,
     TeamSide Team,
     int? ShirtNumber,

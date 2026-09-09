@@ -286,7 +286,7 @@ function readFrames(
     const holder = holderSlotValue > 0 ? players.find((player) => player.slot === holderSlot) : undefined
     if (holderSlotValue > 0 && !holder) throw new ArchiveError("持球球员 Slot 无效")
     const ballHolderPlayerId = holder?.playerId
-    players = players.map((player) => ({ ...player, isBallHolder: player.playerId === ballHolderPlayerId }))
+    players = players.map((player) => ({ ...player, isBallHolder: player.slot === holderSlot }))
     const momentumEvents = readTail(reader, previous?.momentumEvents, (value) => readEvent(value, structureMinor))
     const momentum = readTail(reader, previous?.momentum, readMomentum)
     const rollingMomentum = readTail(reader, previous?.rollingMomentum, readMomentum)
@@ -426,7 +426,8 @@ function readMetadata(payload: Uint8Array, header: ArchiveHeader) {
   if (playerCount > 255) throw new ArchiveError("元数据球员数量过大")
   const players = Array.from({ length: playerCount }, () => readPlayerMetadata(reader, strings))
   if (new Set(players.map((player) => player.slot)).size !== players.length) throw new ArchiveError("元数据包含重复 Slot")
-  if (new Set(players.map((player) => player.playerId)).size !== players.length) throw new ArchiveError("元数据包含重复球员 ID")
+  const playerUids = players.flatMap((player) => player.uid == null ? [] : [player.uid])
+  if (new Set(playerUids).size !== playerUids.length) throw new ArchiveError("元数据包含重复球员 UID")
   let matchDate: string | undefined
   if (!reader.atEnd) {
     const extensionFlags = reader.readByte()
@@ -469,14 +470,17 @@ function readMetadataDelta(payload: Uint8Array, header: ArchiveHeader, previous:
     }
     if ((flags & 0x01) !== 0) {
       const player = readPlayerMetadata(reader, strings)
-      if (players.some((existing) => existing.playerId === player.playerId)) throw new ArchiveError("Metadata 增量重复添加球员")
+      if (players.some((existing) => existing.slot === player.slot)) throw new ArchiveError("Metadata 增量重复添加球员 Slot")
+      if (player.uid != null && players.some((existing) => existing.uid === player.uid)) throw new ArchiveError("Metadata 增量重复添加球员 UID")
       players.push(player)
       continue
     }
 
     const playerId = reader.readVarInt()
-    const playerIndex = players.findIndex((player) => player.playerId === playerId)
-    if (playerIndex < 0) throw new ArchiveError("Metadata 增量引用了未知球员")
+    const playerIndexes = players.flatMap((player, playerIndex) => player.playerId === playerId ? [playerIndex] : [])
+    if (playerIndexes.length === 0) throw new ArchiveError("Metadata 增量引用了未知球员")
+    if (playerIndexes.length > 1) throw new ArchiveError("Metadata 增量引用了不唯一的旧版球员 ID")
+    const playerIndex = playerIndexes[0]
     const existing = players[playerIndex]
     players[playerIndex] = {
       ...existing,

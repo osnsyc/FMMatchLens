@@ -37,7 +37,7 @@ internal static class ArchiveFrameCodec
                 var found = false;
                 foreach (var player in frame.Players)
                 {
-                    if (player.PlayerId != frame.BallHolderPlayerId.Value) continue;
+                    if (!player.IsBallHolder) continue;
                     holderSlot = checked(player.Slot + 1);
                     found = true;
                     break;
@@ -158,15 +158,16 @@ internal static class ArchiveFrameCodec
                     }, mask);
                 }
             }
-            int? holderPlayerId = null;
+            long? holderPlayerId = null;
+            int? holderSlot = null;
             if (holderSlotValue > 0)
             {
-                var holderSlot = holderSlotValue - 1;
-                var holder = players.FirstOrDefault(player => player.Slot == holderSlot);
-                if (holder.PlayerId == 0 && !players.Any(player => player.Slot == holderSlot)) throw new ArchiveFormatException("invalid_slot", "Ball holder references an unknown player slot.");
+                holderSlot = holderSlotValue - 1;
+                var holder = players.FirstOrDefault(player => player.Slot == holderSlot.Value);
+                if (holder.PlayerId == 0 && !players.Any(player => player.Slot == holderSlot.Value)) throw new ArchiveFormatException("invalid_slot", "Ball holder references an unknown player slot.");
                 holderPlayerId = holder.PlayerId;
             }
-            for (var index = 0; index < players.Length; index++) players[index] = players[index] with { IsBallHolder = players[index].PlayerId == holderPlayerId };
+            for (var index = 0; index < players.Length; index++) players[index] = players[index] with { IsBallHolder = players[index].Slot == holderSlot };
             var events = ReadTail(reader, previous?.MomentumEvents, value => ReadEvent(value, structureMinor));
             var momentum = ReadTail(reader, previous?.Momentum, ReadMomentum);
             var rolling = ReadTail(reader, previous?.RollingMomentum, ReadMomentum);
@@ -255,7 +256,7 @@ internal static class ArchiveFrameCodec
     private static PlayerTickData ReadFullPlayer(BinaryReader reader, float halfWidth, float halfLength)
     {
         var slot = checked((int)ArchiveBinary.ReadVarUInt64(reader, 5));
-        var playerId = checked((int)ArchiveBinary.ReadVarInt64(reader));
+        var playerId = ArchiveBinary.ReadVarInt64(reader);
         var teamValue = reader.ReadByte();
         if (teamValue > 1) throw new ArchiveFormatException("invalid_team", "Player team value is invalid.");
         var seed = default(PlayerTickData) with
@@ -386,9 +387,9 @@ internal static class ArchiveFrameCodec
         var team = reader.ReadByte();
         if (team > 1) throw new ArchiveFormatException("invalid_team", "Event team value is invalid.");
         var playerSlot = checked((int)ArchiveBinary.ReadVarInt64(reader));
-        var playerId = checked((int)ArchiveBinary.ReadVarInt64(reader));
+        var playerId = ArchiveBinary.ReadVarInt64(reader);
         var receiverPlayerSlot = checked((int)ArchiveBinary.ReadVarInt64(reader));
-        var receiverPlayerId = checked((int)ArchiveBinary.ReadVarInt64(reader));
+        var receiverPlayerId = ArchiveBinary.ReadVarInt64(reader);
         var eventType = checked((int)ArchiveBinary.ReadVarInt64(reader));
         var flags = checked((int)ArchiveBinary.ReadVarInt64(reader));
         var sequenceIndex = 0;
