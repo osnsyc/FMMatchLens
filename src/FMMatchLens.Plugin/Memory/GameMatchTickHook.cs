@@ -15,6 +15,22 @@ internal sealed class GameMatchTickHook : IDisposable
 {
     private const int CandidateRealtimeMaxTicksPerSecond = 240;
     private const int CandidatePaceObservationSeconds = 2;
+    private const int CandidateIdentityRetryMilliseconds = 500;
+    private const int CandidatePairConfirmationCount = 3;
+    private const int CandidateRecentSeconds = 2;
+    private const int CandidateExpectedTickDelta = 360;
+    private const int CandidateTickDeltaTolerance = 16;
+    private const int LockHealthLogSeconds = 5;
+    private const int DrainHealthLogSeconds = 5;
+    private const int DrainStallWarningSeconds = 2;
+    private const int LockedAnimationTerminalProbeSeconds = 30;
+    private const int MaxPendingDiagnosticMessages = 256;
+    private const int MaxDiagnosticMessagesPerFlush = 128;
+    private const int PreLockCaptureMaxTick = 2_048;
+    private const int RealtimeFrameBufferCapacity = 8_192;
+    private const int PreLockFramePoolReserve = 1_024;
+    private const int MaxPreLockCachedFrames = RealtimeFrameBufferCapacity - PreLockFramePoolReserve;
+    private const int MaxPreLockCachedFramesPerCandidate = PreLockCaptureMaxTick + 1;
     private const int PreviousMatchTickForEpochReset = 12_000;
     private const int NewMatchTickForEpochReset = 4_096;
     private const int EpochResetConfirmationRecords = 3;
@@ -32,13 +48,15 @@ internal sealed class GameMatchTickHook : IDisposable
     private readonly MomentumCalculator _momentumCalculator = new();
     private readonly GameMatchTickRecordBuffer _tickRecords = new(65_536);
     private readonly GameMatchTickRecord[] _drainBatch = new GameMatchTickRecord[2_048];
-    private readonly RealtimeTickFrameBuffer _realtimeFrames = new(8_192);
+    private readonly RealtimeTickFrameBuffer _realtimeFrames = new(RealtimeFrameBufferCapacity);
     private readonly RawRealtimeTickFrame[] _realtimeDrainBatch = new RawRealtimeTickFrame[2_048];
     private readonly Dictionary<nint, CandidateState> _candidates = new();
+    private readonly Dictionary<nint, PreLockFrameCache> _preLockFrames = new();
     private readonly Dictionary<nint, NativeMomentumCaptureState> _nativeMomentumStates = new();
     private readonly object _nativeMomentumGate = new();
     private readonly object _animatedUpdateGate = new();
     private readonly ConcurrentDictionary<nint, byte> _terminalMatches = new();
+    private readonly ConcurrentQueue<PendingDiagnosticMessage> _pendingDiagnosticMessages = new();
     private Timer? _diagnosticsTimer;
     private Timer? _tickDrainTimer;
     private INativeDetour? _detour;
@@ -51,18 +69,39 @@ internal sealed class GameMatchTickHook : IDisposable
     private long _lastResult;
     private long _tickRecordSequence;
     private long _lastCandidateSummaryTimestamp;
+    private long _lastLockHealthTimestamp;
     private long _lastReportedDropped;
     private long _lastReportedRealtimeDropped;
     private nint _lastReportedSimulation;
     private nint _lastReportedAnimated;
     private nint _stableSimulation;
     private nint _stableAnimated;
+    private LocatorState _locatorState;
+    private MatchFingerprint _pendingFingerprint;
+    private nint _pendingSimulation;
+    private nint _pendingAnimated;
+    private int _pendingConfirmationCount;
+    private long _pendingFirstTimestamp;
     private long _selectedAnimated;
     private int _lastReportedEndTick;
     private long _lastReportedEndTimestamp;
     private long _lastMetadataFailureTimestamp;
     private long _lastMetadataCaptureTimestamp;
+    private long _drainSequence;
+    private long _drainStartedTimestamp;
+    private long _lastDrainCompletedTimestamp;
+    private long _lastDrainHealthTimestamp;
+    private long _lastDrainStallWarningTimestamp;
+    private long _lastLockedAnimationTerminalProbeTimestamp;
+    private long _droppedDiagnosticMessages;
+    private long _lastReportedDroppedDiagnosticMessages;
+    private long _droppedPreLockFrames;
+    private long _lastReportedDroppedPreLockFrames;
+    private int _preLockFrameCount;
+    private int _pendingDiagnosticMessageCount;
+    private int _drainStage;
     private int _isDrainingTickRecords;
+    private int _isLoggingDiagnostics;
     private bool _started;
 
     public GameMatchTickHook(
@@ -116,14 +155,15 @@ internal sealed class GameMatchTickHook : IDisposable
                 out MatchUpdateDelegate original);
             _original = original;
             _started = true;
-            if (PluginLogger.IsDebugEnabled)
-            {
-                _diagnosticsTimer = new Timer(
-                    _ => LogDiagnostics(),
-                    null,
-                    TimeSpan.FromSeconds(1),
-                    TimeSpan.FromSeconds(1));
-            }
+            Interlocked.Exchange(ref _lastDrainCompletedTimestamp, Stopwatch.GetTimestamp());
+            // This timer is also the non-critical log pump. Keep it alive in
+            // release mode so queued lifecycle warnings never run on the native
+            // hook or tick-drain threads.
+            _diagnosticsTimer = new Timer(
+                _ => LogDiagnostics(),
+                null,
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(1));
             _tickDrainTimer = new Timer(
                 _ => DrainTickRecords(),
                 null,
@@ -198,11 +238,11 @@ internal sealed class GameMatchTickHook : IDisposable
             // A managed exception must never cross the reverse-P/Invoke boundary.
             try
             {
-                PluginLogger.Error($"GAME_MATCH match-update hook failed: {ex}");
+                QueueDiagnostic(DiagnosticSeverity.Error, $"GAME_MATCH match-update hook failed: {ex}");
             }
             catch
             {
-                // Logging is best-effort inside a native callback.
+                // Diagnostics are best-effort inside a native callback.
             }
 
             return 0;
@@ -223,7 +263,8 @@ internal sealed class GameMatchTickHook : IDisposable
             _tickRecords.TryWrite(record);
             var selectedAnimated = (nint)Interlocked.Read(ref _selectedAnimated);
             if (!record.IsTerminal &&
-                (selectedAnimated == match || (selectedAnimated == default && record.Tick <= 2_048)))
+                (selectedAnimated == match ||
+                 (selectedAnimated == default && record.Tick is >= 0 and <= PreLockCaptureMaxTick)))
             {
                 TryCaptureRealtimeFrame(record);
             }
@@ -234,25 +275,38 @@ internal sealed class GameMatchTickHook : IDisposable
 
     private void LogDiagnostics()
     {
+        if (Interlocked.Exchange(ref _isLoggingDiagnostics, 1) == 1)
+        {
+            return;
+        }
+
         try
         {
-            var callCount = Interlocked.Read(ref _callCount);
-            var previous = Interlocked.Exchange(ref _lastLoggedCallCount, callCount);
-            if (callCount == previous)
+            if (PluginLogger.IsDebugEnabled)
             {
-                return;
+                var callCount = Interlocked.Read(ref _callCount);
+                var previous = Interlocked.Exchange(ref _lastLoggedCallCount, callCount);
+                if (callCount != previous)
+                {
+                    var match = (nint)Interlocked.Read(ref _lastMatch);
+                    var param2 = unchecked((ulong)Interlocked.Read(ref _lastParam2));
+                    var result = unchecked((ulong)Interlocked.Read(ref _lastResult));
+                    PluginLogger.Debug(
+                        $"GAME_MATCH hook alive: calls={callCount}, callsSinceLastLog={callCount - previous}, " +
+                        $"match={FormatPointer(match)}, param2=0x{param2:X}, result=0x{result:X}.");
+                }
             }
 
-            var match = (nint)Interlocked.Read(ref _lastMatch);
-            var param2 = unchecked((ulong)Interlocked.Read(ref _lastParam2));
-            var result = unchecked((ulong)Interlocked.Read(ref _lastResult));
-            PluginLogger.Debug(
-                $"GAME_MATCH hook alive: calls={callCount}, callsSinceLastLog={callCount - previous}, " +
-                $"match={FormatPointer(match)}, param2=0x{param2:X}, result=0x{result:X}.");
+            FlushPendingDiagnostics();
+            ReportDrainHealth(Stopwatch.GetTimestamp());
         }
         catch (Exception ex)
         {
             PluginLogger.Warning($"Unable to write GAME_MATCH hook diagnostics: {ex.Message}");
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _isLoggingDiagnostics, 0);
         }
     }
 
@@ -276,7 +330,8 @@ internal sealed class GameMatchTickHook : IDisposable
         _memoryReader.TryReadPointer(match + Offsets.GameMatch.PossessionTeam, out var possessionTeam);
         _memoryReader.TryReadPointer(match + Offsets.GameMatch.CurrentBallHolder, out var currentBallHolder);
 
-        var isActive = homeTeam != default && awayTeam != default && playerCount is > 0 and <= 64;
+        var isActive = homeTeam != default && awayTeam != default && homeTeam != awayTeam &&
+                       playerCount is > 0 and <= 64;
         // At full time the GAME_MATCH object remains readable, but both runtime
         // team pointers are cleared. Require successful slot reads so an invalid
         // or already-freed GAME_MATCH address cannot masquerade as full time.
@@ -811,7 +866,7 @@ internal sealed class GameMatchTickHook : IDisposable
             if (now - _lastMetadataFailureTimestamp >= Stopwatch.Frequency * 5)
             {
                 _lastMetadataFailureTimestamp = now;
-                PluginLogger.Warning($"Unable to capture player name metadata: {ex.Message}");
+                QueueDiagnostic(DiagnosticSeverity.Warning, $"Unable to capture player name metadata: {ex.Message}");
             }
         }
     }
@@ -960,26 +1015,52 @@ internal sealed class GameMatchTickHook : IDisposable
 
     private RealtimeManagerMetadata? ReadManagerMetadata(nint team)
     {
-        if (team == default ||
-            !_memoryReader.TryReadPointer(team + Offsets.Team.Manager, out var manager) ||
-            manager == default ||
-            !_memoryReader.TryReadPointer(manager + Offsets.Manager.Person, out var person) ||
-            person == default ||
-            !_memoryReader.TryReadPointer(person, out var virtualFunctionTable) ||
-            virtualFunctionTable == default ||
-            !_memoryReader.TryReadPointer(virtualFunctionTable + Offsets.Rtti.Metadata, out var rttiMetadata) ||
-            rttiMetadata == default ||
-            !_memoryReader.TryReadUInt32(rttiMetadata + Offsets.Rtti.SubobjectOffset, out var subobjectOffset) ||
-            subobjectOffset is not (Offsets.Rtti.HumanManagerPersonOffset or Offsets.Rtti.StaffPersonOffset))
+        if (!TryReadManagerIdentity(team, out var person, out _, out var kind, out var uid) ||
+            kind is not (ManagerKind.Human or ManagerKind.Staff))
         {
             return null;
         }
 
         return new RealtimeManagerMetadata(
-            ReadUid(person + Offsets.Person.Uid),
+            uid,
             ReadPersonName(person, Offsets.Person.FirstName),
             ReadPersonName(person, Offsets.Person.SecondName),
-            subobjectOffset == Offsets.Rtti.HumanManagerPersonOffset);
+            kind == ManagerKind.Human);
+    }
+
+    private bool TryReadManagerIdentity(
+        nint team,
+        out nint person,
+        out uint rttiOffset,
+        out ManagerKind kind,
+        out uint? uid)
+    {
+        person = default;
+        rttiOffset = default;
+        kind = ManagerKind.Unknown;
+        uid = null;
+        if (team == default ||
+            !_memoryReader.TryReadPointer(team + Offsets.Team.Manager, out var manager) ||
+            manager == default ||
+            !_memoryReader.TryReadPointer(manager + Offsets.Manager.Person, out person) ||
+            person == default ||
+            !_memoryReader.TryReadPointer(person, out var virtualFunctionTable) ||
+            virtualFunctionTable == default ||
+            !_memoryReader.TryReadPointer(virtualFunctionTable + Offsets.Rtti.Metadata, out var rttiMetadata) ||
+            rttiMetadata == default ||
+            !_memoryReader.TryReadUInt32(rttiMetadata + Offsets.Rtti.SubobjectOffset, out rttiOffset))
+        {
+            return false;
+        }
+
+        kind = rttiOffset switch
+        {
+            Offsets.Rtti.HumanManagerPersonOffset => ManagerKind.Human,
+            Offsets.Rtti.StaffPersonOffset => ManagerKind.Staff,
+            _ => ManagerKind.Unsupported
+        };
+        uid = ReadUid(person + Offsets.Person.Uid);
+        return true;
     }
 
     private IReadOnlyDictionary<string, int>? ReadPlayerPositionFamiliarities(nint person)
@@ -1235,57 +1316,68 @@ internal sealed class GameMatchTickHook : IDisposable
             return;
         }
 
+        Interlocked.Increment(ref _drainSequence);
+        Interlocked.Exchange(ref _drainStartedTimestamp, Stopwatch.GetTimestamp());
+        Volatile.Write(ref _drainStage, (int)DrainStage.TickRecords);
         try
         {
             var count = _tickRecords.Drain(_drainBatch);
-            if (count == 0)
+            CandidateClassification? classification = null;
+            if (count > 0)
             {
-                DrainRealtimeFrames();
-                ReportDroppedRecords();
-                return;
-            }
-
-            for (var i = 0; i < count; i++)
-            {
-                ObserveCandidate(_drainBatch[i]);
-            }
-
-            var (simulation, animated) = ClassifyCandidates(_drainBatch[count - 1].CapturedTimestamp);
-            if (simulation != default && animated != default && IsLikelyRealtimeAnimated(animated, _drainBatch[count - 1].CapturedTimestamp))
-            {
-                _stableSimulation = simulation;
-                _stableAnimated = animated;
-                if ((nint)Interlocked.Read(ref _selectedAnimated) != animated)
+                Volatile.Write(ref _drainStage, (int)DrainStage.Candidates);
+                for (var i = 0; i < count; i++)
                 {
-                    // Pre-selection candidate frames may already have been released.
-                    // Force the first selected callback to replay every published native event
-                    // currently retained by the event vector.
-                    lock (_nativeMomentumGate)
-                    {
-                        _nativeMomentumStates.Remove(animated);
-                    }
+                    ObserveCandidate(_drainBatch[i]);
                 }
-                Interlocked.Exchange(ref _selectedAnimated, (long)animated);
-                _timeline.Begin(animated);
-                TryCapturePlayerMetadata(animated);
+
+                var now = _drainBatch[count - 1].CapturedTimestamp;
+                Volatile.Write(ref _drainStage, (int)DrainStage.Identity);
+                foreach (var pair in _candidates)
+                {
+                    RefreshCandidateIdentity(pair.Key, pair.Value, now);
+                }
+
+                Volatile.Write(ref _drainStage, (int)DrainStage.Classification);
+                classification = ClassifyCandidates(now);
+                if (_locatorState != LocatorState.Locked)
+                {
+                    Volatile.Write(ref _drainStage, (int)DrainStage.LockUpdate);
+                    UpdateCandidateLock(classification, now);
+                }
             }
 
+            if (_locatorState != LocatorState.Locked)
+            {
+                Volatile.Write(ref _drainStage, (int)DrainStage.PreLockFrames);
+                PrunePreLockFrameCaches();
+            }
+
+            Volatile.Write(ref _drainStage, (int)DrainStage.RealtimeFrames);
             DrainRealtimeFrames();
 
+            Volatile.Write(ref _drainStage, (int)DrainStage.MatchEnd);
             for (var i = 0; i < count; i++)
             {
                 ReportMatchEnded(_drainBatch[i]);
             }
 
-            ReportCandidateSummary(simulation, animated, _drainBatch[count - 1].CapturedTimestamp);
+            var diagnosticTimestamp = Stopwatch.GetTimestamp();
+            ProbeLockedAnimationTerminal(diagnosticTimestamp);
+
+            Volatile.Write(ref _drainStage, (int)DrainStage.Diagnostics);
+            ReportCandidateSummary(classification, diagnosticTimestamp);
+            ReportLockHealth(diagnosticTimestamp);
             ReportDroppedRecords();
         }
         catch (Exception ex)
         {
-            PluginLogger.Warning($"Unable to drain GAME_MATCH tick records: {ex.Message}");
+            QueueDiagnostic(DiagnosticSeverity.Warning, $"Unable to drain GAME_MATCH tick records: {ex.Message}");
         }
         finally
         {
+            Interlocked.Exchange(ref _lastDrainCompletedTimestamp, Stopwatch.GetTimestamp());
+            Volatile.Write(ref _drainStage, (int)DrainStage.Idle);
             Interlocked.Exchange(ref _isDrainingTickRecords, 0);
         }
     }
@@ -1298,30 +1390,281 @@ internal sealed class GameMatchTickHook : IDisposable
             return;
         }
 
+        var processed = 0;
         try
         {
             var selectedAnimated = (nint)Interlocked.Read(ref _selectedAnimated);
-            if (selectedAnimated == default)
-            {
-                return;
-            }
-
             // Native callbacks can complete on different threads. Sort the drained
             // window so a later callback cannot make us reject an earlier tick.
             Array.Sort(_realtimeDrainBatch, 0, count, RawFrameTickComparer.Instance);
-            for (var i = 0; i < count; i++)
+            for (; processed < count; processed++)
             {
-                var frame = _realtimeDrainBatch[i];
-                if (frame.MatchAddress == selectedAnimated)
+                var frame = _realtimeDrainBatch[processed];
+                var retained = false;
+                try
                 {
-                    _timeline.Append(frame);
+                    if (selectedAnimated == default)
+                    {
+                        retained = TryCachePreLockFrame(frame);
+                    }
+                    else if (frame.MatchAddress == selectedAnimated)
+                    {
+                        _timeline.Append(frame);
+                    }
+                }
+                finally
+                {
+                    _realtimeDrainBatch[processed] = null!;
+                    if (!retained)
+                    {
+                        _realtimeFrames.Release(frame);
+                    }
                 }
             }
         }
         finally
         {
-            _realtimeFrames.Release(_realtimeDrainBatch, count);
+            // If sorting or processing throws, every frame still owned by this
+            // drain batch must return to the pool. Frames already transferred to
+            // a pre-lock cache have had their batch slot cleared.
+            for (; processed < count; processed++)
+            {
+                var frame = _realtimeDrainBatch[processed];
+                if (frame is not null)
+                {
+                    _realtimeFrames.Release(frame);
+                    _realtimeDrainBatch[processed] = null!;
+                }
+            }
         }
+    }
+
+    private bool TryCachePreLockFrame(RawRealtimeTickFrame frame)
+    {
+        if (frame.Tick is < 0 or > PreLockCaptureMaxTick ||
+            !_candidates.TryGetValue(frame.MatchAddress, out var candidate) ||
+            !CanCachePreLockFrames(candidate))
+        {
+            return false;
+        }
+
+        if (!_preLockFrames.TryGetValue(frame.MatchAddress, out var cache))
+        {
+            if (Volatile.Read(ref _preLockFrameCount) >= MaxPreLockCachedFrames)
+            {
+                Interlocked.Increment(ref _droppedPreLockFrames);
+                return false;
+            }
+
+            cache = new PreLockFrameCache();
+            _preLockFrames.Add(frame.MatchAddress, cache);
+        }
+
+        if (cache.Frames.TryGetValue(frame.Tick, out var previous))
+        {
+            // Match the live timeline's ordering: the first callback for a tick
+            // wins. It may contain a newly published native event that a later
+            // duplicate no longer carries.
+            if (previous.Sequence <= frame.Sequence)
+            {
+                return false;
+            }
+
+            cache.Frames[frame.Tick] = frame;
+            _realtimeFrames.Release(previous);
+            return true;
+        }
+
+        if (cache.Frames.Count >= MaxPreLockCachedFramesPerCandidate ||
+            Volatile.Read(ref _preLockFrameCount) >= MaxPreLockCachedFrames)
+        {
+            Interlocked.Increment(ref _droppedPreLockFrames);
+            return false;
+        }
+
+        cache.Frames.Add(frame.Tick, frame);
+        Interlocked.Increment(ref _preLockFrameCount);
+        return true;
+    }
+
+    private void PrunePreLockFrameCaches()
+    {
+        if (_preLockFrames.Count == 0)
+        {
+            return;
+        }
+
+        List<nint>? rejected = null;
+        foreach (var pair in _preLockFrames)
+        {
+            if (_candidates.TryGetValue(pair.Key, out var candidate) &&
+                IsRetainablePreLockCandidate(pair.Key, candidate))
+            {
+                continue;
+            }
+
+            rejected ??= new List<nint>();
+            rejected.Add(pair.Key);
+        }
+
+        if (rejected is null)
+        {
+            return;
+        }
+
+        var releasedFrames = 0;
+        foreach (var address in rejected)
+        {
+            releasedFrames += ReleasePreLockFrameCache(address);
+        }
+
+        QueueDiagnostic(
+            DiagnosticSeverity.Debug,
+            $"GAME_MATCH pre-lock frame caches pruned: candidates={rejected.Count}, frames={releasedFrames}, " +
+            $"remainingCached={Volatile.Read(ref _preLockFrameCount)}.");
+    }
+
+    private bool IsRetainablePreLockCandidate(nint address, CandidateState candidate)
+    {
+        if (candidate.IsTerminal || !candidate.HasActiveRecord ||
+            ClassifyManagerPair(candidate) == ManagerPairClassification.Rejected)
+        {
+            return false;
+        }
+
+        var homeRead = _memoryReader.TryReadPointer(address + Offsets.GameMatch.HomeTeam, out var homeTeam);
+        var awayRead = _memoryReader.TryReadPointer(address + Offsets.GameMatch.AwayTeam, out var awayTeam);
+        var playerCountRead = _memoryReader.TryReadByte(
+            address + Offsets.GameMatch.MatchPlayersCount,
+            out var playerCount);
+        if (!homeRead || !awayRead || !playerCountRead)
+        {
+            // A transient read failure is not enough evidence to discard early data.
+            return true;
+        }
+
+        return homeTeam != default && awayTeam != default && homeTeam != awayTeam &&
+               playerCount is > 0 and <= 64 &&
+               (candidate.ProbedHomeTeam == default || candidate.ProbedHomeTeam == homeTeam) &&
+               (candidate.ProbedAwayTeam == default || candidate.ProbedAwayTeam == awayTeam);
+    }
+
+    private static bool CanCachePreLockFrames(CandidateState candidate) =>
+        ClassifyManagerPair(candidate) != ManagerPairClassification.Rejected &&
+        (candidate.HomeManagerKind == ManagerKind.Human ||
+         candidate.AwayManagerKind == ManagerKind.Human);
+
+    private (int Cached, int Appended, int FirstTick, int LastTick, int PitchBackfilled, int PitchSourceTick)
+        CommitPreLockFrames(nint selectedAnimated)
+    {
+        if (!_preLockFrames.Remove(selectedAnimated, out var cache) || cache.Frames.Count == 0)
+        {
+            return (0, 0, -1, -1, 0, -1);
+        }
+
+        var frames = cache.Frames.Values
+            .OrderBy(frame => frame.Tick)
+            .ThenBy(frame => frame.Sequence)
+            .ToArray();
+        var (pitchBackfilled, pitchSourceTick) = BackfillLeadingPitchDimensions(frames);
+        Interlocked.Add(ref _preLockFrameCount, -frames.Length);
+        var appended = 0;
+        try
+        {
+            foreach (var frame in frames)
+            {
+                if (_timeline.Append(frame))
+                {
+                    appended++;
+                }
+            }
+        }
+        finally
+        {
+            foreach (var frame in frames)
+            {
+                _realtimeFrames.Release(frame);
+            }
+        }
+
+        return (frames.Length, appended, frames[0].Tick, frames[^1].Tick, pitchBackfilled, pitchSourceTick);
+    }
+
+    private static (int Backfilled, int SourceTick) BackfillLeadingPitchDimensions(
+        IReadOnlyList<RawRealtimeTickFrame> frames)
+    {
+        var sourceIndex = -1;
+        for (var index = 0; index < frames.Count; index++)
+        {
+            var frame = frames[index];
+            if (HasValidPitchDimensions(frame.HalfPitchWidth, frame.HalfPitchLength))
+            {
+                sourceIndex = index;
+                break;
+            }
+        }
+
+        if (sourceIndex <= 0)
+        {
+            return (0, sourceIndex == 0 ? frames[0].Tick : -1);
+        }
+
+        var source = frames[sourceIndex];
+        var backfilled = 0;
+        for (var index = 0; index < sourceIndex; index++)
+        {
+            var frame = frames[index];
+            if (frame.HalfPitchWidth != 0 && frame.HalfPitchLength != 0)
+            {
+                continue;
+            }
+
+            frame.HalfPitchWidth = source.HalfPitchWidth;
+            frame.HalfPitchLength = source.HalfPitchLength;
+            backfilled++;
+        }
+
+        return (backfilled, source.Tick);
+    }
+
+    private static bool HasValidPitchDimensions(float halfWidth, float halfLength) =>
+        float.IsFinite(halfWidth) && float.IsFinite(halfLength) &&
+        halfWidth is > 0 and <= 1_000 && halfLength is > 0 and <= 1_000;
+
+    private (int Candidates, int Frames) ReleaseExcludedPreLockFrameCaches(nint selectedAnimated = default)
+    {
+        if (_preLockFrames.Count == 0)
+        {
+            return (0, 0);
+        }
+
+        var addresses = _preLockFrames.Keys
+            .Where(address => address != selectedAnimated)
+            .ToArray();
+        var releasedFrames = 0;
+        foreach (var address in addresses)
+        {
+            releasedFrames += ReleasePreLockFrameCache(address);
+        }
+
+        return (addresses.Length, releasedFrames);
+    }
+
+    private int ReleasePreLockFrameCache(nint address)
+    {
+        if (!_preLockFrames.Remove(address, out var cache))
+        {
+            return 0;
+        }
+
+        var count = cache.Frames.Count;
+        foreach (var frame in cache.Frames.Values)
+        {
+            _realtimeFrames.Release(frame);
+        }
+
+        Interlocked.Add(ref _preLockFrameCount, -count);
+        return count;
     }
 
     private void ObserveCandidate(in GameMatchTickRecord record)
@@ -1331,13 +1674,21 @@ internal sealed class GameMatchTickHook : IDisposable
             state = new CandidateState();
             _candidates.Add(record.MatchAddress, state);
         }
+        else if (!record.IsTerminal && state.IsTerminal)
+        {
+            // A non-selected terminal address may be reused without ending the
+            // current session. Treat the active object as a fresh candidate epoch.
+            ReleasePreLockFrameCache(record.MatchAddress);
+            state = new CandidateState();
+            _candidates[record.MatchAddress] = state;
+        }
         else if (!record.IsTerminal && ObserveTickEpochReset(state, record.Tick))
         {
             var previousTick = state.LastTick;
             var belongsToCurrentSession = record.MatchAddress == _stableSimulation ||
                                           record.MatchAddress == _stableAnimated ||
                                           record.MatchAddress == (nint)Interlocked.Read(ref _selectedAnimated);
-            PluginLogger.Debug(
+            QueueDiagnostic(DiagnosticSeverity.Debug,
                 $"GAME_MATCH tick epoch reset detected: match={FormatPointer(record.MatchAddress)}, " +
                 $"previousTick={previousTick}, newTick={record.Tick}, " +
                 $"currentSession={belongsToCurrentSession}.");
@@ -1348,6 +1699,7 @@ internal sealed class GameMatchTickHook : IDisposable
             }
             else
             {
+                ReleasePreLockFrameCache(record.MatchAddress);
                 _candidates.Remove(record.MatchAddress);
             }
 
@@ -1426,7 +1778,7 @@ internal sealed class GameMatchTickHook : IDisposable
         {
             _timeline.MarkEnded(selectedAnimated);
             var timelineStatus = _timeline.GetStatus();
-            PluginLogger.Debug(
+            QueueDiagnostic(DiagnosticSeverity.Debug,
                 $"GAME_MATCH realtime timeline finalized by tick epoch reset: " +
                 $"resetMatch={FormatPointer(resetAddress)}, selectedAnimated={FormatPointer(selectedAnimated)}, " +
                 $"tick={previousTick}->{newTick}, frames={timelineStatus.FrameCount}, " +
@@ -1455,10 +1807,10 @@ internal sealed class GameMatchTickHook : IDisposable
         _lastReportedEndTick = record.Tick;
         _lastReportedEndTimestamp = record.CapturedTimestamp;
         var final = state.LastActiveRecord;
-        PluginLogger.Info(
+        QueueDiagnostic(DiagnosticSeverity.Info,
             $"GAME_MATCH ended: score={final.HomeGoals}-{final.AwayGoals}, " +
             $"xg={final.HomeXg:0.000}-{final.AwayXg:0.000}, shots={final.HomeShots}-{final.AwayShots}.");
-        PluginLogger.Debug(
+        QueueDiagnostic(DiagnosticSeverity.Debug,
             $"GAME_MATCH end details: match={FormatPointer(record.MatchAddress)}, terminalTick={record.Tick}, " +
             $"finalDataTick={final.Tick}, period={record.Period}, " +
             $"runtimeTeams={FormatPointer(record.HomeTeam)}/{FormatPointer(record.AwayTeam)}, " +
@@ -1471,7 +1823,7 @@ internal sealed class GameMatchTickHook : IDisposable
             Interlocked.CompareExchange(ref _selectedAnimated, 0, (long)record.MatchAddress);
             _timeline.MarkEnded(record.MatchAddress);
             var timelineStatus = _timeline.GetStatus();
-            PluginLogger.Debug(
+            QueueDiagnostic(DiagnosticSeverity.Debug,
                 $"GAME_MATCH realtime timeline finalized: frames={timelineStatus.FrameCount}, " +
                 $"lastTick={timelineStatus.LastTick}, missingTicks={timelineStatus.MissingTickCount}, " +
                 $"duplicates={timelineStatus.DuplicateTickCount}, outOfOrder={timelineStatus.OutOfOrderTickCount}.");
@@ -1479,8 +1831,65 @@ internal sealed class GameMatchTickHook : IDisposable
         }
     }
 
+    private void ProbeLockedAnimationTerminal(long now)
+    {
+        if (_locatorState != LocatorState.Locked ||
+            now - _lastLockedAnimationTerminalProbeTimestamp <
+            Stopwatch.Frequency * LockedAnimationTerminalProbeSeconds)
+        {
+            return;
+        }
+
+        _lastLockedAnimationTerminalProbeTimestamp = now;
+        var animated = _stableAnimated;
+        if (animated == default)
+        {
+            return;
+        }
+
+        var homeTeamRead = _memoryReader.TryReadPointer(
+            animated + Offsets.GameMatch.HomeTeam,
+            out var homeTeam);
+        var awayTeamRead = _memoryReader.TryReadPointer(
+            animated + Offsets.GameMatch.AwayTeam,
+            out var awayTeam);
+        if (!homeTeamRead || !awayTeamRead)
+        {
+            QueueDiagnostic(
+                DiagnosticSeverity.Debug,
+                $"GAME_MATCH locked animation terminal probe: address={FormatPointer(animated)}, " +
+                $"result=unreadable, homeRead={homeTeamRead}, awayRead={awayTeamRead}.");
+            return;
+        }
+
+        if (homeTeam != default || awayTeam != default)
+        {
+            QueueDiagnostic(
+                DiagnosticSeverity.Debug,
+                $"GAME_MATCH locked animation terminal probe: address={FormatPointer(animated)}, " +
+                $"result=active, runtimeTeams={FormatPointer(homeTeam)}/{FormatPointer(awayTeam)}.");
+            return;
+        }
+
+        QueueDiagnostic(
+            DiagnosticSeverity.Info,
+            $"GAME_MATCH locked animation terminal probe detected cleared runtime teams: " +
+            $"address={FormatPointer(animated)}.");
+        Interlocked.CompareExchange(ref _selectedAnimated, 0, (long)animated);
+        _timeline.MarkEnded(animated);
+        var timelineStatus = _timeline.GetStatus();
+        QueueDiagnostic(
+            DiagnosticSeverity.Debug,
+            $"GAME_MATCH realtime timeline finalized by active terminal probe: " +
+            $"frames={timelineStatus.FrameCount}, lastTick={timelineStatus.LastTick}, " +
+            $"missingTicks={timelineStatus.MissingTickCount}, duplicates={timelineStatus.DuplicateTickCount}, " +
+            $"outOfOrder={timelineStatus.OutOfOrderTickCount}.");
+        ResetCandidateSession("active terminal probe");
+    }
+
     private void ResetCandidateSession(string reason)
     {
+        var releasedPreLock = ReleaseExcludedPreLockFrameCaches();
         _candidates.Clear();
         lock (_nativeMomentumGate)
         {
@@ -1492,49 +1901,19 @@ internal sealed class GameMatchTickHook : IDisposable
         _lastReportedSimulation = default;
         _lastReportedAnimated = default;
         _lastCandidateSummaryTimestamp = 0;
+        _lastLockHealthTimestamp = 0;
+        _lastLockedAnimationTerminalProbeTimestamp = 0;
         _lastMetadataCaptureTimestamp = 0;
-        PluginLogger.Debug($"GAME_MATCH candidate session cleared after {reason}; reused addresses may start a new match.");
-    }
-
-    private (nint Simulation, nint Animated) ClassifyCandidates(long now)
-    {
-        var recentThreshold = now - Stopwatch.Frequency * 2;
-        nint simulation = default;
-        var simulationTick = int.MinValue;
-
-        foreach (var pair in _candidates)
-        {
-            var state = pair.Value;
-            if (state.LastAdvanceTimestamp >= recentThreshold && state.LastTick > simulationTick)
-            {
-                simulation = pair.Key;
-                simulationTick = state.LastTick;
-            }
-        }
-
-        nint animated = default;
-        var bestDeltaError = int.MaxValue;
-        foreach (var pair in _candidates)
-        {
-            if (pair.Key == simulation || pair.Value.LastAdvanceTimestamp < recentThreshold)
-            {
-                continue;
-            }
-
-            var deltaError = Math.Abs((simulationTick - pair.Value.LastTick) - 360);
-            if (deltaError < bestDeltaError)
-            {
-                bestDeltaError = deltaError;
-                animated = pair.Key;
-            }
-        }
-
-        if (bestDeltaError > 16)
-        {
-            animated = default;
-        }
-
-        return (simulation, animated);
+        _locatorState = LocatorState.Discovering;
+        _pendingFingerprint = default;
+        _pendingSimulation = default;
+        _pendingAnimated = default;
+        _pendingConfirmationCount = 0;
+        _pendingFirstTimestamp = 0;
+        QueueDiagnostic(
+            DiagnosticSeverity.Debug,
+            $"GAME_MATCH candidate session cleared after {reason}; reused addresses may start a new match; " +
+            $"releasedPreLockCandidates={releasedPreLock.Candidates}, releasedPreLockFrames={releasedPreLock.Frames}.");
     }
 
     private bool IsLikelyRealtimeAnimated(nint animated, long now)
@@ -1550,48 +1929,121 @@ internal sealed class GameMatchTickHook : IDisposable
             return false;
         }
 
-        var elapsedSeconds = elapsedTicks / (double)Stopwatch.Frequency;
-        var ticksPerSecond = Math.Max(0, state.LastTick - state.FirstTick) / elapsedSeconds;
-        return ticksPerSecond <= CandidateRealtimeMaxTicksPerSecond;
+        return CalculateTickRate(state, now) <= CandidateRealtimeMaxTicksPerSecond;
     }
 
-    private void ReportCandidateSummary(nint simulation, nint animated, long now)
+    private static double CalculateTickRate(CandidateState state, long now)
+    {
+        var elapsedTicks = Math.Max(1, now - state.FirstSeenTimestamp);
+        var elapsedSeconds = elapsedTicks / (double)Stopwatch.Frequency;
+        return Math.Max(0, state.LastTick - state.FirstTick) / elapsedSeconds;
+    }
+
+    private void ReportCandidateSummary(CandidateClassification? classification, long now)
     {
         if (!PluginLogger.IsDebugEnabled)
         {
             return;
         }
 
-        var selectionChanged = simulation != _lastReportedSimulation || animated != _lastReportedAnimated;
-        if (!selectionChanged && now - _lastCandidateSummaryTimestamp < Stopwatch.Frequency)
+        if (classification is not null)
         {
-            return;
+            var uniquePair = classification.Pairs.Count == 1 ? classification.Pairs[0] : (CandidatePair?)null;
+            var simulation = uniquePair?.Simulation ?? default;
+            var animated = uniquePair?.Animated ?? default;
+            var selectionChanged = simulation != _lastReportedSimulation || animated != _lastReportedAnimated;
+            if (selectionChanged || now - _lastCandidateSummaryTimestamp >= Stopwatch.Frequency)
+            {
+                _lastReportedSimulation = simulation;
+                _lastReportedAnimated = animated;
+                _lastCandidateSummaryTimestamp = now;
+
+                QueueDiagnostic(DiagnosticSeverity.Debug,
+                    $"GAME_MATCH candidate classification: locator={_locatorState.ToString().ToLowerInvariant()}, " +
+                    $"eligible={classification.EligibleCount}, groups={classification.GroupCount}, " +
+                    $"pairs={classification.Pairs.Count}, result=" +
+                    $"{(classification.Pairs.Count == 0 ? "no_pair" : classification.Pairs.Count == 1 ? "unique_pair" : "ambiguous_pair")}.");
+            }
         }
-
-        _lastReportedSimulation = simulation;
-        _lastReportedAnimated = animated;
-        _lastCandidateSummaryTimestamp = now;
-
-        var simulationTick = simulation != default && _candidates.TryGetValue(simulation, out var simulationState)
-            ? simulationState.LastTick
-            : 0;
-        var animatedTick = animated != default && _candidates.TryGetValue(animated, out var animatedState)
-            ? animatedState.LastTick
-            : 0;
-        var delta = animated == default ? 0 : simulationTick - animatedTick;
-
-        PluginLogger.Debug(
-            $"GAME_MATCH candidate selection: simulation={FormatPointer(simulation)} tick={simulationTick}, " +
-            $"animated={FormatPointer(animated)} tick={animatedTick}, delta={delta}.");
 
         foreach (var pair in _candidates)
         {
             var state = pair.Value;
-            PluginLogger.Debug(
-                $"GAME_MATCH candidate health: match={FormatPointer(pair.Key)}, tick={state.LastTick}, " +
-                $"records={state.RecordCount}, missingTicks={state.GapCount}, outOfOrder={state.OutOfOrderCount}.");
+            var reason = GetEligibilityReason(state, now);
+            if (string.Equals(state.LastReportedEligibilityReason, reason, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            state.LastReportedEligibilityReason = reason;
+            var record = state.LastActiveRecord;
+            QueueDiagnostic(DiagnosticSeverity.Debug,
+                $"GAME_MATCH candidate evidence: address={FormatPointer(pair.Key)}, tick={state.LastTick}, " +
+                $"ageMs={Math.Max(0, now - state.LastSeenTimestamp) * 1_000 / Stopwatch.Frequency}, " +
+                $"rate={CalculateTickRate(state, now):0.0}, homeTeam={FormatPointer(record.HomeTeam)}, " +
+                $"awayTeam={FormatPointer(record.AwayTeam)}, players={record.PlayerCount}, " +
+                $"homeUid={FormatUid(state.HomeTeamUidReadable, state.HomeDbTeamUid)}, " +
+                $"awayUid={FormatUid(state.AwayTeamUidReadable, state.AwayDbTeamUid)}, " +
+                $"homeManagerRtti={FormatManagerRtti(state.HomeManagerReadable, state.HomeManagerRttiOffset)}, " +
+                $"awayManagerRtti={FormatManagerRtti(state.AwayManagerReadable, state.AwayManagerRttiOffset)}, " +
+                $"homeManagerUid={state.HomeManagerUid?.ToString(CultureInfo.InvariantCulture) ?? "unknown"}, " +
+                $"awayManagerUid={state.AwayManagerUid?.ToString(CultureInfo.InvariantCulture) ?? "unknown"}, " +
+                $"fingerprint={FormatFingerprint(state)}, eligible={reason == "eligible"}, " +
+                $"reason={reason}, records={state.RecordCount}, " +
+                $"missingTicks={state.GapCount}, outOfOrder={state.OutOfOrderCount}.");
         }
     }
+
+    private void ReportLockHealth(long now)
+    {
+        if (!PluginLogger.IsDebugEnabled || _locatorState != LocatorState.Locked ||
+            now - _lastLockHealthTimestamp < Stopwatch.Frequency * LockHealthLogSeconds)
+        {
+            return;
+        }
+
+        _lastLockHealthTimestamp = now;
+        var selected = (nint)Interlocked.Read(ref _selectedAnimated);
+        if (!_candidates.TryGetValue(selected, out var state))
+        {
+            QueueDiagnostic(
+                DiagnosticSeverity.Debug,
+                $"GAME_MATCH lock health: address={FormatPointer(selected)}, candidateMissing=true.");
+            return;
+        }
+
+        var record = state.LastActiveRecord;
+        QueueDiagnostic(DiagnosticSeverity.Debug,
+            $"GAME_MATCH lock health: address={FormatPointer(selected)}, tick={state.LastTick}, " +
+            $"lastAdvanceAgeMs={Math.Max(0, now - state.LastAdvanceTimestamp) * 1_000 / Stopwatch.Frequency}, " +
+            $"records={state.RecordCount}, missingTicks={state.GapCount}, outOfOrder={state.OutOfOrderCount}, " +
+            $"runtimeTeamsReadable={record.HomeTeam != default && record.AwayTeam != default}.");
+    }
+
+    private static string FormatUid(bool readable, uint uid) => readable
+        ? uid.ToString(CultureInfo.InvariantCulture)
+        : "unknown";
+
+    private static string FormatManagerRtti(bool readable, uint offset) => readable
+        ? $"0x{offset:X}"
+        : "unreadable";
+
+    private static string FormatFingerprint(CandidateState state) =>
+        state.HomeTeamUidReadable && state.AwayTeamUidReadable
+            ? $"{state.HomeDbTeamUid}:{state.AwayDbTeamUid}"
+            : "unknown";
+
+    private static string FormatManagerPair(CandidateState? state) => state is null
+        ? "unknown/unknown"
+        : $"{FormatManagerKind(state.HomeManagerKind)}/{FormatManagerKind(state.AwayManagerKind)}";
+
+    private static string FormatManagerKind(ManagerKind kind) => kind switch
+    {
+        ManagerKind.Human => "human",
+        ManagerKind.Staff => "ai",
+        ManagerKind.Unsupported => "unsupported",
+        _ => "unknown"
+    };
 
     private void ReportDroppedRecords()
     {
@@ -1599,15 +2051,136 @@ internal sealed class GameMatchTickHook : IDisposable
         if (dropped != _lastReportedDropped)
         {
             _lastReportedDropped = dropped;
-            PluginLogger.Warning($"GAME_MATCH tick record buffer dropped records: total={dropped}.");
+            QueueDiagnostic(
+                DiagnosticSeverity.Warning,
+                $"GAME_MATCH tick record buffer dropped records: total={dropped}.");
         }
 
         var realtimeDropped = _realtimeFrames.Dropped;
         if (realtimeDropped != _lastReportedRealtimeDropped)
         {
             _lastReportedRealtimeDropped = realtimeDropped;
-            PluginLogger.Warning($"GAME_MATCH realtime frame buffer dropped records: total={realtimeDropped}.");
+            QueueDiagnostic(
+                DiagnosticSeverity.Warning,
+                $"GAME_MATCH realtime frame buffer dropped records: total={realtimeDropped}.");
         }
+
+        var preLockDropped = Interlocked.Read(ref _droppedPreLockFrames);
+        if (preLockDropped != _lastReportedDroppedPreLockFrames)
+        {
+            _lastReportedDroppedPreLockFrames = preLockDropped;
+            QueueDiagnostic(
+                DiagnosticSeverity.Warning,
+                $"GAME_MATCH pre-lock frame cache dropped records: total={preLockDropped}, " +
+                $"cached={Volatile.Read(ref _preLockFrameCount)}.");
+        }
+    }
+
+    private void QueueDiagnostic(DiagnosticSeverity severity, string message)
+    {
+        if (severity == DiagnosticSeverity.Debug && !PluginLogger.IsDebugEnabled)
+        {
+            return;
+        }
+
+        var pendingCount = Interlocked.Increment(ref _pendingDiagnosticMessageCount);
+        if (pendingCount > MaxPendingDiagnosticMessages)
+        {
+            Interlocked.Decrement(ref _pendingDiagnosticMessageCount);
+            Interlocked.Increment(ref _droppedDiagnosticMessages);
+            return;
+        }
+
+        _pendingDiagnosticMessages.Enqueue(new PendingDiagnosticMessage(severity, message));
+    }
+
+    private void FlushPendingDiagnostics()
+    {
+        var flushed = 0;
+        while (flushed < MaxDiagnosticMessagesPerFlush &&
+               _pendingDiagnosticMessages.TryDequeue(out var pending))
+        {
+            Interlocked.Decrement(ref _pendingDiagnosticMessageCount);
+            switch (pending.Severity)
+            {
+                case DiagnosticSeverity.Info:
+                    PluginLogger.Info(pending.Message);
+                    break;
+                case DiagnosticSeverity.Warning:
+                    PluginLogger.Warning(pending.Message);
+                    break;
+                case DiagnosticSeverity.Error:
+                    PluginLogger.Error(pending.Message);
+                    break;
+                default:
+                    PluginLogger.Debug(pending.Message);
+                    break;
+            }
+
+            flushed++;
+        }
+
+        var dropped = Interlocked.Read(ref _droppedDiagnosticMessages);
+        var previous = Interlocked.Exchange(ref _lastReportedDroppedDiagnosticMessages, dropped);
+        if (dropped != previous)
+        {
+            PluginLogger.Warning(
+                $"GAME_MATCH diagnostic queue dropped messages: total={dropped}, " +
+                $"pending={Volatile.Read(ref _pendingDiagnosticMessageCount)}.");
+        }
+    }
+
+    private void ReportDrainHealth(long now)
+    {
+        if (!PluginLogger.IsDebugEnabled)
+        {
+            return;
+        }
+
+        var draining = Volatile.Read(ref _isDrainingTickRecords) != 0;
+        var stage = (DrainStage)Volatile.Read(ref _drainStage);
+        var started = Interlocked.Read(ref _drainStartedTimestamp);
+        var completed = Interlocked.Read(ref _lastDrainCompletedTimestamp);
+        var activeMilliseconds = draining && started != 0
+            ? Math.Max(0, now - started) * 1_000 / Stopwatch.Frequency
+            : 0;
+        var completedAgeMilliseconds = completed == 0
+            ? -1
+            : Math.Max(0, now - completed) * 1_000 / Stopwatch.Frequency;
+
+        if (draining && activeMilliseconds >= DrainStallWarningSeconds * 1_000L)
+        {
+            if (now - _lastDrainStallWarningTimestamp < Stopwatch.Frequency * DrainHealthLogSeconds)
+            {
+                return;
+            }
+
+            _lastDrainStallWarningTimestamp = now;
+            PluginLogger.Warning(
+                $"GAME_MATCH drain stalled: cycle={Interlocked.Read(ref _drainSequence)}, " +
+                $"stage={stage.ToString().ToLowerInvariant()}, activeMs={activeMilliseconds}, " +
+                $"lastCompletedAgeMs={completedAgeMilliseconds}, tickQueue={_tickRecords.Count}, " +
+                $"realtimeQueue={_realtimeFrames.ReadyCount}, tickDropped={_tickRecords.Dropped}, " +
+                $"realtimeDropped={_realtimeFrames.Dropped}, preLockCached={Volatile.Read(ref _preLockFrameCount)}, " +
+                $"preLockDropped={Interlocked.Read(ref _droppedPreLockFrames)}, " +
+                $"diagnosticQueue={Volatile.Read(ref _pendingDiagnosticMessageCount)}.");
+            return;
+        }
+
+        if (now - _lastDrainHealthTimestamp < Stopwatch.Frequency * DrainHealthLogSeconds)
+        {
+            return;
+        }
+
+        _lastDrainHealthTimestamp = now;
+        PluginLogger.Debug(
+            $"GAME_MATCH drain health: cycle={Interlocked.Read(ref _drainSequence)}, draining={draining}, " +
+            $"stage={stage.ToString().ToLowerInvariant()}, activeMs={activeMilliseconds}, " +
+            $"lastCompletedAgeMs={completedAgeMilliseconds}, tickQueue={_tickRecords.Count}, " +
+            $"realtimeQueue={_realtimeFrames.ReadyCount}, tickDropped={_tickRecords.Dropped}, " +
+            $"realtimeDropped={_realtimeFrames.Dropped}, preLockCached={Volatile.Read(ref _preLockFrameCount)}, " +
+            $"preLockDropped={Interlocked.Read(ref _droppedPreLockFrames)}, " +
+            $"diagnosticQueue={Volatile.Read(ref _pendingDiagnosticMessageCount)}.");
     }
 
     private static string FormatPointer(nint address)
@@ -1620,6 +2193,76 @@ internal sealed class GameMatchTickHook : IDisposable
     // The function returns uVar23 & 0xffffffff, but the native ABI return register is RAX.
     [UnmanagedFunctionPointer(CallingConvention.Winapi)]
     private delegate ulong MatchUpdateDelegate(nint match, ulong param2);
+
+    private enum DiagnosticSeverity
+    {
+        Debug,
+        Info,
+        Warning,
+        Error
+    }
+
+    private enum DrainStage
+    {
+        Idle,
+        TickRecords,
+        Candidates,
+        Identity,
+        PreLockFrames,
+        Classification,
+        LockUpdate,
+        RealtimeFrames,
+        MatchEnd,
+        Diagnostics
+    }
+
+    private sealed record PendingDiagnosticMessage(DiagnosticSeverity Severity, string Message);
+
+    private enum LocatorState
+    {
+        Discovering,
+        Confirming,
+        Locked
+    }
+
+    private enum ManagerKind
+    {
+        Unknown,
+        Staff,
+        Human,
+        Unsupported
+    }
+
+    private enum ManagerPairClassification
+    {
+        Pending,
+        Rejected,
+        Eligible
+    }
+
+    private readonly record struct MatchFingerprint(uint HomeTeamUid, uint AwayTeamUid)
+    {
+        public override string ToString() => $"{HomeTeamUid}:{AwayTeamUid}";
+    }
+
+    private readonly record struct CandidatePair(
+        MatchFingerprint Fingerprint,
+        nint Simulation,
+        nint Animated,
+        int SimulationTick,
+        int AnimatedTick,
+        int TickDelta,
+        double AnimatedTicksPerSecond);
+
+    private sealed record CandidateClassification(
+        IReadOnlyList<CandidatePair> Pairs,
+        int EligibleCount,
+        int GroupCount);
+
+    private sealed class PreLockFrameCache
+    {
+        public Dictionary<int, RawRealtimeTickFrame> Frames { get; } = new();
+    }
 
     private sealed class CandidateState
     {
@@ -1640,6 +2283,22 @@ internal sealed class GameMatchTickHook : IDisposable
         public int EpochResetFirstTick;
         public int EpochResetMaxTick;
         public string? MatchDate;
+        public nint ProbedHomeTeam;
+        public nint ProbedAwayTeam;
+        public long LastIdentityProbeTimestamp;
+        public bool HomeManagerReadable;
+        public bool AwayManagerReadable;
+        public uint HomeManagerRttiOffset;
+        public uint AwayManagerRttiOffset;
+        public ManagerKind HomeManagerKind;
+        public ManagerKind AwayManagerKind;
+        public uint? HomeManagerUid;
+        public uint? AwayManagerUid;
+        public bool HomeTeamUidReadable;
+        public bool AwayTeamUidReadable;
+        public uint HomeDbTeamUid;
+        public uint AwayDbTeamUid;
+        public string? LastReportedEligibilityReason;
     }
 
     private sealed class NativeMomentumCaptureState
@@ -1675,6 +2334,306 @@ internal sealed class GameMatchTickHook : IDisposable
                     begin + (SignatureStart + index) * Offsets.MomentumEvent.Size);
             }
         }
+    }
+
+    private void RefreshCandidateIdentity(nint address, CandidateState state, long now)
+    {
+        if (state.IsTerminal || !state.HasActiveRecord ||
+            state.LastSeenTimestamp < now - Stopwatch.Frequency * CandidateRecentSeconds)
+        {
+            return;
+        }
+
+        var record = state.LastActiveRecord;
+        if (state.ProbedHomeTeam != record.HomeTeam || state.ProbedAwayTeam != record.AwayTeam)
+        {
+            ReleasePreLockFrameCache(address);
+            ResetCandidateIdentity(state);
+            state.ProbedHomeTeam = record.HomeTeam;
+            state.ProbedAwayTeam = record.AwayTeam;
+        }
+
+        var managerPair = ClassifyManagerPair(state);
+        var identityComplete = managerPair == ManagerPairClassification.Rejected ||
+                               managerPair == ManagerPairClassification.Eligible &&
+                               state.HomeTeamUidReadable && state.AwayTeamUidReadable;
+        if (identityComplete ||
+            now - state.LastIdentityProbeTimestamp < Stopwatch.Frequency * CandidateIdentityRetryMilliseconds / 1_000)
+        {
+            return;
+        }
+
+        state.LastIdentityProbeTimestamp = now;
+        state.HomeManagerReadable = TryReadManagerIdentity(
+            record.HomeTeam,
+            out _,
+            out state.HomeManagerRttiOffset,
+            out state.HomeManagerKind,
+            out state.HomeManagerUid);
+        state.AwayManagerReadable = TryReadManagerIdentity(
+            record.AwayTeam,
+            out _,
+            out state.AwayManagerRttiOffset,
+            out state.AwayManagerKind,
+            out state.AwayManagerUid);
+        state.HomeTeamUidReadable = TryReadDbTeamUid(record.HomeTeam, out state.HomeDbTeamUid);
+        state.AwayTeamUidReadable = TryReadDbTeamUid(record.AwayTeam, out state.AwayDbTeamUid);
+    }
+
+    private static void ResetCandidateIdentity(CandidateState state)
+    {
+        state.LastIdentityProbeTimestamp = 0;
+        state.HomeManagerReadable = false;
+        state.AwayManagerReadable = false;
+        state.HomeManagerRttiOffset = 0;
+        state.AwayManagerRttiOffset = 0;
+        state.HomeManagerKind = ManagerKind.Unknown;
+        state.AwayManagerKind = ManagerKind.Unknown;
+        state.HomeManagerUid = null;
+        state.AwayManagerUid = null;
+        state.HomeTeamUidReadable = false;
+        state.AwayTeamUidReadable = false;
+        state.HomeDbTeamUid = 0;
+        state.AwayDbTeamUid = 0;
+        state.LastReportedEligibilityReason = null;
+    }
+
+    private static ManagerPairClassification ClassifyManagerPair(CandidateState state)
+    {
+        if (state.HomeManagerKind == ManagerKind.Unsupported ||
+            state.AwayManagerKind == ManagerKind.Unsupported)
+        {
+            return ManagerPairClassification.Rejected;
+        }
+
+        if (state.HomeManagerKind == ManagerKind.Unknown ||
+            state.AwayManagerKind == ManagerKind.Unknown)
+        {
+            return ManagerPairClassification.Pending;
+        }
+
+        return state.HomeManagerKind == ManagerKind.Human ||
+               state.AwayManagerKind == ManagerKind.Human
+            ? ManagerPairClassification.Eligible
+            : ManagerPairClassification.Rejected;
+    }
+
+    private bool TryReadDbTeamUid(nint team, out uint uid)
+    {
+        uid = default;
+        return team != default &&
+               _memoryReader.TryReadPointer(team + Offsets.Team.DbTeam, out var dbTeam) &&
+               dbTeam != default &&
+               _memoryReader.TryReadUInt32(dbTeam + Offsets.DbTeam.Uid, out uid) &&
+               uid != 0;
+    }
+
+    private static string GetEligibilityReason(CandidateState state, long now)
+    {
+        if (state.IsTerminal) return "terminal";
+        if (!state.HasActiveRecord || state.LastActiveRecord.HomeTeam == default ||
+            state.LastActiveRecord.AwayTeam == default ||
+            state.LastActiveRecord.HomeTeam == state.LastActiveRecord.AwayTeam ||
+            state.LastActiveRecord.PlayerCount is 0 or > 64)
+        {
+            return "invalid_shape";
+        }
+
+        var managerPair = ClassifyManagerPair(state);
+        if (managerPair == ManagerPairClassification.Pending)
+        {
+            return "manager_unreadable";
+        }
+        if (managerPair == ManagerPairClassification.Rejected)
+        {
+            return state.HomeManagerKind == ManagerKind.Unsupported ||
+                   state.AwayManagerKind == ManagerKind.Unsupported
+                ? "unsupported_manager"
+                : "no_human_manager";
+        }
+
+        if (!state.HomeTeamUidReadable || !state.AwayTeamUidReadable) return "team_uid_unreadable";
+        if (state.HomeDbTeamUid == state.AwayDbTeamUid) return "same_team_uid";
+        return state.LastAdvanceTimestamp < now - Stopwatch.Frequency * CandidateRecentSeconds
+            ? "stale"
+            : "eligible";
+    }
+
+    private static bool TryGetEligibleFingerprint(
+        CandidateState state,
+        long now,
+        out MatchFingerprint fingerprint)
+    {
+        if (GetEligibilityReason(state, now) != "eligible")
+        {
+            fingerprint = default;
+            return false;
+        }
+
+        fingerprint = new MatchFingerprint(state.HomeDbTeamUid, state.AwayDbTeamUid);
+        return true;
+    }
+
+    private CandidateClassification ClassifyCandidates(long now)
+    {
+        var groups = new Dictionary<MatchFingerprint, List<KeyValuePair<nint, CandidateState>>>();
+        var eligibleCount = 0;
+        foreach (var candidate in _candidates)
+        {
+            if (!TryGetEligibleFingerprint(candidate.Value, now, out var fingerprint)) continue;
+            eligibleCount++;
+            if (!groups.TryGetValue(fingerprint, out var group))
+            {
+                group = new List<KeyValuePair<nint, CandidateState>>();
+                groups.Add(fingerprint, group);
+            }
+            group.Add(candidate);
+        }
+
+        var pairs = new List<CandidatePair>();
+        foreach (var group in groups)
+        {
+            if (group.Value.Count < 2) continue;
+
+            var simulation = group.Value
+                .OrderByDescending(candidate => candidate.Value.LastTick)
+                .ThenBy(candidate => (long)candidate.Key)
+                .First();
+            CandidatePair? best = null;
+            var bestError = int.MaxValue;
+            foreach (var candidate in group.Value)
+            {
+                if (candidate.Key == simulation.Key || !IsLikelyRealtimeAnimated(candidate.Key, now)) continue;
+                var delta = simulation.Value.LastTick - candidate.Value.LastTick;
+                var error = Math.Abs(delta - CandidateExpectedTickDelta);
+                if (error > CandidateTickDeltaTolerance || error >= bestError) continue;
+                bestError = error;
+                best = new CandidatePair(
+                    group.Key,
+                    simulation.Key,
+                    candidate.Key,
+                    simulation.Value.LastTick,
+                    candidate.Value.LastTick,
+                    delta,
+                    CalculateTickRate(candidate.Value, now));
+            }
+
+            if (best.HasValue) pairs.Add(best.Value);
+        }
+
+        return new CandidateClassification(pairs.ToArray(), eligibleCount, groups.Count);
+    }
+
+    private void UpdateCandidateLock(CandidateClassification classification, long now)
+    {
+        if (classification.Pairs.Count != 1)
+        {
+            ResetPendingPair();
+            return;
+        }
+
+        var pair = classification.Pairs[0];
+        var samePendingPair = _locatorState == LocatorState.Confirming &&
+                              _pendingFingerprint == pair.Fingerprint &&
+                              _pendingSimulation == pair.Simulation &&
+                              _pendingAnimated == pair.Animated;
+        if (!samePendingPair)
+        {
+            _locatorState = LocatorState.Confirming;
+            _pendingFingerprint = pair.Fingerprint;
+            _pendingSimulation = pair.Simulation;
+            _pendingAnimated = pair.Animated;
+            _pendingConfirmationCount = 1;
+            _pendingFirstTimestamp = now;
+        }
+        else
+        {
+            _pendingConfirmationCount++;
+        }
+
+        QueueDiagnostic(DiagnosticSeverity.Debug,
+            $"GAME_MATCH pair confirmation: fingerprint={pair.Fingerprint}, " +
+            $"simulation={FormatPointer(pair.Simulation)} simulationTick={pair.SimulationTick}, " +
+            $"animated={FormatPointer(pair.Animated)} animatedTick={pair.AnimatedTick}, " +
+            $"delta={pair.TickDelta}, animatedRate={pair.AnimatedTicksPerSecond:0.0}, " +
+            $"confirmation={_pendingConfirmationCount}/{CandidatePairConfirmationCount}.");
+
+        if (_pendingConfirmationCount < CandidatePairConfirmationCount) return;
+        LockAnimatedCandidate(pair, now);
+    }
+
+    private void LockAnimatedCandidate(CandidatePair pair, long now)
+    {
+        _locatorState = LocatorState.Locked;
+        _stableSimulation = pair.Simulation;
+        _stableAnimated = pair.Animated;
+        _lastLockedAnimationTerminalProbeTimestamp = now;
+        var hasCachedPreLockFrames = _preLockFrames.TryGetValue(pair.Animated, out var preLockCache) &&
+                                     preLockCache.Frames.Count > 0;
+        lock (_nativeMomentumGate)
+        {
+            // If no early frame survived candidate filtering, replay the native
+            // event vector on the first selected callback. Cached frames already
+            // contain those events and must not be followed by a duplicate replay.
+            if (!hasCachedPreLockFrames)
+            {
+                _nativeMomentumStates.Remove(pair.Animated);
+            }
+        }
+        Interlocked.Exchange(ref _selectedAnimated, (long)pair.Animated);
+        _timeline.Begin(pair.Animated);
+        TryCapturePlayerMetadata(pair.Animated);
+        var committedPreLock = (
+            Cached: 0,
+            Appended: 0,
+            FirstTick: -1,
+            LastTick: -1,
+            PitchBackfilled: 0,
+            PitchSourceTick: -1);
+        (int Candidates, int Frames) releasedPreLock;
+        try
+        {
+            committedPreLock = CommitPreLockFrames(pair.Animated);
+        }
+        finally
+        {
+            releasedPreLock = ReleaseExcludedPreLockFrameCaches(pair.Animated);
+        }
+
+        _candidates.TryGetValue(pair.Animated, out var animatedState);
+        var observationMilliseconds = animatedState is null
+            ? 0
+            : (now - animatedState.FirstSeenTimestamp) * 1_000 / Stopwatch.Frequency;
+        var confirmationMilliseconds = Math.Max(0, now - _pendingFirstTimestamp) * 1_000 / Stopwatch.Frequency;
+        QueueDiagnostic(DiagnosticSeverity.Info,
+            $"GAME_MATCH animation locked: address={FormatPointer(pair.Animated)}, " +
+            $"simulation={FormatPointer(pair.Simulation)}, fingerprint={pair.Fingerprint}, " +
+            $"tick={pair.AnimatedTick}, simulationTick={pair.SimulationTick}, delta={pair.TickDelta}, " +
+            $"managers={FormatManagerPair(animatedState)}, " +
+            $"confirmation={CandidatePairConfirmationCount}/{CandidatePairConfirmationCount}, " +
+            $"confirmationMs={confirmationMilliseconds}, observationMs={observationMilliseconds}.");
+        var committedTickRange = committedPreLock.Cached == 0
+            ? "none"
+            : $"{committedPreLock.FirstTick}-{committedPreLock.LastTick}";
+        QueueDiagnostic(DiagnosticSeverity.Info,
+            $"GAME_MATCH pre-lock frames committed: address={FormatPointer(pair.Animated)}, " +
+            $"cached={committedPreLock.Cached}, appended={committedPreLock.Appended}, " +
+            $"tickRange={committedTickRange}, " +
+            $"pitchBackfilled={committedPreLock.PitchBackfilled}, " +
+            $"pitchSourceTick={committedPreLock.PitchSourceTick}, " +
+            $"releasedCandidates={releasedPreLock.Candidates}, releasedFrames={releasedPreLock.Frames}, " +
+            $"remainingCached={Volatile.Read(ref _preLockFrameCount)}.");
+    }
+
+    private void ResetPendingPair()
+    {
+        if (_locatorState == LocatorState.Locked) return;
+        _locatorState = LocatorState.Discovering;
+        _pendingFingerprint = default;
+        _pendingSimulation = default;
+        _pendingAnimated = default;
+        _pendingConfirmationCount = 0;
+        _pendingFirstTimestamp = 0;
     }
 
     private sealed class RawFrameTickComparer : IComparer<RawRealtimeTickFrame>

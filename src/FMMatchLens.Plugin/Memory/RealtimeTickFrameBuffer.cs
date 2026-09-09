@@ -38,6 +38,17 @@ internal sealed class RealtimeTickFrameBuffer
         }
     }
 
+    public int ReadyCount
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _ready.Count;
+            }
+        }
+    }
+
     public bool TryRent(out RawRealtimeTickFrame frame)
     {
         lock (_gate)
@@ -63,6 +74,11 @@ internal sealed class RealtimeTickFrameBuffer
     }
 
     public void ReleaseUnpublished(RawRealtimeTickFrame frame)
+    {
+        Release(frame);
+    }
+
+    public void Release(RawRealtimeTickFrame frame)
     {
         lock (_gate)
         {

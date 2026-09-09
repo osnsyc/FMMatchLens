@@ -60,6 +60,17 @@ internal sealed class GameMatchTickRecordBuffer
         }
     }
 
+    public int Count
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _count;
+            }
+        }
+    }
+
     public bool TryWrite(in GameMatchTickRecord record)
     {
         lock (_sync)
