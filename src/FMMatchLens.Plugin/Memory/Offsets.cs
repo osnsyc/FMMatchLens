@@ -312,8 +312,152 @@ internal static class Offsets
         public const int CommonName = 0x60;
         public const int Nation = 0x68;
         public const int City = 0x80;
+        // uint32 FM date: year = raw >> 16, one-based day-of-year = raw & 0x1FF.
         public const int DateOfBirth = 0x88;
         public const int FullContract = 0xA8;
+
+        // 64-bit player-trait bitfield spanning Person + 0xC0 through Person + 0xC7.
+        public const int Traits = 0xC0;
+        // Bit 0 (+0xC0 bit 0, mask 0x01): Runs With Ball Down Left
+        public const ulong RunsWithBallDownLeft = 1UL << 0;
+        // Bit 1 (+0xC0 bit 1, mask 0x02): Runs With Ball Down Right
+        public const ulong RunsWithBallDownRight = 1UL << 1;
+        // Bit 2 (+0xC0 bit 2, mask 0x04): Runs With Ball Down Center
+        public const ulong RunsWithBallDownCenter = 1UL << 2;
+        // Bit 3 (+0xC0 bit 3, mask 0x08): Gets Into Opposition Area
+        public const ulong GetsIntoOppositionArea = 1UL << 3;
+        // Bit 4 (+0xC0 bit 4, mask 0x10): Moves Into Channels
+        public const ulong MovesIntoChannels = 1UL << 4;
+        // Bit 5 (+0xC0 bit 5, mask 0x20): Gets Forward Whenever Possible
+        public const ulong GetsForwardWheneverPossible = 1UL << 5;
+        // Bit 6 (+0xC0 bit 6, mask 0x40): Plays Short Simple Passes
+        public const ulong PlaysShortSimplePasses = 1UL << 6;
+        // Bit 7 (+0xC0 bit 7, mask 0x80): Tries Killer Balls Often
+        public const ulong TriesKillerBallsOften = 1UL << 7;
+        // Bit 8 (+0xC1 bit 0, mask 0x01): Shoots From Distance
+        public const ulong ShootsFromDistance = 1UL << 8;
+        // Bit 9 (+0xC1 bit 1, mask 0x02): Shoots With Power
+        public const ulong ShootsWithPower = 1UL << 9;
+        // Bit 10 (+0xC1 bit 2, mask 0x04): Places Shots
+        public const ulong PlacesShots = 1UL << 10;
+        // Bit 11 (+0xC1 bit 3, mask 0x08): Curls Ball
+        public const ulong CurlsBall = 1UL << 11;
+        // Bit 12 (+0xC1 bit 4, mask 0x10): Likes To Round Keeper
+        public const ulong LikesToRoundKeeper = 1UL << 12;
+        // Bit 13 (+0xC1 bit 5, mask 0x20): Likes To Try To Break Offside Trap
+        public const ulong LikesToTryToBreakOffsideTrap = 1UL << 13;
+        // Bit 14 (+0xC1 bit 6, mask 0x40): Uses Outside Of Foot
+        public const ulong UsesOutsideOfFoot = 1UL << 14;
+        // Bit 15 (+0xC1 bit 7, mask 0x80): Marks Opponent Tightly
+        public const ulong MarksOpponentTightly = 1UL << 15;
+        // Bit 16 (+0xC2 bit 0, mask 0x01): Winds Up Opponents
+        public const ulong WindsUpOpponents = 1UL << 16;
+        // Bit 17 (+0xC2 bit 1, mask 0x02): Argues With Officials
+        public const ulong ArguesWithOfficials = 1UL << 17;
+        // Bit 18 (+0xC2 bit 2, mask 0x04): Plays With Back To Goal
+        public const ulong PlaysWithBackToGoal = 1UL << 18;
+        // Bit 19 (+0xC2 bit 3, mask 0x08): Comes Deep To Get Ball
+        public const ulong ComesDeepToGetBall = 1UL << 19;
+        // Bit 20 (+0xC2 bit 4, mask 0x10): Plays One-Twos
+        public const ulong PlaysOneTwos = 1UL << 20;
+        // Bit 21 (+0xC2 bit 5, mask 0x20): Likes To Lob Keeper
+        public const ulong LikesToLobKeeper = 1UL << 21;
+        // Bit 22 (+0xC2 bit 6, mask 0x40): Dictates Tempo
+        public const ulong DictatesTempo = 1UL << 22;
+        // Bit 23 (+0xC2 bit 7, mask 0x80): Attempts Overhead Kicks
+        public const ulong AttemptsOverheadKicks = 1UL << 23;
+        // Bit 24 (+0xC3 bit 0, mask 0x01): Looks For Pass Rather Than Attempting To Score
+        public const ulong LooksForPassRatherThanAttemptingToScore = 1UL << 24;
+        // Bit 25 (+0xC3 bit 1, mask 0x02): Plays No Through Balls
+        public const ulong PlaysNoThroughBalls = 1UL << 25;
+        // Bit 26 (+0xC3 bit 2, mask 0x04): Stops Play
+        public const ulong StopsPlay = 1UL << 26;
+        // Bit 27 (+0xC3 bit 3, mask 0x08): Knocks Ball Past Opponent
+        public const ulong KnocksBallPastOpponent = 1UL << 27;
+        // Bit 28 (+0xC3 bit 4, mask 0x10): Moves Ball To Right Foot Before Dribble Attempt
+        public const ulong MovesBallToRightFootBeforeDribbleAttempt = 1UL << 28;
+        // Bit 29 (+0xC3 bit 5, mask 0x20): Moves Ball To Left Foot Before Dribble Attempt
+        public const ulong MovesBallToLeftFootBeforeDribbleAttempt = 1UL << 29;
+        // Bit 30 (+0xC3 bit 6, mask 0x40): Dwells On Ball
+        public const ulong DwellsOnBall = 1UL << 30;
+        // Bit 31 (+0xC3 bit 7, mask 0x80): Arrives Late In Opponents' Area
+        public const ulong ArrivesLateInOpponentsArea = 1UL << 31;
+        // Bit 32 (+0xC4 bit 0, mask 0x01): Tries To Play Way Out Of Trouble
+        public const ulong TriesToPlayWayOutOfTrouble = 1UL << 32;
+        // Bit 33 (+0xC4 bit 1, mask 0x02): Stays Back At All Times
+        public const ulong StaysBackAtAllTimes = 1UL << 33;
+        // Bit 34 (+0xC4 bit 2, mask 0x04): Avoids Using Weaker Foot
+        public const ulong AvoidsUsingWeakerFoot = 1UL << 34;
+        // Bit 35 (+0xC4 bit 3, mask 0x08): Tries Tricks
+        public const ulong TriesTricks = 1UL << 35;
+        // Bit 36 (+0xC4 bit 4, mask 0x10): Tries Long Range Free Kicks
+        public const ulong TriesLongRangeFreeKicks = 1UL << 36;
+        // Bit 37 (+0xC4 bit 5, mask 0x20): Dives Into Tackles
+        public const ulong DivesIntoTackles = 1UL << 37;
+        // Bit 38 (+0xC4 bit 6, mask 0x40): Does Not Dive Into Tackles
+        public const ulong DoesNotDiveIntoTackles = 1UL << 38;
+        // Bit 39 (+0xC4 bit 7, mask 0x80): Cuts Inside From Both Wings
+        public const ulong CutsInsideFromBothWings = 1UL << 39;
+        // Bit 40 (+0xC5 bit 0, mask 0x01): Hugs Line
+        public const ulong HugsLine = 1UL << 40;
+        // Bit 41 (+0xC5 bit 1, mask 0x02): Gets Crowd Going
+        public const ulong GetsCrowdGoing = 1UL << 41;
+        // Bit 42 (+0xC5 bit 2, mask 0x04): Tries First Time Shots
+        public const ulong TriesFirstTimeShots = 1UL << 42;
+        // Bit 43 (+0xC5 bit 3, mask 0x08): Tries Long Range Passes
+        public const ulong TriesLongRangePasses = 1UL << 43;
+        // Bit 44 (+0xC5 bit 4, mask 0x10): Likes Ball Played Into Feet
+        public const ulong LikesBallPlayedIntoFeet = 1UL << 44;
+        // Bit 45 (+0xC5 bit 5, mask 0x20): Hits Free Kick With Power
+        public const ulong HitsFreeKickWithPower = 1UL << 45;
+        // Bit 46 (+0xC5 bit 6, mask 0x40): Likes To Beat Man Repeatedly
+        public const ulong LikesToBeatManRepeatedly = 1UL << 46;
+        // Bit 47 (+0xC5 bit 7, mask 0x80): Likes To Switch Ball To Other Flank
+        public const ulong LikesToSwitchBallToOtherFlank = 1UL << 47;
+        // Bit 48 (+0xC6 bit 0, mask 0x01): Unknown / undefined
+        public const ulong UnknownTraitBit48 = 1UL << 48;
+        // Bit 49 (+0xC6 bit 1, mask 0x02): Unknown / undefined
+        public const ulong UnknownTraitBit49 = 1UL << 49;
+        // Bit 50 (+0xC6 bit 2, mask 0x04): Possesses Long Flat Throw
+        public const ulong PossessesLongFlatThrow = 1UL << 50;
+        // Bit 51 (+0xC6 bit 3, mask 0x08): Runs With Ball Often
+        public const ulong RunsWithBallOften = 1UL << 51;
+        // Bit 52 (+0xC6 bit 4, mask 0x10): Runs With Ball Rarely
+        public const ulong RunsWithBallRarely = 1UL << 52;
+        // Bit 53 (+0xC6 bit 5, mask 0x20): Unknown / undefined
+        public const ulong UnknownTraitBit53 = 1UL << 53;
+        // Bit 54 (+0xC6 bit 6, mask 0x40): Does Not Move Into Channels
+        public const ulong DoesNotMoveIntoChannels = 1UL << 54;
+        // Bit 55 (+0xC6 bit 7, mask 0x80): Uses Long Throw To Start Counter Attacks
+        public const ulong UsesLongThrowToStartCounterAttacks = 1UL << 55;
+        // Bit 56 (+0xC7 bit 0, mask 0x01): Refrains From Taking Long Shots
+        public const ulong RefrainsFromTakingLongShots = 1UL << 56;
+        // Bit 57 (+0xC7 bit 1, mask 0x02): Cuts Inside From Left Wing
+        public const ulong CutsInsideFromLeftWing = 1UL << 57;
+        // Bit 58 (+0xC7 bit 2, mask 0x04): Cuts Inside From Right Wing
+        public const ulong CutsInsideFromRightWing = 1UL << 58;
+        // Bit 59 (+0xC7 bit 3, mask 0x08): Crosses Early
+        public const ulong CrossesEarly = 1UL << 59;
+        // Bit 60 (+0xC7 bit 4, mask 0x10): Brings Ball Out Of Defense
+        public const ulong BringsBallOutOfDefense = 1UL << 60;
+        // Bit 61 (+0xC7 bit 5, mask 0x20): Unknown / undefined
+        public const ulong UnknownTraitBit61 = 1UL << 61;
+        // Bit 62 (+0xC7 bit 6, mask 0x40): Unknown / undefined
+        public const ulong UnknownTraitBit62 = 1UL << 62;
+        // Bit 63 (+0xC7 bit 7, mask 0x80): Plays Ball With Feet
+        public const ulong PlaysBallWithFeet = 1UL << 63;
+
+        public const int InternationalApps = 0x134;  //byte
+        public const int InternationalGoals = 0x136; //byte
+        public const int YouthApps = 0x138;          //byte
+        public const int YouthGoals = 0x13A;         //byte
+    }
+
+    public static class Nation
+    {
+        public const int Uid = 0x0C;
+        public const int NationName = 0x18;
+        public const int NationalityName = 0x30;
     }
 
     public static class FullContract
@@ -386,8 +530,10 @@ internal static class Offsets
         public const int Composure = 0x193;
         public const int Concentration = 0x194;
         public const int Height = 0x22E;
-        public const int GuideValueGbp = 0x234;
-        public const int TransferValue = 0x238;
+        // 1 Ectomorph 2 Ecto-Mesomorph 3 Mesomorph 4 Meso-Endomorph 5 Endomorph
+        public const int BodyType = 0x230;
+        public const int GuideValueGbp = 0x234; //u32
+        public const int TransferValue = 0x238; //u32
         public const int Condition = 0x258;
         public const int CurrentReputation = 0x260;
         public const int CurrentAbility = 0x264;
@@ -409,7 +555,8 @@ internal static class Offsets
         public const int EventTimestamp = 0x78;
         public const int RatingTimes100 = 0x82;
         public const int TeamSideUnconfirmed = 0x87;
-        // public const int InjuryStateOrSeverityCandidate = 0x88; // 255 health, 13 slight injury
+        // 255 health, 13 slight injury, 10 knee injury, 8 5w-6w injury, 11 foot injury
+        // public const int InjuryStateOrSeverityCandidate = 0x88;
         public const int OverallPhysicalCondition = 0x89;
         public const int MatchSharpness = 0x8A;
         public const int Goals = 0x8B;
