@@ -3,6 +3,24 @@
 
 This file records the project's important changes. Version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [0.2.2] - 2026-09-10
+
+### Added
+
+- Added team-manager metadata, including manager UID, name, and human-control status, to the realtime API, score-header details, and archive format 2.3 while retaining compatibility with older 2.x archives.
+- Added adaptive home and away team-color selection from club logo's background, foreground, and outline colors, with duplicate removal, OKLab color-distance filtering, and separate light- and dark-theme combinations.
+
+### Changed
+
+- Reworked match-instance discovery to require complete manager classification before candidate pairing and to support both human-vs-AI and human-vs-human matches.
+- Switched player and event identity to the unique `Person.Uid`, with slot-based fallback identities when a UID cannot be read and compatibility handling for legacy archive references.
+- Centralized repeated frontend colors in the theme palette and aligned formations, heatmaps, charts, timelines, squad panels, tactical markers, menus, and controls across light and dark themes.
+
+### Fixed
+
+- Preserved pre-lock match frames across pauses and transient memory-read failures so the opening phase is restored once the correct match instance is locked.
+- Prevented duplicate non-unique legacy player-stat IDs from corrupting metadata dictionaries or linking events to the wrong player.
+
 ## [0.2.1] - 2026-09-08
 
 ### Added
@@ -66,7 +84,8 @@ This file records the project's important changes. Version numbers follow [Seman
 - Two plugin logging modes: release and debug.
 - Centralized project metadata, CI checks, and an automated tag-based release pipeline.
 
-[Unreleased]: https://github.com/osnsyc/FMMatchLens/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/osnsyc/FMMatchLens/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/osnsyc/FMMatchLens/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/osnsyc/FMMatchLens/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/osnsyc/FMMatchLens/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/osnsyc/FMMatchLens/compare/v0.1.0...v0.1.1
