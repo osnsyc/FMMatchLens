@@ -148,10 +148,10 @@ export function MatchStatsPanel({
     useState<StatGroup>("all")
 
   const homeColor =
-    match.home.color ?? "#6cabdd"
+    match.home.color ?? "var(--team-home-fallback)"
 
   const awayColor =
-    match.away.color ?? "#ef0107"
+    match.away.color ?? "var(--team-away-fallback)"
 
   const activeRows =
     groups.find(

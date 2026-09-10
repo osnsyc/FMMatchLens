@@ -100,7 +100,11 @@ export function FormationPitch({ match }: FormationPitchProps) {
   const activeTimelineItemRef = useRef<HTMLDivElement | null>(null)
   const matchKeyRef = useRef("")
   const formationSeedKeyRef = useRef("")
-  const teamColor = match[side].color ?? (side === "home" ? "#6cabdd" : "#ef0107")
+  const teamColor =
+    match[side].color ??
+    (side === "home"
+      ? "var(--team-home-fallback)"
+      : "var(--team-away-fallback)")
   const matchKey = match.matchId
     ?? `${match.home.clubUid ?? match.home.uid ?? match.home.name}:${match.away.clubUid ?? match.away.uid ?? match.away.name}`
   const formationSnapshots = useMemo(

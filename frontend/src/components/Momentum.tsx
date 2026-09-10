@@ -59,8 +59,8 @@ const momentumYTicks = [-1, -0.5, 0, 0.5, 1]
 export function Momentum({ match }: MomentumProps) {
   const { t } = useTranslation()
   const [mode, setMode] = useState<MomentumMode>("line")
-  const homeColor = match.home.color ?? "#6cabdd"
-  const awayColor = match.away.color ?? "#ef0107"
+  const homeColor = match.home.color ?? "var(--team-home-fallback)"
+  const awayColor = match.away.color ?? "var(--team-away-fallback)"
   const nativeBarPoints = useMemo(() => buildNativeMomentum(match.momentum), [match.momentum])
   const hasNativeMomentum = nativeBarPoints.length > 0
   const minutePoints = useMemo(() => buildLineMomentum(match), [match])

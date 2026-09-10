@@ -20,8 +20,8 @@ function initials(name: string) {
 export function ScoreHeader({ match }: { match: MatchSnapshot }) {
   const { t, i18n } = useTranslation()
   const currentLanguage: SupportedLanguage = i18n.language === "en" ? "en" : "zh-CN"
-  const homeColor = match.home.color ?? "#6cabdd"
-  const awayColor = match.away.color ?? "#ef0107"
+  const homeColor = match.home.color ?? "var(--team-home-fallback)"
+  const awayColor = match.away.color ?? "var(--team-away-fallback)"
 
   const handleLanguageChange = (value: string | null) => {
     if (value === "en" || value === "zh-CN") {

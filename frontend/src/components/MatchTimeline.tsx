@@ -572,7 +572,7 @@ export function MatchTimeline({
           <EventRail
             events={homeEvents}
             side="home"
-            color={match.home.color ?? "#6cabdd"}
+            color={match.home.color ?? "var(--team-home-fallback)"}
             match={match}
             frames={frames}
             replaying={replaying}
@@ -608,7 +608,7 @@ export function MatchTimeline({
           <EventRail
             events={awayEvents}
             side="away"
-            color={match.away.color ?? "#ef0107"}
+            color={match.away.color ?? "var(--team-away-fallback)"}
             match={match}
             frames={frames}
             replaying={replaying}
@@ -768,7 +768,7 @@ function TimelineDetailIcon({
         stroke="currentColor"
         strokeWidth={1.5}
         aria-hidden="true"
-        className="size-3.5 shrink-0 text-red-500 dark:text-red-400"
+        className="size-3.5 shrink-0 text-status-negative"
       />
     )
   }
@@ -790,7 +790,7 @@ function TimelineDetailIcon({
         icon={ArrowDataTransferHorizontalIcon}
         strokeWidth={3}
         aria-hidden="true"
-        className={`size-3.5 shrink-0 ${row === "primary" ? "text-emerald-400" : "text-rose-400"}`}
+        className={`size-3.5 shrink-0 ${row === "primary" ? "text-status-positive" : "text-status-negative"}`}
       />
     )
   }
@@ -798,7 +798,7 @@ function TimelineDetailIcon({
   return (
     <span
       aria-hidden="true"
-      className={`size-2.5 shrink-0 rounded-[2px] ${event.type === "red_card" ? "bg-red-500" : "bg-yellow-400"}`}
+      className={`size-2.5 shrink-0 rounded-[2px] ${event.type === "red_card" ? "bg-status-negative" : "bg-status-warning"}`}
     />
   )
 }
@@ -811,7 +811,7 @@ function EventIcon({ event, color }: { event: TimelineEvent; color: string }) {
         stroke="currentColor"
         strokeWidth={1.5}
         aria-hidden="true"
-        className="size-3.5 shrink-0 text-red-500 dark:text-red-400"
+        className="size-3.5 shrink-0 text-status-negative"
       />
     )
   }
@@ -826,7 +826,7 @@ function EventIcon({ event, color }: { event: TimelineEvent; color: string }) {
         icon={ArrowDataTransferHorizontalIcon}
         strokeWidth={3}
         aria-hidden="true"
-        className="size-4 text-emerald-500 dark:text-emerald-400"
+        className="size-4 text-status-positive"
       />
     )
   }
@@ -834,7 +834,7 @@ function EventIcon({ event, color }: { event: TimelineEvent; color: string }) {
   return (
     <span
       aria-hidden="true"
-      className={`block rounded-[2px] ${event.type === "red_card" ? "size-3 bg-red-500" : "size-3 bg-yellow-400"}`}
+      className={`block rounded-[2px] ${event.type === "red_card" ? "size-3 bg-status-negative" : "size-3 bg-status-warning"}`}
       style={{ boxShadow: `0 0 0 1px ${color}` }}
     />
   )

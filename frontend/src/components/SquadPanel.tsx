@@ -196,11 +196,11 @@ function ratingClass(
   }
 
   if (rating >= 7.5) {
-    return "text-emerald-500 dark:text-emerald-400"
+    return "text-status-positive"
   }
 
   if (rating < 6.5) {
-    return "text-destructive"
+    return "text-status-negative"
   }
 
   return "text-foreground"
@@ -269,7 +269,10 @@ export function SquadPanel({
   )
 
   const resolvedTeamColor =
-    teamColor ?? "#af78ff"
+    teamColor ??
+    (side === "home"
+      ? "var(--team-home-fallback)"
+      : "var(--team-away-fallback)")
 
   const minutesFor = (
     player: MatchPlayer,
@@ -300,7 +303,7 @@ export function SquadPanel({
         marker: "",
         icon: "own-goal",
         className:
-          "text-red-500 dark:text-red-400",
+          "text-status-negative",
         minutes: minutesFor(
           player,
           "own_goal"
@@ -323,7 +326,7 @@ export function SquadPanel({
         marker: "",
         icon: "sub-on",
         className:
-          "text-emerald-500 dark:text-emerald-400",
+          "text-status-positive",
         minutes: [player.status.subbedOnMinute],
       })
     }
@@ -340,7 +343,7 @@ export function SquadPanel({
         marker: "",
         icon: "sub-off",
         className:
-          "text-destructive",
+          "text-status-negative",
         minutes: [player.status.subbedOffMinute],
       })
     }
@@ -831,8 +834,8 @@ function formatProfileLevel(value?: number) {
 }
 
 function attributeValueClass(value: number) {
-  if (value >= 16) return "text-emerald-500 dark:text-emerald-400"
-  if (value >= 11) return "text-yellow-500 dark:text-yellow-400"
+  if (value >= 16) return "text-status-positive"
+  if (value >= 11) return "text-status-warning"
   if (value >= 6) return "text-foreground"
   return "text-muted-foreground/65"
 }
@@ -1233,8 +1236,8 @@ function TeamStatsDrawer({
             <DrawerTitle className="truncate text-base font-semibold" style={{ color: teamColor }}>{title}</DrawerTitle>
             <DrawerDescription className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
               <span>{t("playerData.summary", { count: players.length })}</span>
-              <span className="inline-flex items-center gap-1"><span className="size-1.5 rounded-full bg-emerald-500" />{t("playerData.teamBest")}</span>
-              <span className="inline-flex items-center gap-1"><span className="size-1.5 rounded-full bg-amber-400" />{t("playerData.matchBest")}</span>
+              <span className="inline-flex items-center gap-1"><span className="size-1.5 rounded-full bg-status-positive" />{t("playerData.teamBest")}</span>
+              <span className="inline-flex items-center gap-1"><span className="size-1.5 rounded-full bg-important-event" />{t("playerData.matchBest")}</span>
             </DrawerDescription>
           </div>
           <DrawerClose render={<Button type="button" variant="ghost" size="icon" className="size-8" aria-label={t("common.close")} />}>
@@ -1389,10 +1392,10 @@ function maxMetricValue(players: MatchPlayer[], field: PlayerMetric) {
 function metricHighlightClass(value: number | undefined, teamMaximum?: number, matchMaximum?: number) {
   if (value == null || value <= 0) return ""
   if (matchMaximum != null && value === matchMaximum) {
-    return "bg-amber-400/15 text-amber-600 dark:text-amber-300"
+    return "bg-important-event/15 text-important-event"
   }
   if (teamMaximum != null && value === teamMaximum) {
-    return "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400"
+    return "bg-status-positive/12 text-status-positive"
   }
   return ""
 }

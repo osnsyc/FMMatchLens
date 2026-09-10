@@ -26,21 +26,29 @@ type Pair = {
   deltaE: number
 }
 
+type TeamColorConfig = {
+  surfaces: Record<ThemeName, Rgb[]>
+  fallbacks: { home: string; away: string }
+}
+
 const MIN_TEAM_DELTA_E = 0.1
 const MIN_GRAPHIC_CONTRAST = 3
 
-let cachedThemeSurfaces: Record<ThemeName, Rgb[]> | undefined
-
-const FALLBACK_HOME = "#6CABDD"
-const FALLBACK_AWAY = "#EF0107"
+let cachedColorConfig: TeamColorConfig | undefined
 
 export function selectTeamThemeColors(
   homeSource?: TeamColorSource,
   awaySource?: TeamColorSource
 ): { home: TeamThemeColors; away: TeamThemeColors } {
-  const themeSurfaces = getThemeSurfaces()
-  const homeCandidates = candidatesFrom(homeSource, FALLBACK_HOME)
-  const awayCandidates = candidatesFrom(awaySource, FALLBACK_AWAY)
+  const colorConfig = getTeamColorConfig()
+  const homeCandidates = candidatesFrom(
+    homeSource,
+    colorConfig.fallbacks.home
+  )
+  const awayCandidates = candidatesFrom(
+    awaySource,
+    colorConfig.fallbacks.away
+  )
   const allPairs = homeCandidates.flatMap((home) =>
     awayCandidates.map((away) => ({
       home,
@@ -62,9 +70,12 @@ export function selectTeamThemeColors(
 
   const light = selectPairForTheme(
     candidatePairs,
-    themeSurfaces.light
+    colorConfig.surfaces.light
   )
-  const dark = selectPairForTheme(candidatePairs, themeSurfaces.dark)
+  const dark = selectPairForTheme(
+    candidatePairs,
+    colorConfig.surfaces.dark
+  )
 
   return {
     home: { light: light.home.color, dark: dark.home.color },
@@ -140,8 +151,8 @@ function selectPairForTheme(pairs: Pair[], surfaces: Rgb[]): Pair {
   return scored[0].pair
 }
 
-function getThemeSurfaces(): Record<ThemeName, Rgb[]> {
-  if (cachedThemeSurfaces) return cachedThemeSurfaces
+function getTeamColorConfig(): TeamColorConfig {
+  if (cachedColorConfig) return cachedColorConfig
 
   const canvas = document.createElement("canvas")
   canvas.width = 1
@@ -175,11 +186,28 @@ function getThemeSurfaces(): Record<ThemeName, Rgb[]> {
     return [background, card]
   }
 
-  cachedThemeSurfaces = {
-    light: readTheme("light"),
-    dark: readTheme("dark"),
+  const rootStyle = getComputedStyle(document.documentElement)
+  cachedColorConfig = {
+    surfaces: {
+      light: readTheme("light"),
+      dark: readTheme("dark"),
+    },
+    fallbacks: {
+      home: rgbToHex(
+        readCssColor(
+          context,
+          rootStyle.getPropertyValue("--team-home-fallback")
+        )
+      ),
+      away: rgbToHex(
+        readCssColor(
+          context,
+          rootStyle.getPropertyValue("--team-away-fallback")
+        )
+      ),
+    },
   }
-  return cachedThemeSurfaces
+  return cachedColorConfig
 }
 
 function readCssColor(
@@ -272,4 +300,10 @@ function hexToRgb(hex: string): Rgb {
     g: (value >>> 8) & 0xff,
     b: value & 0xff,
   }
+}
+
+function rgbToHex({ r, g, b }: Rgb): string {
+  const channel = (value: number) =>
+    Math.round(value).toString(16).padStart(2, "0")
+  return `#${channel(r)}${channel(g)}${channel(b)}`.toUpperCase()
 }

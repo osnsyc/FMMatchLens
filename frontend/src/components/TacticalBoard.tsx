@@ -73,9 +73,9 @@ type Shape =
 type MarkerVariant =
   | "solid"
   | "outline"
-  | "gold"
+  | "important"
   | "dashed"
-  | "white"
+  | "contrast"
   | "double"
 
 type DataMetric = {
@@ -541,10 +541,10 @@ function ShotChainNodes({
                 <span
                   className="pointer-events-none absolute inset-0 flex items-center justify-center text-[7px] font-bold leading-none"
                   style={{
-                    color: hollow ? color : "#fff",
+                    color: hollow ? color : "var(--event-marker-foreground)",
                     textShadow: hollow
                       ? "0 0 3px var(--background)"
-                      : "0 1px 2px rgb(0 0 0 / 65%)",
+                      : "0 1px 2px var(--event-marker-shadow)",
                   }}
                 >
                   {player?.shirtNumber ?? ""}
@@ -623,7 +623,7 @@ const metrics: DataMetric[] = [
     label: "Goals",
     group: "shots",
     shape: "square",
-    variant: "gold",
+    variant: "important",
     scale: 1.1,
   },
 
@@ -650,7 +650,7 @@ const metrics: DataMetric[] = [
     label: "Hit woodwork",
     group: "shots",
     shape: "square",
-    variant: "gold",
+    variant: "important",
     scale: 0.85,
   },
 
@@ -665,25 +665,25 @@ const metrics: DataMetric[] = [
 
   { id: "passesCompleted", label: "Completed passes", group: "distribution", shape: "circle", variant: "solid", scale: 0.65 },
   { id: "passesIncomplete", label: "Incomplete passes", group: "distribution", shape: "circle", variant: "outline", scale: 0.65 },
-  { id: "keyPasses", label: "Key passes", group: "distribution", shape: "circle", variant: "gold", scale: 0.8 },
+  { id: "keyPasses", label: "Key passes", group: "distribution", shape: "circle", variant: "important", scale: 0.8 },
   { id: "crossesCompleted", label: "Completed crosses", group: "distribution", shape: "circle", variant: "double", scale: 0.8 },
   { id: "crossesIncomplete", label: "Incomplete crosses", group: "distribution", shape: "circle", variant: "dashed", scale: 0.8 },
 
   { id: "tacklesWon", label: "Tackles won", group: "defensive", shape: "triangle", variant: "solid", scale: 0.8 },
   { id: "tacklesLost", label: "Tackles lost", group: "defensive", shape: "triangle", variant: "outline", scale: 0.8 },
-  { id: "aerialsWon", label: "Aerial duels won", group: "defensive", shape: "triangle", variant: "white", scale: 0.8 },
+  { id: "aerialsWon", label: "Aerial duels won", group: "defensive", shape: "triangle", variant: "contrast", scale: 0.8 },
   { id: "aerialsLost", label: "Aerial duels lost", group: "defensive", shape: "triangle", variant: "dashed", scale: 0.8 },
 
   { id: "interceptions", label: "Interceptions", group: "defensive", shape: "triangle", variant: "double", scale: 0.8 },
-  { id: "clearances", label: "Clearances", group: "defensive", shape: "triangle", variant: "gold", scale: 0.8 },
+  { id: "clearances", label: "Clearances", group: "defensive", shape: "triangle", variant: "important", scale: 0.8 },
   { id: "defensiveBlocks", label: "Defensive blocks", group: "defensive", shape: "triangle", variant: "dashed", scale: 0.8 },
   { id: "dribblesCompleted", label: "Completed dribbles", group: "possession", shape: "triangle-down", variant: "solid", scale: 0.8 },
-  { id: "possessionGained", label: "Possession gained", group: "possession", shape: "triangle-down", variant: "gold", scale: 0.8 },
+  { id: "possessionGained", label: "Possession gained", group: "possession", shape: "triangle-down", variant: "important", scale: 0.8 },
   { id: "possessionLost", label: "Possession lost", group: "possession", shape: "triangle-down", variant: "outline", scale: 0.8 },
-  { id: "touches", label: "Specific touches", group: "possession", shape: "triangle-down", variant: "white", scale: 0.7 },
+  { id: "touches", label: "Specific touches", group: "possession", shape: "triangle-down", variant: "contrast", scale: 0.7 },
 
   { id: "foulsCommitted", label: "Fouls committed", group: "discipline", shape: "pentagon", variant: "dashed", scale: 0.85 },
-  { id: "fouled", label: "Fouled", group: "discipline", shape: "pentagon", variant: "white", scale: 0.85 },
+  { id: "fouled", label: "Fouled", group: "discipline", shape: "pentagon", variant: "contrast", scale: 0.85 },
   { id: "offsides", label: "Offsides", group: "discipline", shape: "pentagon", variant: "outline", scale: 0.85 },
 
   { id: "goalkeeperSavesHeld", label: "Saves held", group: "goalkeeping", shape: "diamond", variant: "solid", scale: 0.9 },
@@ -1157,13 +1157,13 @@ export function TacticalBoard({
               <div className="absolute inset-0">
                 <ShotChainLines
                   chains={visibleShotChains}
-                  homeColor={match.home.color ?? "#6cabdd"}
-                  awayColor={match.away.color ?? "#ef0107"}
+                  homeColor={match.home.color ?? "var(--team-home-fallback)"}
+                  awayColor={match.away.color ?? "var(--team-away-fallback)"}
                 />
                 <TrajectoryArrows
                   points={visiblePoints}
-                  homeColor={match.home.color ?? "#6cabdd"}
-                  awayColor={match.away.color ?? "#ef0107"}
+                  homeColor={match.home.color ?? "var(--team-home-fallback)"}
+                  awayColor={match.away.color ?? "var(--team-away-fallback)"}
                 />
                 {activeSelectedShotId != null && (
                   <ShotChainNodes
@@ -1171,8 +1171,8 @@ export function TacticalBoard({
                     players={match.players}
                     renderedPointIds={renderedPointIds}
                     showNumbers={showNumbers}
-                    homeColor={match.home.color ?? "#6cabdd"}
-                    awayColor={match.away.color ?? "#ef0107"}
+                    homeColor={match.home.color ?? "var(--team-home-fallback)"}
+                    awayColor={match.away.color ?? "var(--team-away-fallback)"}
                   />
                 )}
                 {visiblePoints.map(
@@ -1189,12 +1189,14 @@ export function TacticalBoard({
                       teamColor ??
                       (point.team ===
                       "home"
-                        ? "#6cabdd"
-                        : "#ef0107")
+                        ? "var(--team-home-fallback)"
+                        : "var(--team-away-fallback)")
 
                     const counterpartColor = point.counterpart
                       ? (point.counterpart.team === "home" ? match.home.color : match.away.color) ??
-                        (point.counterpart.team === "home" ? "#6cabdd" : "#ef0107")
+                        (point.counterpart.team === "home"
+                          ? "var(--team-home-fallback)"
+                          : "var(--team-away-fallback)")
                       : undefined
 
                     const hollow =
@@ -1280,12 +1282,12 @@ export function TacticalBoard({
                                       color:
                                         hollow
                                           ? resolvedColor
-                                          : "#fff",
+                                          : "var(--event-marker-foreground)",
 
                                       textShadow:
                                         hollow
                                           ? "0 0 3px var(--background)"
-                                          : "0 1px 2px rgb(0 0 0 / 65%)",
+                                          : "0 1px 2px var(--event-marker-shadow)",
                                     }}
                                   >
                                     {point
@@ -1571,7 +1573,7 @@ function MarkerGlyph({
         <ShapeElement
           shape={shape}
           fill="transparent"
-          stroke="#f6c453"
+          stroke="var(--important-event)"
           strokeWidth={1.8}
         />
 
@@ -1579,7 +1581,7 @@ function MarkerGlyph({
           <ShapeElement
             shape={shape}
             fill={color}
-            stroke="#ffffff"
+            stroke="var(--event-marker-foreground)"
             strokeWidth={1.2}
           />
         </g>
@@ -1629,10 +1631,10 @@ function markerStyle(
         strokeWidth: 2.2,
       }
 
-    case "gold":
+    case "important":
       return {
         fill: color,
-        stroke: "#f6c453",
+        stroke: "var(--important-event)",
         strokeWidth: 2,
       }
 
@@ -1645,10 +1647,10 @@ function markerStyle(
           "3 1.8",
       }
 
-    case "white":
+    case "contrast":
       return {
         fill: color,
-        stroke: "#f4f0ff",
+        stroke: "var(--event-contrast)",
         strokeWidth: 2,
       }
 

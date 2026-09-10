@@ -46,7 +46,9 @@ export function ZonePanel({ match }: ZonePanelProps) {
   const [pitchSize, setPitchSize] = useState({ width: 0, height: 0 })
   const teamColor =
     match[selectedTeam].color ??
-    (selectedTeam === "home" ? "#6cabdd" : "#ef0107")
+    (selectedTeam === "home"
+      ? "var(--team-home-fallback)"
+      : "var(--team-away-fallback)")
 
   const teamPlayers = useMemo(
     () => match.players.filter((player) => player.team === selectedTeam),
