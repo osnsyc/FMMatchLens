@@ -15,7 +15,7 @@ import { playerPositionLabels } from "@/types/match"
 const magic = "FMLENS2\0"
 const archiveStructureMajor = 2
 const firstSupportedStructureMinor = 1
-const archiveStructureMinor = 3
+const archiveStructureMinor = 4
 const legacy21FramePayloadMarker = 1
 const legacy21BlockStructure = 1
 const metadataRecord = 1
@@ -424,7 +424,7 @@ function readMetadata(payload: Uint8Array, header: ArchiveHeader) {
   let away = readTeamMetadata(reader, strings)
   const playerCount = reader.readVarUint()
   if (playerCount > 255) throw new ArchiveError("元数据球员数量过大")
-  const players = Array.from({ length: playerCount }, () => readPlayerMetadata(reader, strings))
+  const players = Array.from({ length: playerCount }, () => readPlayerMetadata(reader, strings, header.structureMinor))
   if (new Set(players.map((player) => player.slot)).size !== players.length) throw new ArchiveError("元数据包含重复 Slot")
   const playerUids = players.flatMap((player) => player.uid == null ? [] : [player.uid])
   if (new Set(playerUids).size !== playerUids.length) throw new ArchiveError("元数据包含重复球员 UID")
@@ -469,7 +469,7 @@ function readMetadataDelta(payload: Uint8Array, header: ArchiveHeader, previous:
       throw new ArchiveError("Metadata 增量含有无效球员字段")
     }
     if ((flags & 0x01) !== 0) {
-      const player = readPlayerMetadata(reader, strings)
+      const player = readPlayerMetadata(reader, strings, header.structureMinor)
       if (players.some((existing) => existing.slot === player.slot)) throw new ArchiveError("Metadata 增量重复添加球员 Slot")
       if (player.uid != null && players.some((existing) => existing.uid === player.uid)) throw new ArchiveError("Metadata 增量重复添加球员 UID")
       players.push(player)
@@ -524,6 +524,7 @@ function readManagerMetadata(reader: ArchiveBufferReader, strings: Array<string 
 function readPlayerMetadata(
   reader: ArchiveBufferReader,
   strings: Array<string | undefined>,
+  structureMinor: number,
 ): RealtimePlayerMetadata {
   const slot = reader.readVarUint()
   const playerId = reader.readVarInt()
@@ -540,7 +541,7 @@ function readPlayerMetadata(
   const commonName = readStringId(reader, strings)
   const displayName = readStringId(reader, strings) ?? `Player ${playerId}`
   const portraitPath = readStringId(reader, strings)
-  const profile = readProfile(reader)
+  const profile = readProfile(reader, structureMinor)
   const attributes = readAttributes(reader, strings)
   return { slot, playerId, uid, team: teamRaw === 1 ? "away" : "home", shirtNumber, position, positionFamiliarities, inPossession, outOfPossession,
     firstName, secondName, commonName, displayName, portraitPath, profile, attributes }
@@ -559,10 +560,21 @@ function readAssignment(reader: ArchiveBufferReader, strings: Array<string | und
   }
 }
 
-function readProfile(reader: ArchiveBufferReader): PlayerProfile | undefined {
+function readProfile(reader: ArchiveBufferReader, structureMinor: number): PlayerProfile | undefined {
   if (!reader.readBoolean()) return undefined
-  return { weeklyWage: readNullableInt(reader), heightCm: readNullableInt(reader), condition: readNullableInt(reader),
+  const profile: PlayerProfile = { weeklyWage: readNullableInt(reader), heightCm: readNullableInt(reader), condition: readNullableInt(reader),
     morale: readNullableInt(reader), currentAbility: readNullableInt(reader), potentialAbility: readNullableInt(reader), currentReputation: readNullableInt(reader) }
+  if (structureMinor >= 4) {
+    profile.dateOfBirth = reader.readString() || undefined
+    profile.nationUid = readNullableUint(reader)
+    profile.bodyType = readNullableInt(reader)
+    profile.guideValueGbp = readNullableUint(reader)
+    profile.internationalApps = readNullableInt(reader)
+    profile.internationalGoals = readNullableInt(reader)
+    profile.youthApps = readNullableInt(reader)
+    profile.youthGoals = readNullableInt(reader)
+  }
+  return profile
 }
 
 function readAttributes(reader: ArchiveBufferReader, strings: Array<string | undefined>): PlayerAttributes | undefined {

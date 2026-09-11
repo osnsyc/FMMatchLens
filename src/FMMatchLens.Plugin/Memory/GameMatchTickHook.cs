@@ -971,13 +971,17 @@ internal sealed class GameMatchTickHook : IDisposable
             !_memoryReader.TryReadPointer(homeTeam + Offsets.Team.DbTeam, out var dbTeam) ||
             dbTeam == default ||
             !_memoryReader.TryReadPointer(dbTeam + Offsets.DbTeam.Schedule, out var schedule) ||
-            schedule == default ||
-            !_memoryReader.TryReadUInt32(
-                schedule + Offsets.Schedule.CurrentMatch + Offsets.ScheduleMatch.Date,
-                out var rawDate))
+            schedule == default)
         {
             return null;
         }
+
+        return ReadFmDate(schedule + Offsets.Schedule.CurrentMatch + Offsets.ScheduleMatch.Date);
+    }
+
+    private string? ReadFmDate(nint address)
+    {
+        if (!_memoryReader.TryReadUInt32(address, out var rawDate)) return null;
 
         var year = checked((int)(rawDate >> 16));
         var dayOfYear = checked((int)(rawDate & 0x1FF));
@@ -1122,6 +1126,11 @@ internal sealed class GameMatchTickHook : IDisposable
         }
 
         var actualPlayer = person + Offsets.Person.ActualPlayerDelta;
+        _memoryReader.TryReadPointer(person + Offsets.Person.Nation, out var nation);
+        var bodyType = _memoryReader.TryReadByte(actualPlayer + Offsets.ActualPlayer.BodyType, out var rawBodyType) &&
+                       rawBodyType is >= 1 and <= 5
+            ? rawBodyType
+            : (byte?)null;
         var profile = new PlayerProfile(
             ReadPositiveInt32(fullContract + Offsets.FullContract.WeeklyWage),
             ReadPositiveInt16(actualPlayer + Offsets.ActualPlayer.Height),
@@ -1129,8 +1138,18 @@ internal sealed class GameMatchTickHook : IDisposable
             ReadPositiveInt16(actualPlayer + Offsets.ActualPlayer.Morale),
             ReadPositiveInt16(actualPlayer + Offsets.ActualPlayer.CurrentAbility),
             ReadPositiveInt16(actualPlayer + Offsets.ActualPlayer.PotentialAbility),
-            ReadPositiveInt16(actualPlayer + Offsets.ActualPlayer.CurrentReputation));
-        return profile.WeeklyWage.HasValue || profile.HeightCm.HasValue || profile.Condition.HasValue || profile.Morale.HasValue
+            ReadPositiveInt16(actualPlayer + Offsets.ActualPlayer.CurrentReputation),
+            ReadFmDate(person + Offsets.Person.DateOfBirth),
+            nation == default ? null : ReadUid(nation + Offsets.Nation.Uid),
+            bodyType,
+            ReadOptionalUInt32(actualPlayer + Offsets.ActualPlayer.GuideValueGbp),
+            ReadOptionalByte(person + Offsets.Person.InternationalApps),
+            ReadOptionalByte(person + Offsets.Person.InternationalGoals),
+            ReadOptionalByte(person + Offsets.Person.YouthApps),
+            ReadOptionalByte(person + Offsets.Person.YouthGoals));
+        return profile.WeeklyWage.HasValue || profile.HeightCm.HasValue || profile.Condition.HasValue || profile.Morale.HasValue ||
+               profile.DateOfBirth is not null || profile.NationUid.HasValue || profile.BodyType.HasValue || profile.GuideValueGbp.HasValue ||
+               profile.InternationalApps.HasValue || profile.YouthApps.HasValue
             ? profile
             : null;
     }
@@ -1234,6 +1253,16 @@ internal sealed class GameMatchTickHook : IDisposable
     private uint? ReadUInt32(nint address)
     {
         return _memoryReader.TryReadUInt32(address, out var value) && value != 0 ? value : null;
+    }
+
+    private uint? ReadOptionalUInt32(nint address)
+    {
+        return _memoryReader.TryReadUInt32(address, out var value) ? value : null;
+    }
+
+    private int? ReadOptionalByte(nint address)
+    {
+        return _memoryReader.TryReadByte(address, out var value) ? value : null;
     }
 
     private string? ReadPersonName(nint person, int fieldOffset)

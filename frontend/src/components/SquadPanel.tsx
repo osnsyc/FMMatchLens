@@ -36,6 +36,7 @@ import type {
   TeamSide,
 } from "@/types/match"
 import { playerPositionLabels } from "@/types/match"
+import { nationDisplay } from "@/lib/nations"
 import { shortPlayerName } from "@/lib/player-name"
 
 type SquadPanelProps = {
@@ -707,13 +708,14 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   panelRef: React.RefObject<HTMLElement | null>
   children: React.ReactNode
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [sideOffset, setSideOffset] = useState(8)
   const [open, setOpen] = useState(false)
   const isGoalkeeper = (player.positionFamiliarities?.GK ?? 0) >= 15 || player.position === "GK"
   const attributeColumns = player.attributes
     ? buildAttributeColumns(isGoalkeeper)
     : []
+  const nation = nationDisplay(player.profile?.nationUid, i18n.resolvedLanguage ?? i18n.language)
 
   useEffect(() => {
     if (!open) return
@@ -745,24 +747,39 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
         className="max-w-none bg-transparent p-0 text-card-foreground shadow-none"
       >
         <Card className="w-[38rem] max-w-[min(38rem,calc(100vw-2rem))] gap-0 border border-border/80 py-0 shadow-2xl">
-          <CardHeader className="grid grid-cols-[7rem_minmax(0,1fr)] gap-0 overflow-hidden border-b bg-muted/35 p-0">
-            <Avatar className="row-span-2 h-full w-full rounded-none after:hidden">
+          <CardHeader className="grid h-28 grid-cols-[7rem_minmax(0,1fr)] gap-0 overflow-hidden border-b bg-muted/35 p-0">
+            <Avatar className="h-28 w-28 rounded-none after:hidden">
               {player.portraitUrl && <AvatarImage src={player.portraitUrl} alt={player.name} className="rounded-none object-cover" />}
               <AvatarFallback className="rounded-none bg-transparent text-lg font-bold" style={{ color: teamColor }}>{initials(player.name)}</AvatarFallback>
             </Avatar>
-            <div className="min-w-0 self-center p-3 pb-1">
-              <CardTitle className="truncate text-lg font-bold">{player.name}</CardTitle>
-              <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                <span className="font-semibold" style={{ color: teamColor }}>#{player.shirtNumber ?? "-"}</span>
-                <span>{familiarPosition(player)}</span>
-                {player.uid != null && <span>UID {player.uid}</span>}
+            <div className="grid min-w-0 grid-rows-[auto_1fr]">
+              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_15.5rem] items-center gap-3 px-3 pb-2 pt-3">
+                <div className="min-w-0">
+                  <CardTitle className="truncate text-lg font-bold">{player.name}</CardTitle>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                    <span className="font-semibold" style={{ color: teamColor }}>#{player.shirtNumber ?? "-"}</span>
+                    <span>{familiarPosition(player)}</span>
+                    {player.uid != null && <span>UID {player.uid}</span>}
+                  </div>
+                </div>
+                <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] gap-x-2 border-l border-border/70 pl-3 text-[10px]">
+                  <div className="min-w-0 space-y-1">
+                    <CompactProfileFact label={t("playerProfile.guideValue")} value={formatGuideValue(player.profile?.guideValueGbp)} />
+                    <CompactProfileFact label={t("playerProfile.weeklyWage")} value={formatWage(player.profile?.weeklyWage)} />
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <ProfileValue value={nation ? <span className="inline-flex items-center gap-1"><span aria-hidden="true">{nation.flag}</span>{nation.name}</span> : "-"} />
+                    <ProfileValue value={formatInternationalRecord(player.profile, t)} />
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 self-end p-3 pt-0 text-[11px]">
-              <ProfileFact label={t("playerProfile.weeklyWage")} value={formatWage(player.profile?.weeklyWage)} />
-              <ProfileFact label={t("playerProfile.height")} value={player.profile?.heightCm ? `${player.profile.heightCm} cm` : "-"} />
-              <ProfileFact label={t("playerProfile.overallPhysicalCondition")} value={formatProfileLevel(player.stats.overallPhysicalCondition)} />
-              <ProfileFact label={t("playerProfile.matchSharpness")} value={formatProfileLevel(player.stats.matchSharpness)} />
+              <div className="grid grid-cols-5 content-center gap-x-3 border-t border-border/60 px-3 py-1.5 text-[10px]">
+                <ProfileFact label={t("playerProfile.age")} value={formatAgeAndBirthDate(player.age, player.profile?.dateOfBirth)} />
+                <ProfileFact label={t("playerProfile.bodyType")} value={formatBodyType(player.profile?.bodyType, t)} />
+                <ProfileFact label={t("playerProfile.height")} value={player.profile?.heightCm ? `${player.profile.heightCm} cm` : "-"} />
+                <ProfileFact label={t("playerProfile.overallPhysicalCondition")} value={formatProfileLevel(player.stats.overallPhysicalCondition)} />
+                <ProfileFact label={t("playerProfile.matchSharpness")} value={formatProfileLevel(player.stats.matchSharpness)} />
+              </div>
             </div>
           </CardHeader>
 
@@ -819,12 +836,54 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   previous.player.stats.matchSharpness === next.player.stats.matchSharpness
 )
 
-function ProfileFact({ label, value }: { label: string; value: string }) {
-  return <div className="flex min-w-0 justify-between gap-2"><span className="text-muted-foreground">{label}</span><span className="truncate font-medium tabular-nums">{value}</span></div>
+function ProfileFact({ label, value }: { label: string; value: React.ReactNode }) {
+  return <div className="flex min-w-0 flex-col leading-tight"><span className="truncate text-muted-foreground">{label}</span><span className="mt-0.5 truncate font-medium tabular-nums">{value}</span></div>
+}
+
+function CompactProfileFact({ label, value }: { label: string; value: React.ReactNode }) {
+  return <div className="flex min-w-0 items-center gap-1 leading-tight"><span className="shrink-0 text-muted-foreground">{label}</span><span className="truncate font-medium tabular-nums">{value}</span></div>
+}
+
+function ProfileValue({ value }: { value: React.ReactNode }) {
+  return <div className="truncate font-medium leading-tight tabular-nums">{value}</div>
+}
+
+function formatAgeAndBirthDate(age?: number, dateOfBirth?: string) {
+  if (!dateOfBirth) return "-"
+  return age == null ? dateOfBirth : `${age} (${dateOfBirth})`
+}
+
+function formatBodyType(value: number | undefined, t: ReturnType<typeof useTranslation>["t"]) {
+  return value && value >= 1 && value <= 5
+    ? t(`playerProfile.bodyTypes.${value}`)
+    : "-"
+}
+
+function formatInternationalRecord(profile: MatchPlayer["profile"], t: ReturnType<typeof useTranslation>["t"]) {
+  if ((profile?.internationalApps ?? 0) > 0) {
+    return t("playerProfile.internationalRecordValue", {
+      apps: profile!.internationalApps,
+      goals: profile?.internationalGoals ?? 0,
+    })
+  }
+  if ((profile?.youthApps ?? 0) > 0) {
+    return t("playerProfile.youthInternationalRecordValue", {
+      apps: profile!.youthApps,
+      goals: profile?.youthGoals ?? 0,
+    })
+  }
+  if (profile?.internationalApps === 0 && profile.youthApps === 0) {
+    return t("playerProfile.noInternationalRecord")
+  }
+  return "-"
+}
+
+function formatGuideValue(value?: number) {
+  return value && value > 0 ? `£${(value / 1_000_000).toFixed(1)}M` : "-"
 }
 
 function formatWage(value?: number) {
-  return value && value > 0 ? `£${Math.round(value).toLocaleString()}/w` : "-"
+  return value && value > 0 ? `£${Math.round(value).toLocaleString()}` : "-"
 }
 
 function formatProfileLevel(value?: number) {

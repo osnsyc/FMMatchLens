@@ -498,7 +498,17 @@ internal sealed class RealtimeMatchTimeline
                metadata.Players.All(player =>
                    player.Uid.HasValue &&
                    player.ShirtNumber.HasValue &&
-                   player.Profile is not null &&
+                   player.Profile is
+                   {
+                       DateOfBirth: not null,
+                       NationUid: not null,
+                       BodyType: not null,
+                       GuideValueGbp: not null,
+                       InternationalApps: not null,
+                       InternationalGoals: not null,
+                       YouthApps: not null,
+                       YouthGoals: not null
+                   } &&
                    player.Attributes is not null &&
                    !player.DisplayName.StartsWith("Player ", StringComparison.Ordinal));
     }
@@ -536,7 +546,15 @@ internal sealed class RealtimeMatchTimeline
             incoming.Morale ?? current.Morale,
             incoming.CurrentAbility ?? current.CurrentAbility,
             incoming.PotentialAbility ?? current.PotentialAbility,
-            incoming.CurrentReputation ?? current.CurrentReputation);
+            incoming.CurrentReputation ?? current.CurrentReputation,
+            incoming.DateOfBirth ?? current.DateOfBirth,
+            incoming.NationUid ?? current.NationUid,
+            incoming.BodyType ?? current.BodyType,
+            incoming.GuideValueGbp ?? current.GuideValueGbp,
+            incoming.InternationalApps ?? current.InternationalApps,
+            incoming.InternationalGoals ?? current.InternationalGoals,
+            incoming.YouthApps ?? current.YouthApps,
+            incoming.YouthGoals ?? current.YouthGoals);
     }
 
     private static PlayerAttributes? MergeAttributes(PlayerAttributes? current, PlayerAttributes? incoming)

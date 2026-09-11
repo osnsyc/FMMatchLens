@@ -32,11 +32,24 @@ internal static class ArchiveMetadataCodec
         metadata.Players.Count > 0 && metadata.Players.All(player =>
             player.Uid.HasValue &&
             player.ShirtNumber.HasValue &&
-            player.Profile is not null &&
+            player.Profile is
+            {
+                DateOfBirth: not null,
+                NationUid: not null,
+                BodyType: not null,
+                GuideValueGbp: not null,
+                InternationalApps: not null,
+                InternationalGoals: not null,
+                YouthApps: not null,
+                YouthGoals: not null
+            } &&
             player.Attributes is not null &&
             !string.Equals(player.DisplayName, $"Player {player.PlayerId}", StringComparison.Ordinal));
 
-    public static byte[] Encode(RealtimeMatchMetadata metadata, uint revision)
+    public static byte[] Encode(
+        RealtimeMatchMetadata metadata,
+        uint revision,
+        ushort structureMinor = ArchiveWireFormat.StructureMinor)
     {
         var strings = BuildStringTable(metadata);
         var ids = strings.Select((value, index) => (value, id: index + 1))
@@ -50,7 +63,7 @@ internal static class ArchiveMetadataCodec
         WriteTeam(writer, metadata.Home, ids);
         WriteTeam(writer, metadata.Away, ids);
         ArchiveBinary.WriteVarUInt64(writer, (ulong)metadata.Players.Count);
-        foreach (var player in metadata.Players.OrderBy(item => item.Slot)) WritePlayer(writer, player, ids);
+        foreach (var player in metadata.Players.OrderBy(item => item.Slot)) WritePlayer(writer, player, ids, structureMinor);
         var extensionFlags = (byte)(
             (!string.IsNullOrWhiteSpace(metadata.MatchDate) ? MatchDateExtensionFlag : 0) |
             (metadata.Home.Manager.HasValue || metadata.Away.Manager.HasValue ? TeamManagersExtensionFlag : 0));
@@ -70,7 +83,8 @@ internal static class ArchiveMetadataCodec
     public static (uint Revision, RealtimeMatchMetadata Metadata) Decode(
         ReadOnlyMemory<byte> payload,
         string matchId,
-        long startedUnixMilliseconds)
+        long startedUnixMilliseconds,
+        ushort structureMinor = ArchiveWireFormat.StructureMinor)
     {
         using var stream = new MemoryStream(payload.ToArray(), writable: false);
         using var reader = new BinaryReader(stream, Encoding.UTF8);
@@ -84,7 +98,7 @@ internal static class ArchiveMetadataCodec
         var playerUids = new HashSet<uint>();
         for (var index = 0; index < playerCount; index++)
         {
-            players[index] = ReadPlayer(reader, strings);
+            players[index] = ReadPlayer(reader, strings, structureMinor);
             if (!slots.Add(players[index].Slot)) throw new ArchiveFormatException("duplicate_slot", "Metadata contains a duplicate player slot.");
             if (players[index].Uid is { } uid && !playerUids.Add(uid))
                 throw new ArchiveFormatException("duplicate_player_uid", "Metadata contains a duplicate player UID.");
@@ -177,7 +191,7 @@ internal static class ArchiveMetadataCodec
             if (delta.IsFull)
             {
                 writer.Write(FullPlayerFlag);
-                WritePlayer(writer, delta.Player, ids);
+                WritePlayer(writer, delta.Player, ids, ArchiveWireFormat.StructureMinor);
                 continue;
             }
 
@@ -197,7 +211,8 @@ internal static class ArchiveMetadataCodec
         ReadOnlyMemory<byte> payload,
         RealtimeMatchMetadata previous,
         string matchId,
-        long startedUnixMilliseconds)
+        long startedUnixMilliseconds,
+        ushort structureMinor = ArchiveWireFormat.StructureMinor)
     {
         using var stream = new MemoryStream(payload.ToArray(), writable: false);
         using var reader = new BinaryReader(stream, Encoding.UTF8);
@@ -222,7 +237,7 @@ internal static class ArchiveMetadataCodec
                 throw new ArchiveFormatException("unknown_metadata_delta_field", "Metadata delta contains invalid player fields.");
             if ((flags & FullPlayerFlag) != 0)
             {
-                var player = ReadPlayer(reader, strings);
+                var player = ReadPlayer(reader, strings, structureMinor);
                 if (!players.TryAdd(player.Slot, player))
                     throw new ArchiveFormatException("duplicate_slot", "Metadata delta adds an existing player slot.");
                 continue;
@@ -397,7 +412,11 @@ internal static class ArchiveMetadataCodec
             reader.ReadBoolean());
     }
 
-    private static void WritePlayer(BinaryWriter writer, RealtimePlayerMetadata player, IReadOnlyDictionary<string, int> ids)
+    private static void WritePlayer(
+        BinaryWriter writer,
+        RealtimePlayerMetadata player,
+        IReadOnlyDictionary<string, int> ids,
+        ushort structureMinor)
     {
         ArchiveBinary.WriteVarUInt64(writer, checked((ulong)player.Slot));
         ArchiveBinary.WriteVarInt64(writer, player.PlayerId);
@@ -413,11 +432,14 @@ internal static class ArchiveMetadataCodec
         WriteStringId(writer, player.CommonName, ids);
         WriteStringId(writer, player.DisplayName, ids);
         WriteStringId(writer, player.PortraitPath, ids);
-        WriteProfile(writer, player.Profile);
+        WriteProfile(writer, player.Profile, structureMinor);
         WriteAttributes(writer, player.Attributes, ids);
     }
 
-    private static RealtimePlayerMetadata ReadPlayer(BinaryReader reader, IReadOnlyList<string> strings)
+    private static RealtimePlayerMetadata ReadPlayer(
+        BinaryReader reader,
+        IReadOnlyList<string> strings,
+        ushort structureMinor)
     {
         var slot = checked((int)ArchiveBinary.ReadVarUInt64(reader, 5));
         var playerId = ArchiveBinary.ReadVarInt64(reader);
@@ -433,7 +455,7 @@ internal static class ArchiveMetadataCodec
         var common = ReadStringId(reader, strings);
         var display = ReadStringId(reader, strings) ?? $"Player {playerId}";
         var portrait = ReadStringId(reader, strings);
-        var profile = ReadProfile(reader);
+        var profile = ReadProfile(reader, structureMinor);
         var attributes = ReadAttributes(reader, strings);
         return new RealtimePlayerMetadata(slot, playerId, uid, team, shirt, position, first, second, common, display, portrait, profile, attributes, inPossession, outOfPossession, positionFamiliarities);
     }
@@ -486,7 +508,7 @@ internal static class ArchiveMetadataCodec
             ReadStringId(reader, strings));
     }
 
-    private static void WriteProfile(BinaryWriter writer, PlayerProfile? profile)
+    private static void WriteProfile(BinaryWriter writer, PlayerProfile? profile, ushort structureMinor)
     {
         writer.Write(profile is not null);
         if (profile is null) return;
@@ -497,11 +519,41 @@ internal static class ArchiveMetadataCodec
         WriteNullableInt(writer, profile.CurrentAbility);
         WriteNullableInt(writer, profile.PotentialAbility);
         WriteNullableInt(writer, profile.CurrentReputation);
+        if (structureMinor >= 4)
+        {
+            ArchiveBinary.WriteString(writer, profile.DateOfBirth);
+            WriteNullableUInt(writer, profile.NationUid);
+            WriteNullableInt(writer, profile.BodyType);
+            WriteNullableUInt(writer, profile.GuideValueGbp);
+            WriteNullableInt(writer, profile.InternationalApps);
+            WriteNullableInt(writer, profile.InternationalGoals);
+            WriteNullableInt(writer, profile.YouthApps);
+            WriteNullableInt(writer, profile.YouthGoals);
+        }
     }
 
-    private static PlayerProfile? ReadProfile(BinaryReader reader) => !reader.ReadBoolean() ? null : new PlayerProfile(
-        ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader),
-        ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader));
+    private static PlayerProfile? ReadProfile(BinaryReader reader, ushort structureMinor)
+    {
+        if (!reader.ReadBoolean()) return null;
+        var profile = new PlayerProfile(
+            ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader),
+            ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader));
+        return structureMinor >= 4
+            ? profile with
+            {
+                DateOfBirth = NullIfEmpty(ArchiveBinary.ReadString(reader)),
+                NationUid = ReadNullableUInt(reader),
+                BodyType = ReadNullableInt(reader),
+                GuideValueGbp = ReadNullableUInt(reader),
+                InternationalApps = ReadNullableInt(reader),
+                InternationalGoals = ReadNullableInt(reader),
+                YouthApps = ReadNullableInt(reader),
+                YouthGoals = ReadNullableInt(reader)
+            }
+            : profile;
+    }
+
+    private static string? NullIfEmpty(string value) => string.IsNullOrEmpty(value) ? null : value;
 
     private static void WriteAttributes(BinaryWriter writer, PlayerAttributes? attributes, IReadOnlyDictionary<string, int> ids)
     {

@@ -51,7 +51,11 @@ internal static class ArchiveReader
                     {
                         case ArchiveWriter.MetadataRecord:
                             var metadataPayload = ArchiveBinary.ReadLengthPrefixedPayload(reader, MaxMetadataBytes);
-                            var decodedMetadata = ArchiveMetadataCodec.Decode(metadataPayload, header.MatchId, header.StartedUnixMilliseconds);
+                            var decodedMetadata = ArchiveMetadataCodec.Decode(
+                                metadataPayload,
+                                header.MatchId,
+                                header.StartedUnixMilliseconds,
+                                header.StructureMinor);
                             if (decodedMetadata.Revision <= metadataRevision) throw new ArchiveFormatException("invalid_metadata_revision", "Metadata revisions are not strictly increasing.");
                             metadataRevision = decodedMetadata.Revision;
                             metadata = metadata is null
@@ -76,7 +80,8 @@ internal static class ArchiveReader
                                 deltaPayload,
                                 metadata,
                                 header.MatchId,
-                                header.StartedUnixMilliseconds);
+                                header.StartedUnixMilliseconds,
+                                header.StructureMinor);
                             if (decodedDelta.Revision <= metadataRevision) throw new ArchiveFormatException("invalid_metadata_revision", "Metadata revisions are not strictly increasing.");
                             metadataRevision = decodedDelta.Revision;
                             metadata = decodedDelta.Metadata;

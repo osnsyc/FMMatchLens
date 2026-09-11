@@ -813,7 +813,7 @@ export function toMatchSnapshot(
       stats: toTeamStats(frame.away),
     },
     players: frame.players.map((player) =>
-      toPlayer(player, playerMetadataBySlot.get(player.slot))
+      toPlayer(player, playerMetadataBySlot.get(player.slot), metadata?.matchDate)
     ),
     events: [...events],
     heatmaps,
@@ -1355,12 +1355,15 @@ function toFormationSnapshot(
         positionFamiliarities: details?.positionFamiliarities,
         inPossession: player.inPossession,
         outOfPossession: player.outOfPossession,
+        age: calculateAge(details?.profile?.dateOfBirth, metadata.matchDate),
         isStarter: !player.isSubstitute,
         isOnPitch: player.isOnPitch,
         status: {
           subbedOnMinute: player.subbedOnMinute || undefined,
           subbedOffMinute: player.subbedOffMinute || undefined,
         },
+        profile: details?.profile,
+        attributes: details?.attributes,
         stats: { goals: 0, assists: 0 },
       }
     }),
@@ -1392,7 +1395,8 @@ function mergeFormationEntryIntoMetadata(
 
 function toPlayer(
   player: RealtimePlayer,
-  metadata?: RealtimePlayerMetadata
+  metadata?: RealtimePlayerMetadata,
+  matchDate?: string,
 ): MatchPlayer {
   const uid = metadata?.uid
   return {
@@ -1415,6 +1419,7 @@ function toPlayer(
     inPossession: metadata?.inPossession,
     outOfPossession: metadata?.outOfPossession,
     rating: player.rating > 0 ? player.rating : undefined,
+    age: calculateAge(metadata?.profile?.dateOfBirth, matchDate),
     isStarter: !player.isSubstitute,
     isOnPitch: player.isOnPitch,
     coordinate: {
@@ -1468,6 +1473,24 @@ function toPlayer(
       matchSharpness: player.matchSharpness,
     },
   }
+}
+
+function calculateAge(dateOfBirth?: string, referenceDate?: string): number | undefined {
+  const birth = parseIsoDate(dateOfBirth)
+  const reference = parseIsoDate(referenceDate) ?? new Date()
+  if (!birth || birth > reference) return undefined
+  let age = reference.getUTCFullYear() - birth.getUTCFullYear()
+  if (reference.getUTCMonth() < birth.getUTCMonth() ||
+      (reference.getUTCMonth() === birth.getUTCMonth() && reference.getUTCDate() < birth.getUTCDate())) {
+    age -= 1
+  }
+  return age >= 0 && age <= 120 ? age : undefined
+}
+
+function parseIsoDate(value?: string): Date | undefined {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined
+  const date = new Date(`${value}T00:00:00Z`)
+  return Number.isNaN(date.getTime()) ? undefined : date
 }
 
 function graphicsAssetUrl(

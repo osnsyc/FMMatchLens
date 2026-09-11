@@ -178,6 +178,14 @@ export type PlayerProfile = {
   currentAbility?: number
   potentialAbility?: number
   currentReputation?: number
+  dateOfBirth?: string
+  nationUid?: number
+  bodyType?: number
+  guideValueGbp?: number
+  internationalApps?: number
+  internationalGoals?: number
+  youthApps?: number
+  youthGoals?: number
 }
 
 export type PlayerAttributes = {
@@ -239,6 +247,7 @@ export type MatchPlayer = {
   inPossession?: PlayerTacticalAssignment
   outOfPossession?: PlayerTacticalAssignment
   rating?: number
+  age?: number
   isStarter: boolean
   isOnPitch: boolean
   coordinate?: {
