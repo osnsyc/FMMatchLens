@@ -1,14 +1,14 @@
-import { useId, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
-import { ArrowBigLeftDashIcon, ArrowBigRightDashIcon } from "@hugeicons/core-free-icons"
+import {
+  ArrowBigLeftDashIcon,
+  ArrowBigRightDashIcon,
+} from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
-import {
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -26,13 +26,21 @@ import {
   MenubarSeparator,
   MenubarTrigger,
 } from "@/components/ui/menubar"
+import { PixiTactical } from "@/components/tactical/PixiTactical"
+import type { TacticalHit } from "@/components/tactical/PixiTacticalRenderer"
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
-
+  buildShotChains,
+  buildTacticalScene,
+  groups,
+  initialSelectedMetrics,
+  metricById,
+  metrics,
+  type DataMetric,
+  type MarkerVariant,
+  type Shape,
+  type ShotChain,
+  type TacticalRenderPoint,
+} from "@/components/tactical/tacticalScene"
 import type {
   MatchPlayer,
   MatchSnapshot,
@@ -44,86 +52,6 @@ type TacticalBoardProps = {
   match: MatchSnapshot
 }
 
-/* =========================================================
-   Groups
-   ========================================================= */
-
-type DataGroupId =
-  | "shots"
-  | "distribution"
-  | "defensive"
-  | "possession"
-  | "discipline"
-  | "goalkeeping"
-
-/*
- * Use one shape for each category.
- */
-type Shape =
-  | "square"
-  | "circle"
-  | "triangle"
-  | "triangle-down"
-  | "pentagon"
-  | "diamond"
-
-/*
- * Distinguish metrics within a category through visual variants.
- */
-type MarkerVariant =
-  | "solid"
-  | "outline"
-  | "important"
-  | "dashed"
-  | "contrast"
-  | "double"
-
-type DataMetric = {
-  id: string
-  label: string
-  group: DataGroupId
-  shape: Shape
-  variant: MarkerVariant
-  scale?: number
-
-  /*
-   * Do not constrain metric to keyof PlayerStats. This supports derived values such as:
-   *
-   * passes - passesCompleted
-   * aerials - aerialsWon
-   *
-   * It also remains compatible with future goalkeeper fields.
-   */
-}
-
-type MapPoint = {
-  id: string
-  player?: MatchPlayer
-  receiver?: MatchPlayer
-  team: TeamSide
-  metric: DataMetric
-  value: number
-  x: number
-  y: number
-  anchorX?: number
-  anchorY?: number
-  trajectoryStartX?: number
-  trajectoryStartY?: number
-  trajectoryPoints?: Array<{ x: number; y: number }>
-  endX?: number
-  endY?: number
-  showTrajectory: boolean
-  size: number
-  minute?: number
-  tick?: number
-  displayTick?: number
-  counterpart?: {
-    player?: MatchPlayer
-    team: TeamSide
-    metric: DataMetric
-  }
-}
-
 type HorizontalZone = 0 | 1 | 2
 
 type LaneShare = {
@@ -132,1280 +60,406 @@ type LaneShare = {
   percentage: number
 }
 
-type ShotChain = {
-  id: string
-  shotEventId: string
-  team: TeamSide
-  events: TacticalEventPoint[]
+type HoveredTacticalPoint = {
+  point: TacticalRenderPoint
+  clientX: number
+  clientY: number
 }
 
-const maxShotChainLookbackTicks = 120 // 30 seconds at four native ticks per second.
-const shotChainRestartFlags = 0x08 | 0x10 | 0x20
+const emptyShotChains: readonly ShotChain[] = []
 
-function deduplicateTrajectoryPoints(points: Array<{ x: number; y: number }>) {
-  const unique: Array<{ x: number; y: number }> = []
-  for (const point of points) {
-    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue
-    if (unique.some((existing) => Math.hypot(existing.x - point.x, existing.y - point.y) < 0.01)) continue
-    unique.push(point)
-  }
-  return unique
-}
-
-function dribbleTrajectoryPoints(
-  trajectoryPoints: Array<{ x: number; y: number }> | undefined,
-  startX: number,
-  startY: number,
-  endX: number,
-  endY: number,
-) {
-  return deduplicateTrajectoryPoints(
-    trajectoryPoints && trajectoryPoints.length > 0
-      ? trajectoryPoints
-      : [{ x: startX, y: startY }, { x: endX, y: endY }]
-  )
-}
-
-function smoothTrajectoryPath(points: Array<{ x: number; y: number }>) {
-  if (points.length === 0) return ""
-  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`
-  if (points.length === 2) return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`
-
-  let path = `M ${points[0].x} ${points[0].y}`
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const before = points[Math.max(0, index - 1)]
-    const current = points[index]
-    const next = points[index + 1]
-    const after = points[Math.min(points.length - 1, index + 2)]
-    const control1X = current.x + (next.x - before.x) / 6
-    const control1Y = current.y + (next.y - before.y) / 6
-    const control2X = next.x - (after.x - current.x) / 6
-    const control2Y = next.y - (after.y - current.y) / 6
-    path += ` C ${control1X} ${control1Y} ${control2X} ${control2Y} ${next.x} ${next.y}`
-  }
-  return path
-}
-
-function DribbleTrajectory({
-  anchorX,
-  anchorY,
-  trajectoryStartX,
-  trajectoryStartY,
-  trajectoryPoints,
-  endX,
-  endY,
-  color,
-  markerEnd,
-  strokeWidth,
-  opacity,
-  connectorStrokeWidth,
-  connectorOpacity,
-}: {
-  anchorX?: number
-  anchorY?: number
-  trajectoryStartX?: number
-  trajectoryStartY?: number
-  trajectoryPoints?: Array<{ x: number; y: number }>
-  endX: number
-  endY: number
-  color: string
-  markerEnd: string
-  strokeWidth: number
-  opacity: number
-  connectorStrokeWidth: number
-  connectorOpacity: number
-}) {
-  const startX = trajectoryStartX ?? endX
-  const startY = trajectoryStartY ?? endY
-  const trajectory = dribbleTrajectoryPoints(trajectoryPoints, startX, startY, endX, endY)
-  if (trajectory.length < 2) return null
-
-  const trajectoryStart = trajectory[0]
-  const showConnector = anchorX != null && anchorY != null &&
-    Math.hypot(trajectoryStart.x - anchorX, trajectoryStart.y - anchorY) >= 0.25
-
-  return (
-    <>
-      {showConnector && (
-        <line
-          x1={anchorX}
-          y1={anchorY}
-          x2={trajectoryStart.x}
-          y2={trajectoryStart.y}
-          stroke={color}
-          strokeWidth={connectorStrokeWidth}
-          strokeLinecap="round"
-          strokeDasharray="3 2"
-          vectorEffect="non-scaling-stroke"
-          opacity={connectorOpacity}
-        />
-      )}
-      <path
-        d={smoothTrajectoryPath(trajectory)}
-        fill="none"
-        stroke={color}
-        strokeWidth={strokeWidth}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-        opacity={opacity}
-        markerEnd={markerEnd}
-      />
-    </>
-  )
-}
-
-function TrajectoryArrows({
-  points,
-  homeColor,
-  awayColor,
-}: {
-  points: MapPoint[]
-  homeColor: string
-  awayColor: string
-}) {
-  const markerPrefix = useId().replace(/:/g, "")
-  const arrows = points.filter((point) => {
-    if (!point.showTrajectory || point.endX == null || point.endY == null) return false
-    if (!Number.isFinite(point.endX) || !Number.isFinite(point.endY)) return false
-    if (point.metric.id === "dribblesCompleted" && point.trajectoryPoints?.length) {
-      const trajectory = deduplicateTrajectoryPoints(point.trajectoryPoints)
-      return trajectory.slice(1).some((current, index) =>
-        Math.hypot(current.x - trajectory[index].x, current.y - trajectory[index].y) >= 0.01
-      )
-    }
-    const startX = point.trajectoryStartX ?? point.x
-    const startY = point.trajectoryStartY ?? point.y
-    return Math.hypot(point.endX - startX, point.endY - startY) >= 0.5
-  })
-
-  if (arrows.length === 0) return null
-
-  return (
-    <svg
-      className="pointer-events-none absolute inset-0 z-[7] size-full overflow-visible"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <defs>
-        {(["home", "away"] as const).map((team) => {
-          const color = team === "home" ? homeColor : awayColor
-          return (
-            <marker
-              key={`${markerPrefix}-trajectory-marker-${team}`}
-              id={`${markerPrefix}-trajectory-marker-${team}`}
-              viewBox="0 0 6 6"
-              refX="5.5"
-              refY="3"
-              markerWidth="5"
-              markerHeight="5"
-              orient="auto"
-              markerUnits="strokeWidth"
-            >
-              <path d="M 0 0 L 6 3 L 0 6 Z" fill={color} />
-            </marker>
-          )
-        })}
-      </defs>
-
-      {arrows.map((point) => {
-        const color = point.team === "home" ? homeColor : awayColor
-        const markerEnd = `url(#${markerPrefix}-trajectory-marker-${point.team})`
-        if (point.metric.id === "dribblesCompleted") {
-          return (
-            <DribbleTrajectory
-              key={`trajectory-dribble-${point.id}`}
-              anchorX={point.anchorX}
-              anchorY={point.anchorY}
-              trajectoryStartX={point.trajectoryStartX ?? point.x}
-              trajectoryStartY={point.trajectoryStartY ?? point.y}
-              trajectoryPoints={point.trajectoryPoints}
-              endX={point.endX!}
-              endY={point.endY!}
-              color={color}
-              markerEnd={markerEnd}
-              strokeWidth={1.5}
-              opacity={0.78}
-              connectorStrokeWidth={1.25}
-              connectorOpacity={0.58}
-            />
-          )
-        }
-        const dashed = point.metric.variant === "outline" || point.metric.variant === "dashed"
-        const startX = point.trajectoryStartX ?? point.x
-        const startY = point.trajectoryStartY ?? point.y
-        return (
-          <line
-            key={`trajectory-line-${point.id}`}
-            x1={startX}
-            y1={startY}
-            x2={point.endX}
-            y2={point.endY}
-            stroke={color}
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeDasharray={dashed ? "3 2" : undefined}
-            vectorEffect="non-scaling-stroke"
-            opacity="0.72"
-            markerEnd={markerEnd}
-          />
-        )
-      })}
-    </svg>
-  )
-}
-
-function ShotChainLines({
-  chains,
-  homeColor,
-  awayColor,
-}: {
-  chains: ShotChain[]
-  homeColor: string
-  awayColor: string
-}) {
-  const markerPrefix = useId().replace(/:/g, "")
-  if (chains.length === 0) return null
-
-  return (
-    <svg
-      className="pointer-events-none absolute inset-0 z-[6] size-full overflow-visible"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <defs>
-        {(["home", "away"] as const).map((team) => {
-          const color = team === "home" ? homeColor : awayColor
-          return (
-            <marker
-              key={`${markerPrefix}-shot-chain-marker-${team}`}
-              id={`${markerPrefix}-shot-chain-marker-${team}`}
-              viewBox="0 0 6 6"
-              refX="5.5"
-              refY="3"
-              markerWidth="4"
-              markerHeight="4"
-              orient="auto"
-              markerUnits="strokeWidth"
-            >
-              <path d="M 0 0 L 6 3 L 0 6 Z" fill={color} />
-            </marker>
-          )
-        })}
-      </defs>
-
-      {chains.flatMap((chain) => {
-        const color = chain.team === "home" ? homeColor : awayColor
-        const actions = chain.events.slice(0, -1)
-        const carrySegments = chain.events.slice(0, -1).map((event, index) => {
-          const next = chain.events[index + 1]
-          const fromX = event.endX ?? event.x
-          const fromY = event.endY ?? event.y
-          const nextX = next.trajectoryStartX ?? next.x
-          const nextY = next.trajectoryStartY ?? next.y
-          if (Math.hypot(nextX - fromX, nextY - fromY) < 0.5) return null
-
-          return (
-            <line
-              key={`${chain.id}-carry-${event.id}-${next.id}`}
-              x1={fromX}
-              y1={fromY}
-              x2={nextX}
-              y2={nextY}
-              stroke={color}
-              strokeWidth="1.25"
-              strokeLinecap="round"
-              strokeDasharray="4 3"
-              vectorEffect="non-scaling-stroke"
-              opacity="0.58"
-              markerEnd={`url(#${markerPrefix}-shot-chain-marker-${chain.team})`}
-            />
-          )
-        })
-
-        return [
-          ...actions.map((event) => {
-            if (event.endX == null || event.endY == null) return null
-            const dribble = event.nativeEventType === 34
-            if (dribble) {
-              return (
-                <DribbleTrajectory
-                  key={`${chain.id}-${event.id}`}
-                  anchorX={event.anchorX}
-                  anchorY={event.anchorY}
-                  trajectoryStartX={event.trajectoryStartX ?? event.x}
-                  trajectoryStartY={event.trajectoryStartY ?? event.y}
-                  trajectoryPoints={event.trajectoryPoints}
-                  endX={event.endX}
-                  endY={event.endY}
-                  color={color}
-                  markerEnd={`url(#${markerPrefix}-shot-chain-marker-${chain.team})`}
-                  strokeWidth={1.25}
-                  opacity={0.62}
-                  connectorStrokeWidth={1.1}
-                  connectorOpacity={0.52}
-                />
-              )
-            }
-            const startX = event.trajectoryStartX ?? event.x
-            const startY = event.trajectoryStartY ?? event.y
-            return (
-              <line
-                key={`${chain.id}-${event.id}`}
-                x1={startX}
-                y1={startY}
-                x2={event.endX}
-                y2={event.endY}
-                stroke={color}
-                strokeWidth="1.25"
-                strokeLinecap="round"
-                vectorEffect="non-scaling-stroke"
-                opacity="0.48"
-                markerEnd={`url(#${markerPrefix}-shot-chain-marker-${chain.team})`}
-              />
-            )
-          }),
-          ...carrySegments,
-        ]
-      })}
-    </svg>
-  )
-}
-
-function ShotChainNodes({
-  chains,
-  players,
-  renderedPointIds,
-  showNumbers,
-  homeColor,
-  awayColor,
-}: {
-  chains: ShotChain[]
-  players: MatchPlayer[]
-  renderedPointIds: Set<string>
-  showNumbers: boolean
-  homeColor: string
-  awayColor: string
-}) {
+export function TacticalBoard({ match }: TacticalBoardProps) {
   const { t } = useTranslation()
-  const playerById = new Map(players.map((player) => [player.id, player]))
-  const historicalEvents = new Map<string, TacticalEventPoint>()
-  for (const chain of chains) {
-    for (const event of chain.events.slice(0, -1)) {
-      if (!renderedPointIds.has(event.id)) historicalEvents.set(event.id, event)
-    }
-  }
+  const [showNumbers, setShowNumbers] = useState(true)
+  const [showAttackFocus, setShowAttackFocus] = useState(true)
+  const [selectedShotId, setSelectedShotId] = useState<string | null>(null)
+  const [selectedMetrics, setSelectedMetrics] = useState<
+    Record<string, boolean>
+  >(initialSelectedMetrics)
+  const [hovered, setHovered] = useState<HoveredTacticalPoint | null>(null)
 
-  return [...historicalEvents.values()].map((event) => {
-    const metricIds = event.metricIds ?? [event.metricId]
-    const metricId = metricIds.includes("keyPasses") ? "keyPasses" : event.metricId
-    const metric = metrics.find((candidate) => candidate.id === metricId)
-    if (!metric) return null
-
-    const player = playerById.get(event.playerId)
-    const receiver = event.receiverPlayerId == null
-      ? undefined
-      : playerById.get(event.receiverPlayerId)
-    const color = event.team === "home" ? homeColor : awayColor
-    const size = Math.max(13, 15 * (metric.scale ?? 1))
-    const hollow = metric.variant === "outline" || metric.variant === "dashed"
-    const metricLabel = t(`dataMap.events.${metric.id}`, { defaultValue: metric.label })
-
-    return (
-      <Tooltip
-        key={`shot-chain-node-${event.id}`}
-      >
-        <TooltipTrigger
-          render={
-            <button
-              type="button"
-              className="absolute z-[9] flex -translate-x-1/2 -translate-y-1/2 items-center justify-center outline-none transition-transform hover:z-20 hover:scale-125 focus-visible:z-20 focus-visible:ring-2 focus-visible:ring-ring"
-              style={{
-                left: `${event.x}%`,
-                top: `${event.y}%`,
-                width: `${size}px`,
-                height: `${size}px`,
-              }}
-              aria-label={`${player?.name ?? t("dataMap.unknownPlayer")}, ${metricLabel}`}
-              onClick={(clickEvent) => clickEvent.stopPropagation()}
-            >
-              <MarkerGlyph
-                shape={metric.shape}
-                variant={metric.variant}
-                color={color}
-                size={size}
-              />
-              {showNumbers && size >= 11 && (
-                <span
-                  className="pointer-events-none absolute inset-0 flex items-center justify-center text-[7px] font-bold leading-none"
-                  style={{
-                    color: hollow ? color : "var(--event-marker-foreground)",
-                    textShadow: hollow
-                      ? "0 0 3px var(--background)"
-                      : "0 1px 2px var(--event-marker-shadow)",
-                  }}
-                >
-                  {player?.shirtNumber ?? ""}
-                </span>
-              )}
-            </button>
-          }
-        />
-
-        <TooltipContent>
-          <div className="space-y-1">
-            <div className="font-medium">
-              {player?.name ?? t("dataMap.unknownPlayer")} #{player?.shirtNumber ?? "-"}
-              {receiver && (
-                <span className="ml-1 text-muted-foreground">
-                  → {receiver.name} #{receiver.shirtNumber ?? "-"}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5 text-xs">
-              <MarkerGlyph
-                shape={metric.shape}
-                variant={metric.variant}
-                color={color}
-                size={11}
-              />
-              <span>{metricLabel}</span>
-            </div>
-            <div className="text-[10px] tabular-nums text-muted-foreground">
-              {formatMatchTick(event.displayTick)}
-            </div>
-          </div>
-        </TooltipContent>
-      </Tooltip>
-    )
-  })
-}
-
-/* =========================================================
-   Groups
-   ========================================================= */
-
-const groups: Array<{
-  id: DataGroupId
-  label: string
-  shape: Shape
-}> = [
-  {
-    id: "shots",
-    label: "Shots",
-    shape: "square",
-  },
-  { id: "distribution", label: "Distribution", shape: "circle" },
-  { id: "defensive", label: "Defensive", shape: "triangle" },
-  { id: "possession", label: "Possession", shape: "triangle-down" },
-  { id: "discipline", label: "Discipline", shape: "pentagon" },
-  { id: "goalkeeping", label: "Goalkeeping", shape: "diamond" },
-]
-
-/* =========================================================
-   Metrics
-   ========================================================= */
-
-const metrics: DataMetric[] = [
-  /* =======================================================
-     SHOTS — square
-
-     Gold    = Goal
-     Solid   = On target
-     Outline = Off target
-     Dashed  = Blocked
-     ======================================================= */
-
-  {
-    id: "goals",
-    label: "Goals",
-    group: "shots",
-    shape: "square",
-    variant: "important",
-    scale: 1.1,
-  },
-
-  {
-    id: "shotsOnTarget",
-    label: "Shots on target",
-    group: "shots",
-    shape: "square",
-    variant: "solid",
-    scale: 0.9,
-  },
-
-  {
-    id: "shotsOffTarget",
-    label: "Shots off target",
-    group: "shots",
-    shape: "square",
-    variant: "outline",
-    scale: 0.8,
-  },
-
-  {
-    id: "hitWoodwork",
-    label: "Hit woodwork",
-    group: "shots",
-    shape: "square",
-    variant: "important",
-    scale: 0.85,
-  },
-
-  {
-    id: "blockedShots",
-    label: "Blocked shots",
-    group: "shots",
-    shape: "square",
-    variant: "dashed",
-    scale: 0.85,
-  },
-
-  { id: "passesCompleted", label: "Completed passes", group: "distribution", shape: "circle", variant: "solid", scale: 0.65 },
-  { id: "passesIncomplete", label: "Incomplete passes", group: "distribution", shape: "circle", variant: "outline", scale: 0.65 },
-  { id: "keyPasses", label: "Key passes", group: "distribution", shape: "circle", variant: "important", scale: 0.8 },
-  { id: "crossesCompleted", label: "Completed crosses", group: "distribution", shape: "circle", variant: "double", scale: 0.8 },
-  { id: "crossesIncomplete", label: "Incomplete crosses", group: "distribution", shape: "circle", variant: "dashed", scale: 0.8 },
-
-  { id: "tacklesWon", label: "Tackles won", group: "defensive", shape: "triangle", variant: "solid", scale: 0.8 },
-  { id: "tacklesLost", label: "Tackles lost", group: "defensive", shape: "triangle", variant: "outline", scale: 0.8 },
-  { id: "aerialsWon", label: "Aerial duels won", group: "defensive", shape: "triangle", variant: "contrast", scale: 0.8 },
-  { id: "aerialsLost", label: "Aerial duels lost", group: "defensive", shape: "triangle", variant: "dashed", scale: 0.8 },
-
-  { id: "interceptions", label: "Interceptions", group: "defensive", shape: "triangle", variant: "double", scale: 0.8 },
-  { id: "clearances", label: "Clearances", group: "defensive", shape: "triangle", variant: "important", scale: 0.8 },
-  { id: "defensiveBlocks", label: "Defensive blocks", group: "defensive", shape: "triangle", variant: "dashed", scale: 0.8 },
-  { id: "dribblesCompleted", label: "Completed dribbles", group: "possession", shape: "triangle-down", variant: "solid", scale: 0.8 },
-  { id: "possessionGained", label: "Possession gained", group: "possession", shape: "triangle-down", variant: "important", scale: 0.8 },
-  { id: "possessionLost", label: "Possession lost", group: "possession", shape: "triangle-down", variant: "outline", scale: 0.8 },
-  { id: "touches", label: "Specific touches", group: "possession", shape: "triangle-down", variant: "contrast", scale: 0.7 },
-
-  { id: "foulsCommitted", label: "Fouls committed", group: "discipline", shape: "pentagon", variant: "dashed", scale: 0.85 },
-  { id: "fouled", label: "Fouled", group: "discipline", shape: "pentagon", variant: "contrast", scale: 0.85 },
-  { id: "offsides", label: "Offsides", group: "discipline", shape: "pentagon", variant: "outline", scale: 0.85 },
-
-  { id: "goalkeeperSavesHeld", label: "Saves held", group: "goalkeeping", shape: "diamond", variant: "solid", scale: 0.9 },
-  { id: "goalkeeperSavesParried", label: "Saves parried", group: "goalkeeping", shape: "diamond", variant: "outline", scale: 0.9 },
-
-]
-
-const initialSelectedMetrics =
-  Object.fromEntries(
-    metrics.map(
-      (metric) => [
-        metric.id,
-        metric.group === "shots",
-      ]
-    )
-  ) as Record<string, boolean>
-
-/* =========================================================
-   TacticalBoard
-   ========================================================= */
-
-export function TacticalBoard({
-  match,
-}: TacticalBoardProps) {
-  const { t } = useTranslation()
   const groupLabel = (group: (typeof groups)[number]) =>
     t(`dataMap.groups.${group.id}`, { defaultValue: group.label })
   const metricLabel = (metric: DataMetric) =>
     t(`dataMap.events.${metric.id}`, { defaultValue: metric.label })
 
-  const [
-    showNumbers,
-    setShowNumbers,
-  ] = useState(true)
-
-  const [selectedShotId, setSelectedShotId] = useState<string | null>(null)
-
-  const [
-    showAttackFocus,
-    setShowAttackFocus,
-  ] = useState(true)
-
-  const [
-    selectedMetrics,
-    setSelectedMetrics,
-  ] = useState<
-    Record<string, boolean>
-  >(
-    initialSelectedMetrics
+  const selectedMetricList = useMemo(
+    () => metrics.filter((metric) => selectedMetrics[metric.id]),
+    [selectedMetrics]
   )
-
-  const selectedMetricList =
-    useMemo(
-      () =>
-        metrics.filter(
-          (metric) =>
-            selectedMetrics[metric.id]
-        ),
-      [selectedMetrics]
-    )
-
-  const selectedMetricCount =
-    selectedMetricList.length
-
+  const scene = useMemo(
+    () => buildTacticalScene(match.tacticalEvents, selectedMetrics),
+    [match.tacticalEvents, selectedMetrics]
+  )
+  const playerById = useMemo(
+    () => new Map(match.players.map((player) => [player.id, player])),
+    [match.players]
+  )
+  const activeSelectedShotId = useMemo(
+    () =>
+      selectedShotId != null &&
+      scene.points.some((point) => point.id === selectedShotId)
+        ? selectedShotId
+        : null,
+    [scene, selectedShotId]
+  )
+  const visibleShotChains = useMemo(
+    () =>
+      activeSelectedShotId == null
+        ? emptyShotChains
+        : buildShotChains(match.tacticalEvents, selectedMetrics).filter(
+            (chain) => chain.shotEventId === activeSelectedShotId
+          ),
+    [activeSelectedShotId, match.tacticalEvents, selectedMetrics]
+  )
   const momentumLaneShares = useMemo(
     () => calculateMomentumLaneShares(match.tacticalEvents),
     [match.tacticalEvents]
   )
-
-  const points =
-    useMemo<
-      MapPoint[]
-    >(() => {
-      const playerById = new Map(match.players.map((player) => [player.id, player]))
-      const metricById = new Map(selectedMetricList.map((metric) => [metric.id, metric]))
-      const allMetricById = new Map(metrics.map((metric) => [metric.id, metric]))
-      const hiddenEventIds = new Set<string>()
-      const counterpartByEventId = new Map<string, MatchSnapshot["tacticalEvents"][number]>()
-
-      const pairSelectedEvents = (displayMetricId: string, hiddenMetricId: string) => {
-        if (!selectedMetrics[displayMetricId] || !selectedMetrics[hiddenMetricId]) return
-
-        const hiddenByTick = new Map<number, MatchSnapshot["tacticalEvents"]>()
-        for (const event of match.tacticalEvents) {
-          if (event.metricId !== hiddenMetricId) continue
-          const bucket = hiddenByTick.get(event.tick)
-          if (bucket) bucket.push(event)
-          else hiddenByTick.set(event.tick, [event])
-        }
-
-        for (const event of match.tacticalEvents) {
-          if (event.metricId !== displayMetricId) continue
-          const candidates = hiddenByTick.get(event.tick)
-          if (!candidates) continue
-          const counterpartIndex = candidates.findIndex((candidate) => candidate.team !== event.team)
-          if (counterpartIndex < 0) continue
-
-          const [counterpart] = candidates.splice(counterpartIndex, 1)
-          counterpartByEventId.set(event.id, counterpart)
-          hiddenEventIds.add(counterpart.id)
-        }
-      }
-
-      // When both sides of a native pair are selected, keep the favourable
-      // result on the pitch and retain the other participant for the tooltip.
-      pairSelectedEvents("fouled", "foulsCommitted")
-      pairSelectedEvents("aerialsWon", "aerialsLost")
-
-      const eventPoints = match.tacticalEvents.flatMap((event) => {
-        if (hiddenEventIds.has(event.id)) return []
-        const player = playerById.get(event.playerId)
-        const receiver = event.receiverPlayerId == null
-          ? undefined
-          : playerById.get(event.receiverPlayerId)
-        const eventMetricIds = event.metricIds ?? [event.metricId]
-        const metric = [...eventMetricIds]
-          .reverse()
-          .map((metricId) => metricById.get(metricId))
-          .find((candidate) => candidate != null)
-        if (!metric) return []
-        const counterpartEvent = counterpartByEventId.get(event.id)
-        const counterpartMetric = counterpartEvent == null
-          ? undefined
-          : allMetricById.get(counterpartEvent.metricId)
-
-        return [{
-          id: event.id,
-          player,
-          receiver,
-          team: event.team,
-          metric,
-          value: 1,
-          x: event.x,
-          y: event.y,
-          anchorX: event.anchorX,
-          anchorY: event.anchorY,
-          trajectoryStartX: event.trajectoryStartX,
-          trajectoryStartY: event.trajectoryStartY,
-          trajectoryPoints: event.trajectoryPoints,
-          endX: event.endX,
-          endY: event.endY,
-          showTrajectory: metric.id === "dribblesCompleted" ||
-            metric.group === "shots" || metric.group === "distribution",
-          size: Math.max(15, 17 * (metric.scale ?? 1)),
-          minute: event.minute,
-          tick: event.tick,
-          displayTick: event.displayTick,
-          counterpart: counterpartEvent && counterpartMetric
-            ? {
-                player: playerById.get(counterpartEvent.playerId),
-                team: counterpartEvent.team,
-                metric: counterpartMetric,
-              }
-            : undefined,
-        }]
-      })
-
-      return eventPoints
-    }, [
-      match.players,
-      match.tacticalEvents,
-      selectedMetrics,
-      selectedMetricList,
-    ])
-
-  const activeSelectedShotId = selectedShotId != null && points.some((point) => point.id === selectedShotId)
-    ? selectedShotId
-    : null
-
-  const visibleShotChains = useMemo(
-    () => activeSelectedShotId == null
-      ? []
-      : buildShotChains(match.tacticalEvents, selectedMetrics)
-          .filter((chain) => chain.shotEventId === activeSelectedShotId),
-    [activeSelectedShotId, match.tacticalEvents, selectedMetrics]
+  const appearance = useMemo(
+    () => ({
+      homeColor: match.home.color ?? "var(--team-home-fallback)",
+      awayColor: match.away.color ?? "var(--team-away-fallback)",
+      showNumbers,
+    }),
+    [match.away.color, match.home.color, showNumbers]
   )
 
-  const visiblePoints = useMemo(
-    () => activeSelectedShotId == null
-      ? points
-      : points.filter((point) => point.id === activeSelectedShotId),
-    [activeSelectedShotId, points]
-  )
-
-  const renderedPointIds = useMemo(
-    () => new Set(visiblePoints.map((point) => point.id)),
-    [visiblePoints]
-  )
-
-  const toggleMetric = (
-    metric: DataMetric
-  ) => {
-    setSelectedMetrics(
-      (current) => ({
-        ...current,
-
-        [metric.id]:
-          !current[
-            metric.id
-          ],
-      })
-    )
+  const toggleMetric = (metric: DataMetric) => {
+    setSelectedMetrics((current) => ({
+      ...current,
+      [metric.id]: !current[metric.id],
+    }))
   }
-
   const setGroupSelected = (groupMetrics: DataMetric[], selected: boolean) => {
     setSelectedMetrics((current) => ({
       ...current,
-      ...Object.fromEntries(groupMetrics.map((metric) => [metric.id, selected])),
+      ...Object.fromEntries(
+        groupMetrics.map((metric) => [metric.id, selected])
+      ),
     }))
   }
-
   const invertGroup = (groupMetrics: DataMetric[]) => {
     setSelectedMetrics((current) => ({
       ...current,
-      ...Object.fromEntries(groupMetrics.map((metric) => [metric.id, !current[metric.id]])),
+      ...Object.fromEntries(
+        groupMetrics.map((metric) => [metric.id, !current[metric.id]])
+      ),
     }))
   }
 
   return (
-    <TooltipProvider>
-      <section className="flex h-full min-h-0 flex-col overflow-hidden">
-        {/* =================================================
-            Header
-            ================================================= */}
+    <section className="flex h-full min-h-0 flex-col overflow-hidden">
+      <CardHeader className="flex shrink-0 flex-row items-center gap-3 border-b px-4 py-2">
+        <CardTitle className="shrink-0 text-sm font-semibold">
+          {t("panels.dataMap")}
+        </CardTitle>
 
-        <CardHeader className="flex shrink-0 flex-row items-center gap-3 border-b px-4 py-2">
-          <CardTitle className="shrink-0 text-sm font-semibold">
-            {t(
-              "panels.dataMap"
-            )}
-          </CardTitle>
-
-          <Menubar className="h-6 min-w-0 flex-1">
-            {groups.filter((group) => metrics.some((metric) => metric.group === group.id)).map(
-              (group) => {
-                const groupMetrics =
-                  metrics.filter(
-                    (metric) =>
-                      metric.group ===
-                      group.id
-                  )
-
-                const enabledCount =
-                  groupMetrics.filter(
-                    (metric) =>
-                      selectedMetrics[
-                        metric.id
-                      ]
-                  ).length
-
-                return (
-                  <MenubarMenu
-                    key={
-                      group.id
-                    }
-                  >
-                    <MenubarTrigger
-                      data-selected={
-                        enabledCount > 0
+        <Menubar className="h-6 min-w-0 flex-1">
+          {groups.map((group) => {
+            const groupMetrics = metrics.filter(
+              (metric) => metric.group === group.id
+            )
+            const enabledCount = groupMetrics.filter(
+              (metric) => selectedMetrics[metric.id]
+            ).length
+            return (
+              <MenubarMenu key={group.id}>
+                <MenubarTrigger className="h-5 min-w-0 flex-1 justify-center gap-1 px-1.5 text-[10px]">
+                  <MarkerGlyph
+                    shape={group.shape}
+                    variant="solid"
+                    color="var(--primary)"
+                    size={12}
+                  />
+                  <span className="truncate">{groupLabel(group)}</span>
+                  <span className="text-[9px] text-muted-foreground tabular-nums">
+                    {enabledCount}/{groupMetrics.length}
+                  </span>
+                </MenubarTrigger>
+                <MenubarContent className="z-[100] min-w-52">
+                  <MenubarGroup>
+                    <MenubarLabel>{groupLabel(group)}</MenubarLabel>
+                    <MenubarSeparator />
+                    <MenubarItem
+                      onClick={() =>
+                        setGroupSelected(
+                          groupMetrics,
+                          enabledCount !== groupMetrics.length
+                        )
                       }
-                      className="min-w-0 flex-1 justify-center px-1.5 text-[10px]"
                     >
-                      <span className="truncate">
-                        {
-                          groupLabel(group)
-                        }
-                      </span>
-                      {enabledCount > 0 && (
-                        <span className="ml-1 text-[9px] tabular-nums text-primary">{enabledCount}</span>
-                      )}
-                    </MenubarTrigger>
+                      {enabledCount === groupMetrics.length
+                        ? t("dataMap.clearAll")
+                        : t("dataMap.selectAll")}
+                    </MenubarItem>
+                    <MenubarItem onClick={() => invertGroup(groupMetrics)}>
+                      {t("dataMap.invertGroup")}
+                    </MenubarItem>
+                    <MenubarSeparator />
+                    {groupMetrics.map((metric) => (
+                      <MenubarCheckboxItem
+                        key={metric.id}
+                        checked={selectedMetrics[metric.id]}
+                        onCheckedChange={() => toggleMetric(metric)}
+                      >
+                        <MarkerGlyph
+                          shape={metric.shape}
+                          variant={metric.variant}
+                          color="var(--primary)"
+                          size={13}
+                        />
+                        <span>{metricLabel(metric)}</span>
+                      </MenubarCheckboxItem>
+                    ))}
+                  </MenubarGroup>
+                </MenubarContent>
+              </MenubarMenu>
+            )
+          })}
+        </Menubar>
 
-                    <MenubarContent
-                      align="start"
-                      className="z-[100] min-w-48"
-                    >
-                      <MenubarGroup>
-                        <MenubarLabel className="flex items-center justify-between gap-4">
-                          <div className="flex items-center gap-2">
-                            <MarkerGlyph
-                              shape={
-                                group.shape
-                              }
-                              variant="solid"
-                              color="var(--primary)"
-                              size={12}
-                            />
-
-                            <span>
-                              {
-                                groupLabel(group)
-                              }
-                            </span>
-                          </div>
-
-                          <span className="tabular-nums text-muted-foreground">
-                            {
-                              enabledCount
-                            }
-                            /
-                            {
-                              groupMetrics.length
-                            }
-                          </span>
-                        </MenubarLabel>
-
-                        <MenubarSeparator />
-
-                        <MenubarItem
-                          onClick={() => setGroupSelected(groupMetrics, enabledCount !== groupMetrics.length)}
-                        >
-                          {enabledCount === groupMetrics.length ? t("dataMap.clearAll") : t("dataMap.selectAll")}
-                        </MenubarItem>
-
-                        <MenubarItem onClick={() => invertGroup(groupMetrics)}>
-                          {t("dataMap.invertGroup")}
-                        </MenubarItem>
-
-                        <MenubarSeparator />
-
-                        {groupMetrics.map(
-                          (
-                            metric
-                          ) => (
-                            <MenubarCheckboxItem
-                              key={
-                                metric.id
-                              }
-                              checked={
-                                selectedMetrics[
-                                  metric
-                                    .id
-                                ]
-                              }
-                              onCheckedChange={() =>
-                                toggleMetric(
-                                  metric
-                                )
-                              }
-                            >
-                              <MarkerGlyph
-                                shape={
-                                  metric.shape
-                                }
-                                variant={
-                                  metric.variant
-                                }
-                                color="var(--primary)"
-                                size={
-                                  13
-                                }
-                              />
-
-                              <span>
-                                {
-                                  metricLabel(metric)
-                                }
-                              </span>
-                            </MenubarCheckboxItem>
-                          )
-                        )}
-                      </MenubarGroup>
-                    </MenubarContent>
-                  </MenubarMenu>
-                )
-              }
-            )}
-          </Menubar>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="px-2 text-[10px]"
-                />
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="outline"
+                size="sm"
+                className="px-2 text-[10px]"
+              />
+            }
+          >
+            {t("dataMap.displaySettings")}
+            <span className="ml-1 text-[9px] text-primary tabular-nums">
+              {Number(showNumbers) + Number(showAttackFocus)}
+            </span>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="z-[100] min-w-36">
+            <DropdownMenuCheckboxItem
+              checked={showNumbers}
+              onCheckedChange={(checked) => setShowNumbers(checked === true)}
+            >
+              {t("dataMap.showNumbers")}
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={showAttackFocus}
+              onCheckedChange={(checked) =>
+                setShowAttackFocus(checked === true)
               }
             >
-              {t("dataMap.displaySettings")}
-              <span className="ml-1 text-[9px] tabular-nums text-primary">
-                {Number(showNumbers) + Number(showAttackFocus)}
-              </span>
-            </DropdownMenuTrigger>
+              {t("dataMap.attackFocus")}
+            </DropdownMenuCheckboxItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </CardHeader>
 
-            <DropdownMenuContent align="end" className="z-[100] min-w-36">
-              <DropdownMenuCheckboxItem
-                checked={showNumbers}
-                onCheckedChange={(checked) => setShowNumbers(checked === true)}
-              >
-                {t("dataMap.showNumbers")}
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={showAttackFocus}
-                onCheckedChange={(checked) => setShowAttackFocus(checked === true)}
-              >
-                {t("dataMap.attackFocus")}
-              </DropdownMenuCheckboxItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </CardHeader>
-
-        {/* =================================================
-            Pitch
-            ================================================= */}
-
-        <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-          <div className="flex min-h-0 min-w-0 flex-1 items-stretch gap-2 overflow-hidden p-3">
-            <aside className="flex w-28 shrink-0 flex-col gap-1.5 overflow-y-auto py-1 text-[9px]">
-              {selectedMetricList.length > 0 ? selectedMetricList.map((metric) => (
-                <div key={`legend-${metric.id}`} className="flex items-center gap-1.5 text-muted-foreground">
-                  <MarkerGlyph shape={metric.shape} variant={metric.variant} color="var(--primary)" size={13} />
+      <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+        <div className="flex min-h-0 min-w-0 flex-1 items-stretch gap-2 overflow-hidden p-3">
+          <aside className="flex w-28 shrink-0 flex-col gap-1.5 overflow-y-auto py-1 text-[9px]">
+            {selectedMetricList.length > 0 ? (
+              selectedMetricList.map((metric) => (
+                <div
+                  key={`legend-${metric.id}`}
+                  className="flex items-center gap-1.5 text-muted-foreground"
+                >
+                  <MarkerGlyph
+                    shape={metric.shape}
+                    variant={metric.variant}
+                    color="var(--primary)"
+                    size={13}
+                  />
                   <span className="leading-tight">{metricLabel(metric)}</span>
                 </div>
-              )) : (
-                <span className="text-muted-foreground">{t("dataMap.noSelection")}</span>
-              )}
-            </aside>
+              ))
+            ) : (
+              <span className="text-muted-foreground">
+                {t("dataMap.noSelection")}
+              </span>
+            )}
+          </aside>
 
-            <div className="tactical-pitch-viewport flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden">
-              <div
-                className="tactical-pitch relative shrink-0 overflow-hidden rounded-md bg-muted"
-                onClick={() => setSelectedShotId(null)}
-              >
+          <div className="tactical-pitch-viewport flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden">
+            <div className="tactical-pitch relative shrink-0 overflow-hidden rounded-md bg-muted">
               <div className="pointer-events-none absolute inset-0 bg-primary/[0.025]" />
-
               <PitchSvg />
 
-              {/* The native momentum table only weights events in each
-                  team's attacking half (vertical zones 3–5). Show the raw
-                  event-count split across its relative left/centre/right
-                  thirds; deliberately do not multiply by momentum weight. */}
               {showAttackFocus && activeSelectedShotId == null && (
-              <div className="pointer-events-none absolute inset-0 z-[5]" aria-hidden="true">
-                <div className="absolute inset-x-0 top-1/3 border-t-2 border-dashed border-foreground/15" />
-                <div className="absolute inset-x-0 top-2/3 border-t-2 border-dashed border-foreground/15" />
-
-                {(["away", "home"] as const).flatMap((team) => {
-                  return momentumLaneShares[team].map((lane) => {
-                    const relativeTop = ((lane.zone + 0.5) / 3) * 100
-                    const top = team === "home" ? relativeTop : 100 - relativeTop
-
-                    return (
-                      <div
-                        key={`${team}-momentum-lane-${lane.zone}`}
-                        className="absolute h-1/4 w-[22%] -translate-x-1/2 -translate-y-1/2"
-                        style={{
-                          left: team === "home" ? "60%" : "40%",
-                          top: `${top}%`,
-                        }}
-                      >
-                        <HugeiconsIcon
-                          icon={team === "home" ? ArrowBigRightDashIcon : ArrowBigLeftDashIcon}
-                          strokeWidth={0.5}
-                          className="size-full text-foreground/[0.10]"
-                        />
-                        <span className="absolute inset-0 flex items-center justify-center text-[clamp(11px,2cqw,18px)] font-bold tabular-nums text-foreground/55">
-                          {lane.percentage}%
-                        </span>
-                      </div>
-                    )
-                  })
-                })}
-              </div>
+                <AttackFocus laneShares={momentumLaneShares} />
               )}
 
-              {/* ===========================================
-                  Data points
-                  =========================================== */}
-
-              <div className="absolute inset-0">
-                <ShotChainLines
-                  chains={visibleShotChains}
-                  homeColor={match.home.color ?? "var(--team-home-fallback)"}
-                  awayColor={match.away.color ?? "var(--team-away-fallback)"}
-                />
-                <TrajectoryArrows
-                  points={visiblePoints}
-                  homeColor={match.home.color ?? "var(--team-home-fallback)"}
-                  awayColor={match.away.color ?? "var(--team-away-fallback)"}
-                />
-                {activeSelectedShotId != null && (
-                  <ShotChainNodes
-                    chains={visibleShotChains}
-                    players={match.players}
-                    renderedPointIds={renderedPointIds}
-                    showNumbers={showNumbers}
-                    homeColor={match.home.color ?? "var(--team-home-fallback)"}
-                    awayColor={match.away.color ?? "var(--team-away-fallback)"}
-                  />
-                )}
-                {visiblePoints.map(
-                  (point) => {
-                    const teamColor =
-                      point.team ===
-                      "home"
-                        ? match.home
-                            .color
-                        : match.away
-                            .color
-
-                    const resolvedColor =
-                      teamColor ??
-                      (point.team ===
-                      "home"
-                        ? "var(--team-home-fallback)"
-                        : "var(--team-away-fallback)")
-
-                    const counterpartColor = point.counterpart
-                      ? (point.counterpart.team === "home" ? match.home.color : match.away.color) ??
-                        (point.counterpart.team === "home"
-                          ? "var(--team-home-fallback)"
-                          : "var(--team-away-fallback)")
-                      : undefined
-
-                    const hollow =
-                      point.metric
-                        .variant ===
-                        "outline" ||
-                      point.metric
-                        .variant ===
-                        "dashed"
-
-                    return (
-                      <Tooltip
-                        key={
-                          point.id
-                        }
-                      >
-                        <TooltipTrigger
-                          render={
-                            <button
-                              type="button"
-                              className="
-                                absolute z-10
-                                flex
-                                -translate-x-1/2
-                                -translate-y-1/2
-                                items-center
-                                justify-center
-                                outline-none
-                                transition-transform
-
-                                hover:z-20
-                                hover:scale-125
-
-                                focus-visible:z-20
-                                focus-visible:ring-2
-                                focus-visible:ring-ring
-                              "
-                              style={{
-                                left: `${point.x}%`,
-                                top: `${point.y}%`,
-                                width: `${point.size}px`,
-                                height: `${point.size}px`,
-                              }}
-                              aria-label={`${point.player?.name ?? t("dataMap.unknownPlayer")}, ${metricLabel(point.metric)}: ${point.value}`}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                if (point.metric.group === "shots") setSelectedShotId(point.id)
-                              }}
-                            >
-                              <MarkerGlyph
-                                shape={
-                                  point
-                                    .metric
-                                    .shape
-                                }
-                                variant={
-                                  point
-                                    .metric
-                                    .variant
-                                }
-                                color={
-                                  resolvedColor
-                                }
-                                size={
-                                  point.size
-                                }
-                              />
-
-                              {showNumbers &&
-                                point.size >=
-                                  11 && (
-                                  <span
-                                    className="
-                                      pointer-events-none
-                                      absolute inset-0
-                                      flex items-center
-                                      justify-center
-                                      text-[7px]
-                                      font-bold
-                                      leading-none
-                                    "
-                                    style={{
-                                      color:
-                                        hollow
-                                          ? resolvedColor
-                                          : "var(--event-marker-foreground)",
-
-                                      textShadow:
-                                        hollow
-                                          ? "0 0 3px var(--background)"
-                                          : "0 1px 2px var(--event-marker-shadow)",
-                                    }}
-                                  >
-                                    {point
-                                      .player
-                                      ?.shirtNumber ??
-                                      ""}
-                                  </span>
-                                )}
-                            </button>
-                          }
-                        />
-
-                        <TooltipContent>
-                          <div className="space-y-1">
-                            <div className="font-medium">
-                              {
-                                point
-                                  .player
-                                  ?.name ?? t("dataMap.unknownPlayer")
-                              }{" "}
-                              #
-                              {point
-                                .player
-                                ?.shirtNumber ??
-                                "-"}
-                              {point.receiver && (
-                                <span className="ml-1 text-muted-foreground">
-                                  → {point.receiver.name} #{point.receiver.shirtNumber ?? "-"}
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="flex items-center gap-1.5 text-xs">
-                              <MarkerGlyph
-                                shape={
-                                  point
-                                    .metric
-                                    .shape
-                                }
-                                variant={
-                                  point
-                                    .metric
-                                    .variant
-                                }
-                                color={
-                                  resolvedColor
-                                }
-                                size={
-                                  11
-                                }
-                              />
-
-                              <span>
-                                {metricLabel(point.metric)}
-                                :{" "}
-                                <strong>
-                                  {
-                                    point.value
-                                  }
-                                </strong>
-                              </span>
-                            </div>
-
-                            {point.counterpart && counterpartColor && (
-                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <MarkerGlyph
-                                  shape={point.counterpart.metric.shape}
-                                  variant={point.counterpart.metric.variant}
-                                  color={counterpartColor}
-                                  size={11}
-                                />
-                                <span>
-                                  {metricLabel(point.counterpart.metric)}: {point.counterpart.player?.name ?? t("dataMap.unknownPlayer")}{" "}
-                                  #{point.counterpart.player?.shirtNumber ?? "-"}
-                                </span>
-                              </div>
-                            )}
-
-                            {point.displayTick != null && (
-                              <div className="text-[10px] tabular-nums text-muted-foreground">
-                                {formatMatchTick(point.displayTick)}
-                              </div>
-                            )}
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
+              <PixiTactical
+                scene={scene}
+                players={playerById}
+                appearance={appearance}
+                selectedShotId={activeSelectedShotId}
+                shotChains={visibleShotChains}
+                onHover={(hit, clientX, clientY) => {
+                  setHovered((current) => {
+                    if (!hit) return null
+                    if (
+                      current?.point.id === hit.point.id &&
+                      current.clientX === clientX &&
+                      current.clientY === clientY
                     )
+                      return current
+                    return { point: hit.point, clientX, clientY }
+                  })
+                }}
+                onPointClick={(hit: TacticalHit) => {
+                  if (!hit.historical && hit.point.group === "shots") {
+                    setSelectedShotId(hit.point.id)
                   }
-                )}
-              </div>
+                }}
+                onEmptyClick={() => setSelectedShotId(null)}
+              />
 
-              {/* ===========================================
-                  Empty state
-                  =========================================== */}
-
-              {(selectedMetricCount ===
-                0 ||
-                points.length ===
-                  0) && (
+              {(selectedMetricList.length === 0 ||
+                scene.points.length === 0) && (
                 <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center">
                   <div className="rounded-md border bg-background/90 px-3 py-2 text-xs text-muted-foreground shadow-sm backdrop-blur-sm">
-                    {selectedMetricCount ===
-                    0
-                      ? t(
-                          "dataMap.noMetrics"
-                        )
-                      : t(
-                          "dataMap.noData"
-                        )}
+                    {selectedMetricList.length === 0
+                      ? t("dataMap.noMetrics")
+                      : t("dataMap.noData")}
                   </div>
                 </div>
               )}
-              </div>
             </div>
           </div>
-        </CardContent>
-      </section>
-    </TooltipProvider>
+        </div>
+      </CardContent>
+
+      {hovered && (
+        <TacticalPointTooltip
+          hovered={hovered}
+          players={playerById}
+          homeColor={appearance.homeColor}
+          awayColor={appearance.awayColor}
+          unknownPlayer={t("dataMap.unknownPlayer")}
+          metricLabel={metricLabel}
+        />
+      )}
+    </section>
+  )
+}
+
+function TacticalPointTooltip({
+  hovered,
+  players,
+  homeColor,
+  awayColor,
+  unknownPlayer,
+  metricLabel,
+}: {
+  hovered: HoveredTacticalPoint
+  players: ReadonlyMap<number, MatchPlayer>
+  homeColor: string
+  awayColor: string
+  unknownPlayer: string
+  metricLabel: (metric: DataMetric) => string
+}) {
+  const { point, clientX, clientY } = hovered
+  const player = players.get(point.playerId)
+  const receiver =
+    point.receiverPlayerId == null
+      ? undefined
+      : players.get(point.receiverPlayerId)
+  const metric = metricById.get(point.metricId)
+  if (!metric) return null
+  const color = point.team === "home" ? homeColor : awayColor
+  const counterpartPlayer = point.counterpart
+    ? players.get(point.counterpart.playerId)
+    : undefined
+  const counterpartMetric = point.counterpart
+    ? metricById.get(point.counterpart.metricId)
+    : undefined
+  const counterpartColor =
+    point.counterpart?.team === "home" ? homeColor : awayColor
+
+  return createPortal(
+    <div
+      role="tooltip"
+      className="pointer-events-none fixed z-[100] inline-flex w-max max-w-xs -translate-x-1/2 -translate-y-[calc(100%+10px)] flex-col gap-1 rounded-md bg-foreground px-3 py-1.5 text-xs text-background shadow-md"
+      style={{ left: clientX, top: clientY }}
+    >
+      <div className="font-medium">
+        {player?.name ?? unknownPlayer} #{player?.shirtNumber ?? "-"}
+        {receiver && (
+          <span className="ml-1 opacity-70">
+            → {receiver.name} #{receiver.shirtNumber ?? "-"}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-1.5">
+        <MarkerGlyph
+          shape={metric.shape}
+          variant={metric.variant}
+          color={color}
+          size={11}
+        />
+        <span>
+          {metricLabel(metric)}: <strong>1</strong>
+        </span>
+      </div>
+      {point.counterpart && counterpartMetric && (
+        <div className="flex items-center gap-1.5 opacity-70">
+          <MarkerGlyph
+            shape={counterpartMetric.shape}
+            variant={counterpartMetric.variant}
+            color={counterpartColor}
+            size={11}
+          />
+          <span>
+            {metricLabel(counterpartMetric)}:{" "}
+            {counterpartPlayer?.name ?? unknownPlayer} #
+            {counterpartPlayer?.shirtNumber ?? "-"}
+          </span>
+        </div>
+      )}
+      <div className="text-[10px] tabular-nums opacity-70">
+        {formatMatchTick(point.displayTick)}
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+function AttackFocus({
+  laneShares,
+}: {
+  laneShares: Record<TeamSide, LaneShare[]>
+}) {
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 z-[5]"
+      aria-hidden="true"
+    >
+      <div className="absolute inset-x-0 top-1/3 border-t-2 border-dashed border-foreground/15" />
+      <div className="absolute inset-x-0 top-2/3 border-t-2 border-dashed border-foreground/15" />
+      {(["away", "home"] as const).flatMap((team) =>
+        laneShares[team].map((lane) => {
+          const relativeTop = ((lane.zone + 0.5) / 3) * 100
+          const top = team === "home" ? relativeTop : 100 - relativeTop
+          return (
+            <div
+              key={`${team}-momentum-lane-${lane.zone}`}
+              className="absolute h-1/4 w-[22%] -translate-x-1/2 -translate-y-1/2"
+              style={{ left: team === "home" ? "60%" : "40%", top: `${top}%` }}
+            >
+              <HugeiconsIcon
+                icon={
+                  team === "home" ? ArrowBigRightDashIcon : ArrowBigLeftDashIcon
+                }
+                strokeWidth={0.5}
+                className="size-full text-foreground/[0.10]"
+              />
+              <span className="absolute inset-0 flex items-center justify-center text-[clamp(11px,2cqw,18px)] font-bold text-foreground/55 tabular-nums">
+                {lane.percentage}%
+              </span>
+            </div>
+          )
+        })
+      )}
+    </div>
   )
 }
 
@@ -1414,93 +468,36 @@ function formatMatchTick(tick: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
 }
 
-function buildShotChains(
-  events: TacticalEventPoint[],
-  selectedMetrics: Record<string, boolean>,
-): ShotChain[] {
-  const ordered = [...events].sort((left, right) => {
-    const leftOrder = left.sequenceIndex ?? left.tick
-    const rightOrder = right.sequenceIndex ?? right.tick
-    return leftOrder - rightOrder || left.tick - right.tick
-  })
-  const chains: ShotChain[] = []
-
-  for (let shotIndex = 0; shotIndex < ordered.length; shotIndex += 1) {
-    const shot = ordered[shotIndex]
-    if (!isShotEvent(shot.nativeEventType) || !selectedMetrics[shot.metricId]) continue
-
-    const previousActions: TacticalEventPoint[] = []
-    for (let index = shotIndex - 1; index >= 0; index -= 1) {
-      const candidate = ordered[index]
-      if (shot.tick - candidate.tick > maxShotChainLookbackTicks || isShotChainBoundary(candidate.nativeEventType)) break
-
-      const passOrDribble = isPassEvent(candidate.nativeEventType) || candidate.nativeEventType === 34
-      if (!passOrDribble) continue
-      if (candidate.team !== shot.team) break
-
-      previousActions.unshift(candidate)
-      const restart = (candidate.flags & shotChainRestartFlags) !== 0
-      if (previousActions.length === 3 || restart) break
-    }
-    if (previousActions.length === 0) continue
-
-    chains.push({
-      id: `shot-chain-${shot.id}`,
-      shotEventId: shot.id,
-      team: shot.team,
-      events: [...previousActions, shot],
-    })
-  }
-
-  return chains
-}
-
-function isShotEvent(eventType: number) {
-  return eventType >= 1 && eventType <= 5
-}
-
-function isPassEvent(eventType: number) {
-  return eventType >= 6 && eventType <= 17
-}
-
-function isShotChainBoundary(eventType: number) {
-  return isShotEvent(eventType) ||
-    (eventType >= 18 && eventType <= 21) ||
-    eventType === 23 ||
-    eventType === 52 ||
-    eventType === 53
-}
-
-function calculateMomentumLaneShares(events: TacticalEventPoint[]): Record<TeamSide, LaneShare[]> {
+function calculateMomentumLaneShares(
+  events: TacticalEventPoint[]
+): Record<TeamSide, LaneShare[]> {
   const counts: Record<TeamSide, [number, number, number]> = {
     home: [0, 0, 0],
     away: [0, 0, 0],
   }
-
   for (const event of events) {
     const zone = weightedMomentumHorizontalZone(event)
-    if (zone == null) continue
-    counts[event.team][zone] += 1
+    if (zone != null) counts[event.team][zone] += 1
   }
-
   return {
     home: buildLaneShares(counts.home),
     away: buildLaneShares(counts.away),
   }
 }
 
-function weightedMomentumHorizontalZone(event: TacticalEventPoint): HorizontalZone | undefined {
+function weightedMomentumHorizontalZone(
+  event: TacticalEventPoint
+): HorizontalZone | undefined {
   if (!Number.isFinite(event.x) || !Number.isFinite(event.y)) return undefined
-
   const reverseDirection = (event.flags & 0x100) !== 0
-  const rotatedForDisplay = event.team === "home" ? !reverseDirection : reverseDirection
+  const rotatedForDisplay =
+    event.team === "home" ? !reverseDirection : reverseDirection
   const nativeLongitudinal = rotatedForDisplay ? 100 - event.x : event.x
   const nativeLateral = rotatedForDisplay ? 100 - event.y : event.y
-  const relativeLongitudinal = reverseDirection ? 100 - nativeLongitudinal : nativeLongitudinal
+  const relativeLongitudinal = reverseDirection
+    ? 100 - nativeLongitudinal
+    : nativeLongitudinal
   const relativeLateral = reverseDirection ? 100 - nativeLateral : nativeLateral
-
-  // Normalized relativeLongitudinal < 50 is native vertical zone 3, 4 or 5.
-  // Events outside those zones have zero momentum weight and are not counted.
   if (relativeLongitudinal >= 50) return undefined
   if (relativeLateral > 200 / 3) return 0
   if (relativeLateral > 100 / 3) return 1
@@ -1516,28 +513,23 @@ function buildLaneShares(counts: [number, number, number]): LaneShare[] {
       percentage: 0,
     }))
   }
-
   const exact = counts.map((count) => (count / total) * 100)
   const percentages = exact.map(Math.floor)
   const remainder = 100 - percentages.reduce((sum, value) => sum + value, 0)
   const remainderOrder = exact
     .map((value, zone) => ({ zone, fraction: value - Math.floor(value) }))
-    .sort((left, right) => right.fraction - left.fraction || left.zone - right.zone)
-
+    .sort(
+      (left, right) => right.fraction - left.fraction || left.zone - right.zone
+    )
   for (let index = 0; index < remainder; index += 1) {
     percentages[remainderOrder[index].zone] += 1
   }
-
   return counts.map((count, zone) => ({
     zone: zone as HorizontalZone,
     count,
     percentage: percentages[zone],
   }))
 }
-
-/* =========================================================
-   Marker
-   ========================================================= */
 
 function MarkerGlyph({
   shape,
@@ -1550,18 +542,7 @@ function MarkerGlyph({
   color: string
   size: number
 }) {
-  /*
-   * SVG is a better fit here than CSS clip-path.
-   *
-   * Reasons:
-   * 1. A hollow polygon is difficult to outline cleanly with a div and clip-path.
-   * 2. A dashed stroke cannot be applied correctly to a clip-path outline.
-   * 3. The diamond shape no longer requires rotating its label.
-   */
-
-  if (
-    variant === "double"
-  ) {
+  if (variant === "double") {
     return (
       <svg
         width={size}
@@ -1576,7 +557,6 @@ function MarkerGlyph({
           stroke="var(--important-event)"
           strokeWidth={1.8}
         />
-
         <g transform="translate(10 10) scale(.58) translate(-10 -10)">
           <ShapeElement
             shape={shape}
@@ -1588,13 +568,6 @@ function MarkerGlyph({
       </svg>
     )
   }
-
-  const style =
-    markerStyle(
-      variant,
-      color
-    )
-
   return (
     <svg
       width={size}
@@ -1603,70 +576,32 @@ function MarkerGlyph({
       aria-hidden="true"
       className="shrink-0 overflow-visible"
     >
-      <ShapeElement
-        shape={shape}
-        {...style}
-      />
+      <ShapeElement shape={shape} {...markerStyle(variant, color)} />
     </svg>
   )
 }
 
-function markerStyle(
-  variant: MarkerVariant,
-  color: string
-) {
+function markerStyle(variant: MarkerVariant, color: string) {
   switch (variant) {
     case "solid":
-      return {
-        fill: color,
-        stroke:
-          "var(--background)",
-        strokeWidth: 1.2,
-      }
-
+      return { fill: color, stroke: "var(--background)", strokeWidth: 1.2 }
     case "outline":
-      return {
-        fill: "transparent",
-        stroke: color,
-        strokeWidth: 2.2,
-      }
-
+      return { fill: "transparent", stroke: color, strokeWidth: 2.2 }
     case "important":
-      return {
-        fill: color,
-        stroke: "var(--important-event)",
-        strokeWidth: 2,
-      }
-
+      return { fill: color, stroke: "var(--important-event)", strokeWidth: 2 }
     case "dashed":
       return {
         fill: "transparent",
         stroke: color,
         strokeWidth: 2,
-        strokeDasharray:
-          "3 1.8",
+        strokeDasharray: "3 1.8",
       }
-
     case "contrast":
-      return {
-        fill: color,
-        stroke: "var(--event-contrast)",
-        strokeWidth: 2,
-      }
-
+      return { fill: color, stroke: "var(--event-contrast)", strokeWidth: 2 }
     default:
-      return {
-        fill: color,
-        stroke:
-          "var(--background)",
-        strokeWidth: 1,
-      }
+      return { fill: color, stroke: "var(--background)", strokeWidth: 1 }
   }
 }
-
-/* =========================================================
-   SVG shapes
-   ========================================================= */
 
 function ShapeElement({
   shape,
@@ -1686,104 +621,24 @@ function ShapeElement({
     stroke,
     strokeWidth,
     strokeDasharray,
-    strokeLinejoin:
-      "round" as const,
-    vectorEffect:
-      "non-scaling-stroke" as const,
+    strokeLinejoin: "round" as const,
+    vectorEffect: "non-scaling-stroke" as const,
   }
-
   switch (shape) {
-    /*
-     * Shots
-     */
     case "square":
-      return (
-        <rect
-          x="3"
-          y="3"
-          width="14"
-          height="14"
-          rx="2"
-          {...common}
-        />
-      )
-
-    /*
-     * Distribution
-     */
+      return <rect x="3" y="3" width="14" height="14" rx="2" {...common} />
     case "circle":
-      return (
-        <circle
-          cx="10"
-          cy="10"
-          r="7"
-          {...common}
-        />
-      )
-
-    /*
-     * Defensive
-     */
+      return <circle cx="10" cy="10" r="7" {...common} />
     case "triangle":
-      return (
-        <polygon
-          points="10,2.5 18,17 2,17"
-          {...common}
-        />
-      )
-
-    /*
-     * Possession
-     */
+      return <polygon points="10,2.5 18,17 2,17" {...common} />
     case "triangle-down":
-      return (
-        <polygon
-          points="2,3 18,3 10,17.5"
-          {...common}
-        />
-      )
-
-    /*
-     * Discipline
-     */
+      return <polygon points="2,3 18,3 10,17.5" {...common} />
     case "pentagon":
-      return (
-        <polygon
-          points="
-            10,2
-            18,7.8
-            15,17
-            5,17
-            2,7.8
-          "
-          {...common}
-        />
-      )
-
-    /*
-     * Goalkeeping
-     */
+      return <polygon points="10,2 18,7.8 15,17 5,17 2,7.8" {...common} />
     case "diamond":
-      return (
-        <polygon
-          points="
-            10,2
-            18,10
-            10,18
-            2,10
-          "
-          {...common}
-        />
-      )
-
-    default:
-      return null
+      return <polygon points="10,2 18,10 10,18 2,10" {...common} />
   }
 }
-
-/* =========================================================
-   Pitch
-   ========================================================= */
 
 function PitchSvg() {
   return (
@@ -1804,7 +659,6 @@ function PitchSvg() {
         strokeWidth="0.8"
         className="text-foreground/40"
       />
-
       <line
         x1="74"
         y1="1"
@@ -1814,7 +668,6 @@ function PitchSvg() {
         strokeWidth="0.6"
         className="text-foreground/35"
       />
-
       <circle
         cx="74"
         cy="50"
@@ -1824,7 +677,6 @@ function PitchSvg() {
         strokeWidth="0.6"
         className="text-foreground/35"
       />
-
       <circle
         cx="74"
         cy="50"
@@ -1832,7 +684,6 @@ function PitchSvg() {
         fill="currentColor"
         className="text-foreground/40"
       />
-
       <rect
         x="1"
         y="30"
@@ -1843,7 +694,6 @@ function PitchSvg() {
         strokeWidth="0.6"
         className="text-foreground/35"
       />
-
       <rect
         x="129"
         y="30"
@@ -1854,7 +704,6 @@ function PitchSvg() {
         strokeWidth="0.6"
         className="text-foreground/35"
       />
-
       <rect
         x="1"
         y="39"
@@ -1865,7 +714,6 @@ function PitchSvg() {
         strokeWidth="0.6"
         className="text-foreground/35"
       />
-
       <rect
         x="140"
         y="39"
@@ -1876,7 +724,6 @@ function PitchSvg() {
         strokeWidth="0.6"
         className="text-foreground/35"
       />
-
       <path
         d="M19 38a15 15 0 0 1 0 24"
         fill="none"
@@ -1884,7 +731,6 @@ function PitchSvg() {
         strokeWidth="0.6"
         className="text-foreground/35"
       />
-
       <path
         d="M129 38a15 15 0 0 0 0 24"
         fill="none"
