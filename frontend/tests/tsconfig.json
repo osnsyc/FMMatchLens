@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "../node_modules/.tmp/tsconfig.tests.tsbuildinfo",
+    "types": ["vite/client", "vitest/globals", "node"],
+    "paths": {
+      "@/*": ["../src/*"]
+    }
+  },
+  "include": [
+    "../src/vite-env.d.ts",
+    "replay/**/*.ts",
+    "vitest.benchmark.config.ts"
+  ]
+}
