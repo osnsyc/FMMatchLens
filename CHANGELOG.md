@@ -3,6 +3,24 @@
 
 This file records the project's important changes. Version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-09-11
+
+### Added
+
+- Expanded player profiles with birth date and age, localized nationality and flag, body type, guide value, and senior or youth international records. These fields are available in the realtime API and archive format 2.4, with read compatibility retained for older 2.x archives.
+- Added a Tactical Board focus mode, toggled with the `T` shortcut, that uses the full central dashboard while preserving the board's filters, display settings, selection, and resolution-aware rendering.
+- Added replay regression tests and benchmarks for forward playback, backward seeking, buffer rotation, snapshot reuse, and dashboard-facing invalidations.
+
+### Changed
+
+- Replaced the Tactical Board's per-event DOM rendering with a persistent, demand-rendered PixiJS scene that incrementally updates markers, shirt numbers, trajectories, shot chains, selection, and spatial hit testing.
+- Rebuilt archive replay around preprocessed frame revisions, indexed tick lookup, bounded checkpoints, incremental history derivation, and animation-frame-throttled seeking to keep large archives responsive.
+- Reduced dashboard rerenders by structurally reusing unchanged match snapshots and arrays, memoizing panels with data-specific equality checks, and tracking heatmap revisions explicitly.
+
+### Fixed
+
+- Made assist icons inherit the active theme color without CSS masks, preventing `file://` CORS errors in the standalone dashboard.
+
 ## [0.2.2] - 2026-09-10
 
 ### Added
@@ -84,7 +102,8 @@ This file records the project's important changes. Version numbers follow [Seman
 - Two plugin logging modes: release and debug.
 - Centralized project metadata, CI checks, and an automated tag-based release pipeline.
 
-[Unreleased]: https://github.com/osnsyc/FMMatchLens/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/osnsyc/FMMatchLens/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/osnsyc/FMMatchLens/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/osnsyc/FMMatchLens/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/osnsyc/FMMatchLens/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/osnsyc/FMMatchLens/compare/v0.1.1...v0.2.0
