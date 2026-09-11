@@ -10,6 +10,7 @@ import type { RealtimeFrame, RealtimeMatchMetadata } from "@/api/realtimeMatch"
 import { parseLocalArchive } from "@/api/localArchive"
 import type { ReplayArchive } from "@/api/replay/replayTypes"
 import { useReplaySession } from "@/hooks/useReplaySession"
+import { AssistIcon } from "@/components/AssistIcon"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -824,13 +825,15 @@ function TimelineDetailIcon({
   }
 
   if (event.type === "goal") {
-    return (
+    return row === "primary" ? (
       <img
-        src={row === "primary" ? "./goal.svg" : "./assist.svg"}
+        src="./goal.svg"
         alt=""
         aria-hidden="true"
         className="size-3.5 shrink-0"
       />
+    ) : (
+      <AssistIcon aria-hidden="true" className="size-3.5 shrink-0" />
     )
   }
 

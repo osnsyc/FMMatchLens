@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { ArrowDataTransferHorizontalIcon, FootballIcon, SidebarLeft01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
+import { AssistIcon } from "@/components/AssistIcon"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -1641,20 +1642,9 @@ function EventIcon({
   }
 
   return (
-    <span
+    <AssistIcon
       aria-hidden="true"
-      className={`
-        inline-block size-3.5 shrink-0
-        bg-current
-        [mask-position:center]
-        [mask-repeat:no-repeat]
-        [mask-size:contain]
-        ${className ?? ""}
-      `}
-      style={{
-        WebkitMaskImage: "url(./assist.svg)",
-        maskImage: "url(./assist.svg)",
-      }}
+      className={`size-3.5 shrink-0 ${className ?? ""}`}
     />
   )
 }
