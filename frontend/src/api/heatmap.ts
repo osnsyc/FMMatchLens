@@ -20,6 +20,7 @@ type Accumulator = {
   sumY: number
   density: Float64Array
   output?: HeatmapGrid
+  dirty: boolean
 }
 
 type Sample = {
@@ -38,6 +39,14 @@ type RecentFrame = {
 
 const ranges: PositionHeatmapRange[] = ["full", "half", "recent15"]
 
+export type HeatmapDerivationsState = {
+  stores: Array<
+    [PositionHeatmapRange, Array<[string, Omit<Accumulator, "output">]>]
+  >
+  recentFrames: RecentFrame[]
+  halfKey: number
+}
+
 /**
  * Incremental heatmap data engine. Forward playback visits every historical
  * frame exactly once; recent15 is maintained as a +1/-1 sliding window.
@@ -51,40 +60,104 @@ export class HeatmapDerivations {
   private recentFrames: RecentFrame[] = []
   private recentStart = 0
   private halfKey = -1
+  private snapshotCache: HeatmapSnapshot = { grids: new Map() }
+  private indexDirty = true
 
   reset() {
     for (const range of ranges) this.stores[range].clear()
     this.recentFrames = []
     this.recentStart = 0
     this.halfKey = -1
+    this.snapshotCache = { grids: new Map() }
+    this.indexDirty = true
   }
 
   append(frames: readonly RealtimeFrame[]) {
     for (const frame of frames) this.appendFrame(frame)
   }
 
+  appendRange(
+    frames: readonly RealtimeFrame[],
+    fromInclusive: number,
+    toInclusive: number
+  ) {
+    const start = Math.max(0, fromInclusive)
+    const end = Math.min(frames.length - 1, toInclusive)
+    for (let index = start; index <= end; index += 1) {
+      this.appendFrame(frames[index])
+    }
+  }
+
+  appendFrame(frame: RealtimeFrame) {
+    this.processFrame(frame)
+  }
+
   snapshot(): HeatmapSnapshot {
     // Accumulator output grids are intentionally reused. Consumers receive a
     // fresh read-only index, while grid storage remains allocation-stable.
-    const grids = new Map<string, HeatmapGrid>()
+    const grids = this.indexDirty
+      ? new Map<string, HeatmapGrid>()
+      : (this.snapshotCache.grids as Map<string, HeatmapGrid>)
     for (const range of ranges) {
       for (const [key, accumulator] of this.stores[range]) {
-        grids.set(`${key}:${range}`, toGrid(accumulator))
+        const output = toGrid(accumulator)
+        if (this.indexDirty) grids.set(`${key}:${range}`, output)
       }
     }
-    return { grids }
+    if (this.indexDirty) {
+      this.snapshotCache = { grids }
+      this.indexDirty = false
+    }
+    return this.snapshotCache
   }
 
   getHeatmap(query: HeatmapQuery): HeatmapGrid {
     return getHeatmap(this.snapshot(), query)
   }
 
-  private appendFrame(frame: RealtimeFrame) {
+  exportState(): HeatmapDerivationsState {
+    return {
+      stores: ranges.map((range) => [
+        range,
+        [...this.stores[range]].map(([key, accumulator]) => [
+          key,
+          {
+            sampleCount: accumulator.sampleCount,
+            sumX: accumulator.sumX,
+            sumY: accumulator.sumY,
+            density: accumulator.density.slice(),
+            dirty: true,
+          },
+        ]),
+      ]),
+      recentFrames: this.recentFrames.slice(this.recentStart),
+      halfKey: this.halfKey,
+    }
+  }
+
+  restoreState(state: HeatmapDerivationsState) {
+    this.reset()
+    for (const [range, entries] of state.stores) {
+      this.stores[range] = new Map(
+        entries.map(([key, accumulator]) => [
+          key,
+          { ...accumulator, density: accumulator.density.slice() },
+        ])
+      )
+    }
+    this.recentFrames = state.recentFrames.slice()
+    this.recentStart = 0
+    this.halfKey = state.halfKey
+    this.indexDirty = true
+  }
+
+  private processFrame(frame: RealtimeFrame) {
     const minute = frameMinute(frame)
     const nextHalfKey = minute < 45 ? 0 : minute < 90 ? 1 : minute < 105 ? 2 : 3
     if (nextHalfKey !== this.halfKey) {
       this.halfKey = nextHalfKey
       this.stores.half.clear()
+      this.indexDirty = true
     }
 
     const samples: Sample[] = []
@@ -172,15 +245,21 @@ export class HeatmapDerivations {
             sumX: 0,
             sumY: 0,
             density: new Float64Array(CELL_COUNT),
+            dirty: true,
           }
           store.set(key, accumulator)
+          this.indexDirty = true
         }
         if (!accumulator) continue
         accumulator.sampleCount += direction
         accumulator.sumX += sample.x * direction
         accumulator.sumY += sample.y * direction
         accumulator.density[sample.cell] += direction
-        if (accumulator.sampleCount <= 0) store.delete(key)
+        accumulator.dirty = true
+        if (accumulator.sampleCount <= 0) {
+          store.delete(key)
+          this.indexDirty = true
+        }
       }
     }
   }
@@ -289,7 +368,7 @@ export function buildHeatmapSnapshot(
 ): HeatmapSnapshot {
   const engine = new HeatmapDerivations()
   const end = Math.min(Math.max(throughIndex, -1), frames.length - 1)
-  if (end >= 0) engine.append(frames.slice(0, end + 1))
+  if (end >= 0) engine.appendRange(frames, 0, end)
   return engine.snapshot()
 }
 
@@ -309,6 +388,7 @@ function toGrid(accumulator: Accumulator): HeatmapGrid {
     averageY: 50,
   }
   accumulator.output = output
+  if (!accumulator.dirty) return output
   output.density.set(accumulator.density)
   output.sampleCount = accumulator.sampleCount
   output.averageX =
@@ -319,6 +399,7 @@ function toGrid(accumulator: Accumulator): HeatmapGrid {
     accumulator.sampleCount > 0
       ? accumulator.sumY / accumulator.sampleCount
       : 50
+  accumulator.dirty = false
   return output
 }
 

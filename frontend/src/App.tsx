@@ -27,65 +27,26 @@ import { ThemeToggle } from "@/components/ThemeToggle"
 import { useTheme } from "@/components/theme-provider"
 import { XgTimeline } from "@/components/XgTimeline"
 import { ZonePanel } from "@/components/ZonePanel"
-import {
-  buildMatchEvents,
-  buildMomentumTimeline,
-  buildRollingMomentumTimeline,
-  buildTacticalEvents,
-  buildXgTimeline,
-  toMatchSnapshot,
-  useRealtimeMatch,
-  type RealtimeFrame,
-  type RealtimeMatchMetadata,
-} from "@/api/realtimeMatch"
-import { buildHeatmapSnapshot } from "@/api/heatmap"
-import { parseLocalArchive, type ParsedLocalArchive } from "@/api/localArchive"
-import { metadataAtTick } from "@/api/archiveMetadata"
+import { useRealtimeMatch } from "@/api/realtimeMatch"
+import { parseLocalArchive } from "@/api/localArchive"
+import { preprocessReplayArchive } from "@/api/replay/replayPreprocessor"
+import { buildInitialReplaySnapshot } from "@/api/replay/replaySession"
+import type { ReplayArchive } from "@/api/replay/replayTypes"
 import { changeLanguage, type SupportedLanguage } from "@/i18n"
-import type {
-  HeatmapSnapshot,
-  MatchEvent,
-  MatchMomentumPoint,
-  MatchSnapshot,
-  TacticalEventPoint,
-  XgTimelinePoint,
-} from "@/types/match"
+import type { MatchSnapshot } from "@/types/match"
 
 export function App() {
   const { t, i18n } = useTranslation()
   const { resolvedTheme } = useTheme()
   const [replayMatch, setReplayMatch] = useState<MatchSnapshot | null>(null)
   const realtimeMatch = useRealtimeMatch(replayMatch === null)
-  const [startupArchive, setStartupArchive] = useState<ParsedLocalArchive>()
+  const [startupArchive, setStartupArchive] = useState<ReplayArchive>()
   const [archiveError, setArchiveError] = useState("")
   const [draggingArchive, setDraggingArchive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const showReplayFrame = useCallback(
-    (
-      frame: RealtimeFrame,
-      metadata: RealtimeMatchMetadata | undefined,
-      xgTimeline: XgTimelinePoint[],
-      events: MatchEvent[],
-      heatmaps: HeatmapSnapshot,
-      tacticalEvents: TacticalEventPoint[],
-      momentum: MatchMomentumPoint[],
-      rollingMomentum: MatchMomentumPoint[]
-    ) => {
-      setReplayMatch(
-        toMatchSnapshot(
-          frame,
-          xgTimeline,
-          metadata,
-          events,
-          heatmaps,
-          tacticalEvents,
-          momentum,
-          rollingMomentum
-        )
-      )
-    },
-    []
-  )
+  const showReplayFrame = useCallback((snapshot: MatchSnapshot) => {
+    setReplayMatch(snapshot)
+  }, [])
   const returnToLive = useCallback(() => setReplayMatch(null), [])
   const openStartupArchive = useCallback(
     async (file: File) => {
@@ -99,25 +60,14 @@ export function App() {
           await file.arrayBuffer(),
           file.name
         )
-        const frameIndex = 0
-        const frame = parsed.frames[frameIndex]
-        const frameMetadata =
-          metadataAtTick(parsed.metadataTimeline, frame.tick) ??
-          parsed.metadataTimeline[0] ??
-          parsed.metadata
-        setStartupArchive(parsed)
-        setReplayMatch(
-          toMatchSnapshot(
-            frame,
-            buildXgTimeline(parsed.frames, frameIndex),
-            frameMetadata,
-            buildMatchEvents(parsed.frames, frameIndex),
-            buildHeatmapSnapshot(parsed.frames, frameIndex),
-            buildTacticalEvents(parsed.frames, frameIndex),
-            buildMomentumTimeline(parsed.frames, frameIndex),
-            buildRollingMomentumTimeline(parsed.frames, frameIndex)
-          )
-        )
+        const archive = await preprocessReplayArchive({
+          summary: parsed.archive,
+          metadata: parsed.metadata,
+          metadataTimeline: parsed.metadataTimeline,
+          frames: parsed.frames,
+        })
+        setStartupArchive(archive)
+        setReplayMatch(buildInitialReplaySnapshot(archive))
       } catch (error) {
         setArchiveError(
           error instanceof Error

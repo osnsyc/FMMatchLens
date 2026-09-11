@@ -2,14 +2,19 @@ import type { RealtimeMatchMetadata } from "@/api/realtimeMatch"
 
 export function metadataAtTick(
   timeline: readonly RealtimeMatchMetadata[],
-  tick: number,
+  tick: number
 ): RealtimeMatchMetadata | undefined {
-  let selected: RealtimeMatchMetadata | undefined
-  for (const metadata of timeline) {
-    if (metadata.capturedTick <= tick &&
-        (!selected || metadata.capturedTick >= selected.capturedTick)) {
-      selected = metadata
+  let low = 0
+  let high = timeline.length - 1
+  let selected = -1
+  while (low <= high) {
+    const middle = (low + high) >>> 1
+    if (timeline[middle].capturedTick <= tick) {
+      selected = middle
+      low = middle + 1
+    } else {
+      high = middle - 1
     }
   }
-  return selected
+  return selected >= 0 ? timeline[selected] : undefined
 }

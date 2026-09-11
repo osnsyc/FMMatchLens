@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   ArrowDataTransferHorizontalIcon,
@@ -6,18 +6,10 @@ import {
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
-import {
-  buildMatchEvents,
-  buildMomentumTimeline,
-  buildRollingMomentumTimeline,
-  buildTacticalEvents,
-  buildXgTimeline,
-  type RealtimeFrame,
-  type RealtimeMatchMetadata,
-} from "@/api/realtimeMatch"
-import { HeatmapDerivations } from "@/api/heatmap"
-import { parseLocalArchive, type ParsedLocalArchive } from "@/api/localArchive"
-import { metadataAtTick } from "@/api/archiveMetadata"
+import type { RealtimeFrame, RealtimeMatchMetadata } from "@/api/realtimeMatch"
+import { parseLocalArchive } from "@/api/localArchive"
+import type { ReplayArchive } from "@/api/replay/replayTypes"
+import { useReplaySession } from "@/hooks/useReplaySession"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -33,15 +25,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import type {
-  HeatmapSnapshot,
-  MatchEventType,
-  MatchMomentumPoint,
-  MatchSnapshot,
-  TacticalEventPoint,
-  TeamSide,
-  XgTimelinePoint,
-} from "@/types/match"
+import type { MatchEventType, MatchSnapshot, TeamSide } from "@/types/match"
 
 const apiBase = `http://127.0.0.1:${__API_PORT__}`
 const pageSize = 2_400
@@ -66,22 +50,13 @@ type ArchiveSlice = {
   archive: ArchiveSummary
   metadata?: RealtimeMatchMetadata
   metadataTimeline?: RealtimeMatchMetadata[]
-  frames: RealtimeFrame[]
+  frames: readonly RealtimeFrame[]
 }
 
 type MatchTimelineProps = {
   match: MatchSnapshot
-  initialLocalArchive?: ParsedLocalArchive
-  onReplayFrame: (
-    frame: RealtimeFrame,
-    metadata: RealtimeMatchMetadata | undefined,
-    xgTimeline: XgTimelinePoint[],
-    events: MatchSnapshot["events"],
-    heatmaps: HeatmapSnapshot,
-    tacticalEvents: TacticalEventPoint[],
-    momentum: MatchMomentumPoint[],
-    rollingMomentum: MatchMomentumPoint[]
-  ) => void
+  initialLocalArchive?: ReplayArchive
+  onReplayFrame: (snapshot: MatchSnapshot) => void
   onLive: () => void
 }
 
@@ -105,12 +80,12 @@ export function MatchTimeline({
   onReplayFrame,
   onLive,
 }: MatchTimelineProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [archives, setArchives] = useState<ArchiveSummary[]>([])
   const [selectedId, setSelectedId] = useState(
     initialLocalArchive ? localArchiveId(initialLocalArchive) : ""
   )
-  const [frames, setFrames] = useState<RealtimeFrame[]>(
+  const [frames, setFrames] = useState<readonly RealtimeFrame[]>(
     initialLocalArchive?.frames ?? []
   )
   const [frameIndex, setFrameIndex] = useState(0)
@@ -118,23 +93,23 @@ export function MatchTimeline({
   const [speed, setSpeed] = useState(1)
   const [loading, setLoading] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
-  const [metadata, setMetadata] = useState<RealtimeMatchMetadata | undefined>(
-    initialLocalArchive?.metadata
+  const [localArchive, setLocalArchive] = useState<ReplayArchive | undefined>(
+    initialLocalArchive
   )
-  const [metadataTimeline, setMetadataTimeline] = useState<
-    RealtimeMatchMetadata[]
-  >(initialLocalArchive?.metadataTimeline ?? [])
-  const [localArchive, setLocalArchive] = useState<
-    ParsedLocalArchive | undefined
-  >(initialLocalArchive)
   const [archiveError, setArchiveError] = useState("")
   const [draggingArchive, setDraggingArchive] = useState(false)
+  const [draftSliderPercent, setDraftSliderPercent] = useState<number>()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const replayHeatRef = useRef<{
-    frames: readonly RealtimeFrame[]
-    throughIndex: number
-    engine: HeatmapDerivations
-  }>({ frames: [], throughIndex: -1, engine: new HeatmapDerivations() })
+  const sliderRafRef = useRef(0)
+  const pendingSliderRef = useRef<number | undefined>(undefined)
+  const {
+    activate: activateReplay,
+    prepare: prepareReplay,
+    advanceTo: advanceReplayTo,
+    dispose: disposeReplay,
+    preprocessing,
+    progress: preprocessingProgress,
+  } = useReplaySession(onReplayFrame)
 
   const refresh = useCallback(async () => {
     try {
@@ -178,6 +153,19 @@ export function MatchTimeline({
   }, [refresh])
 
   useEffect(() => {
+    if (!initialLocalArchive) return
+    activateReplay(initialLocalArchive)
+  }, [activateReplay, initialLocalArchive])
+
+  useEffect(
+    () => () => {
+      if (sliderRafRef.current)
+        window.cancelAnimationFrame(sliderRafRef.current)
+    },
+    []
+  )
+
+  useEffect(() => {
     if (!selectedId || selectedId.startsWith("local:")) return
 
     let cancelled = false
@@ -186,6 +174,7 @@ export function MatchTimeline({
       const loaded: RealtimeFrame[] = []
       let loadedMetadata: RealtimeMatchMetadata | undefined
       let loadedMetadataTimeline: RealtimeMatchMetadata[] = []
+      let loadedSummary: ArchiveSummary | undefined
       let fromTick = 0
 
       try {
@@ -194,6 +183,7 @@ export function MatchTimeline({
           const response = await fetch(url)
           if (!response.ok) throw new Error("archive read failed")
           const page = (await response.json()) as ArchiveSlice
+          loadedSummary = page.archive
           loadedMetadata ??= page.metadata
           if (
             loadedMetadataTimeline.length === 0 &&
@@ -214,15 +204,25 @@ export function MatchTimeline({
         }
 
         if (!cancelled) {
-          setFrames(loaded)
-          setMetadata(loadedMetadata)
-          setMetadataTimeline(loadedMetadataTimeline)
-          setFrameIndex(0)
+          if (!loadedSummary) throw new Error("archive has no summary")
+          const prepared = await prepareReplay({
+            summary: {
+              ...loadedSummary,
+              fileName:
+                loadedSummary.fileName ?? `${loadedSummary.matchId}.fmlens`,
+            },
+            metadata: loadedMetadata,
+            metadataTimeline: loadedMetadataTimeline,
+            frames: loaded,
+          })
+          if (!cancelled && prepared) {
+            setFrames(prepared.frames)
+            setFrameIndex(0)
+          }
         }
       } catch {
         if (!cancelled) {
           setFrames([])
-          setMetadataTimeline([])
           setLoadFailed(true)
           setArchiveError(t("timeline.serverArchiveReadFailed"))
         }
@@ -235,7 +235,7 @@ export function MatchTimeline({
     return () => {
       cancelled = true
     }
-  }, [selectedId, t])
+  }, [prepareReplay, selectedId, t])
 
   useEffect(() => {
     if (!playing || frames.length === 0) return
@@ -267,63 +267,58 @@ export function MatchTimeline({
   }, [playing, speed, frames.length])
 
   useEffect(() => {
-    const frame = frames[frameIndex]
-    if (selectedId && frame) {
-      let heatState = replayHeatRef.current
-      if (heatState.frames !== frames || frameIndex < heatState.throughIndex) {
-        heatState = {
-          frames,
-          throughIndex: -1,
-          engine: new HeatmapDerivations(),
-        }
-        replayHeatRef.current = heatState
-      }
-      if (frameIndex > heatState.throughIndex) {
-        heatState.engine.append(
-          frames.slice(heatState.throughIndex + 1, frameIndex + 1)
-        )
-        heatState.throughIndex = frameIndex
-      }
-      const frameMetadata =
-        metadataAtTick(metadataTimeline, frame.tick) ??
-        metadataTimeline[0] ??
-        metadata
-      onReplayFrame(
-        frame,
-        frameMetadata,
-        buildXgTimeline(frames, frameIndex),
-        buildMatchEvents(frames, frameIndex),
-        heatState.engine.snapshot(),
-        buildTacticalEvents(frames, frameIndex),
-        buildMomentumTimeline(frames, frameIndex),
-        buildRollingMomentumTimeline(frames, frameIndex)
-      )
-    }
-  }, [
-    selectedId,
-    frameIndex,
-    frames,
-    metadata,
-    metadataTimeline,
-    onReplayFrame,
-  ])
+    if (selectedId && frames[frameIndex]) advanceReplayTo(frameIndex)
+  }, [advanceReplayTo, frameIndex, frames, selectedId])
 
-  const events = useMemo(() => buildTimelineEvents(match, t), [match, t])
-  const homeEvents = events.filter((event) => event.team === "home")
-  const awayEvents = events.filter((event) => event.team === "away")
+  const events = useTimelineEvents(
+    match,
+    t,
+    i18n.resolvedLanguage ?? i18n.language
+  )
+  const homeEvents = useMemo(
+    () => events.filter((event) => event.team === "home"),
+    [events]
+  )
+  const awayEvents = useMemo(
+    () => events.filter((event) => event.team === "away"),
+    [events]
+  )
   const replaying = selectedId !== ""
+  const busy = loading || preprocessing
   const sliderMax = 100
-  const sliderPercent = replaying
+  const committedSliderPercent = replaying
     ? replayPercent(frameIndex, frames)
     : liveTimelinePercent(match.clock.elapsedTick, match)
+  const sliderPercent = draftSliderPercent ?? committedSliderPercent
   const sliderValue = sliderPercent
   const sliderLabelOffset = 10 - sliderPercent * 0.2
+
+  const queueSliderSeek = (percent: number) => {
+    setPlaying(false)
+    setDraftSliderPercent(percent)
+    pendingSliderRef.current = percent
+    if (sliderRafRef.current) return
+    sliderRafRef.current = window.requestAnimationFrame(() => {
+      sliderRafRef.current = 0
+      const pending = pendingSliderRef.current
+      if (pending == null) return
+      setFrameIndex(replayFrameIndex(pending, frames))
+    })
+  }
+
+  const commitSliderSeek = (percent: number) => {
+    if (sliderRafRef.current) window.cancelAnimationFrame(sliderRafRef.current)
+    sliderRafRef.current = 0
+    pendingSliderRef.current = undefined
+    setDraftSliderPercent(undefined)
+    setFrameIndex(replayFrameIndex(percent, frames))
+  }
 
   const selectSource = (matchId: string) => {
     if (localArchive && matchId === localArchiveId(localArchive)) {
       setFrames(localArchive.frames)
-      setMetadata(localArchive.metadata)
-      setMetadataTimeline(localArchive.metadataTimeline)
+      disposeReplay()
+      activateReplay(localArchive)
       setFrameIndex(0)
       setPlaying(false)
       setLoading(false)
@@ -334,8 +329,7 @@ export function MatchTimeline({
     }
 
     setFrames([])
-    setMetadata(undefined)
-    setMetadataTimeline([])
+    disposeReplay()
     setFrameIndex(0)
     setPlaying(false)
     setLoading(matchId !== "")
@@ -359,12 +353,17 @@ export function MatchTimeline({
         await file.arrayBuffer(),
         file.name
       )
-      setLocalArchive(parsed)
-      setFrames(parsed.frames)
-      setMetadata(parsed.metadata)
-      setMetadataTimeline(parsed.metadataTimeline)
+      const prepared = await prepareReplay({
+        summary: parsed.archive,
+        metadata: parsed.metadata,
+        metadataTimeline: parsed.metadataTimeline,
+        frames: parsed.frames,
+      })
+      if (!prepared) return
+      setLocalArchive(prepared)
+      setFrames(prepared.frames)
       setFrameIndex(0)
-      setSelectedId(localArchiveId(parsed))
+      setSelectedId(localArchiveId(prepared))
     } catch (error) {
       setLoadFailed(true)
       setArchiveError(
@@ -383,7 +382,7 @@ export function MatchTimeline({
       ? [
           {
             value: localArchiveId(localArchive),
-            label: `${t("timeline.local")} · ${archiveOptionLabel(localArchive.archive, localArchive.metadata)}`,
+            label: `${t("timeline.local")} · ${archiveOptionLabel(localArchive.summary, localArchive.metadata)}`,
           },
         ]
       : []),
@@ -441,7 +440,7 @@ export function MatchTimeline({
           </div>
 
           <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-            {replaying && !loading && !loadFailed ? (
+            {replaying && !busy && !loadFailed ? (
               <span
                 className="flex h-8 min-w-0 flex-1 items-center justify-center rounded-md border border-border/70 bg-muted/35 px-2 tabular-nums shadow-xs"
                 aria-label={t("timeline.tickProgress", {
@@ -465,8 +464,8 @@ export function MatchTimeline({
                 {archiveError && !replaying
                   ? archiveError
                   : replaying
-                    ? loading
-                      ? t("timeline.loading")
+                    ? busy
+                      ? `${t("timeline.loading")}${preprocessing ? ` ${Math.round(preprocessingProgress * 100)}%` : ""}`
                       : archiveError || t("timeline.archiveReadFailed")
                     : t("timeline.liveClock", {
                         time: `${match.clock.minute}:${String(match.clock.second).padStart(2, "0")}`,
@@ -552,7 +551,7 @@ export function MatchTimeline({
             variant={replaying ? "default" : "outline"}
             size="icon"
             className="size-11 shrink-0 rounded-full shadow-md shadow-primary/25 transition-transform hover:scale-105"
-            disabled={!replaying || loading || frames.length === 0}
+            disabled={!replaying || busy || frames.length === 0}
             aria-label={playing ? t("timeline.pause") : t("timeline.play")}
             onClick={() => setPlaying((current) => !current)}
           >
@@ -586,20 +585,26 @@ export function MatchTimeline({
                 marginLeft: `${sliderLabelOffset - 10}px`,
               }}
             >
-              {formatTimelineClock(match)}
+              {draftSliderPercent == null
+                ? formatTimelineClock(match)
+                : formatReplayClock(draftSliderPercent, frames)}
             </span>
             <Slider
               min={0}
               max={sliderMax}
               step={1}
               value={[sliderValue]}
-              disabled={!replaying || loading || frames.length === 0}
+              disabled={!replaying || busy || frames.length === 0}
               onValueChange={(value) => {
                 const next = Array.isArray(value) ? value[0] : value
                 if (typeof next === "number" && replaying) {
-                  setPlaying(false)
-                  setFrameIndex(replayFrameIndex(next, frames))
+                  queueSliderSeek(next)
                 }
+              }}
+              onValueCommitted={(value) => {
+                const next = Array.isArray(value) ? value[0] : value
+                if (typeof next === "number" && replaying)
+                  commitSliderSeek(next)
               }}
               className="[&_[data-slot=slider-range]]:bg-primary/80 [&_[data-slot=slider-thumb]]:size-5 [&_[data-slot=slider-thumb]]:rounded-full [&_[data-slot=slider-thumb]]:border-2 [&_[data-slot=slider-thumb]]:bg-background [&_[data-slot=slider-track]]:h-2 [&_[data-slot=slider-track]]:rounded-full"
             />
@@ -666,75 +671,120 @@ function archiveMetadataFromFileName(matchId: string, fileName?: string) {
   }
 }
 
-function localArchiveId(archive: ParsedLocalArchive) {
-  return `local:${archive.archive.matchId}:${archive.archive.fileName}`
+function localArchiveId(archive: ReplayArchive) {
+  return `local:${archive.summary.matchId}:${archive.summary.fileName}`
 }
 
-function EventRail({
-  events,
-  side,
-  color,
-  match,
-  frames,
-  replaying,
-}: {
-  events: TimelineEvent[]
-  side: TeamSide
-  color: string
-  match: MatchSnapshot
-  frames: RealtimeFrame[]
-  replaying: boolean
-}) {
-  const positionedEvents = layoutEvents(events, (event) =>
-    eventTimelinePercent(event, match, frames, replaying)
-  )
+function useTimelineEvents(
+  match: MatchSnapshot,
+  t: (key: string) => string,
+  language: string
+) {
+  const key = `${language}|${match.events
+    .map(
+      (event) =>
+        `${event.id}:${event.type}:${event.minute}:${event.tick ?? ""}:${event.team ?? ""}:${event.playerId ?? ""}`
+    )
+    .join("|")}|${match.players
+    .map(
+      (player) =>
+        `${player.id}:${player.name}:${player.team}:${player.status?.subbedOnMinute ?? ""}:${player.status?.subbedOffMinute ?? ""}`
+    )
+    .join("|")}`
+  // The key is a compact view-model revision: ratings and coordinates are
+  // intentionally excluded so ordinary replay frames do not rebuild rails.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => buildTimelineEvents(match, t), [key, t])
+}
 
-  return (
-    <div className="relative z-20 h-6 min-w-0">
-      {positionedEvents.map(({ event, percent, offset }) => (
-        <Tooltip key={event.id}>
-          <TooltipTrigger
-            render={
-              <button
-                type="button"
-                className={`absolute z-20 flex size-5 items-center justify-center rounded-full transition-transform outline-none hover:z-30 hover:scale-110 focus-visible:z-30 focus-visible:ring-2 focus-visible:ring-ring ${side === "home" ? "bottom-0" : "top-0"}`}
-                style={{
-                  left: `${percent}%`,
-                  transform: `translateX(calc(-50% + ${offset}px))`,
-                }}
-                aria-label={`${event.label} ${event.minute}'`}
-              />
-            }
-          >
-            <EventIcon event={event} color={color} />
-            {event.occurrences > 1 && (
-              <span className="pointer-events-none absolute -top-0.5 -right-1.5 z-30 flex min-w-3.5 items-center justify-center rounded-full bg-foreground px-0.5 text-[8px] leading-3.5 font-bold text-background shadow-sm">
-                {event.occurrences}
-              </span>
-            )}
-            <span
-              className={`pointer-events-none absolute left-1/2 -translate-x-1/2 text-[8px] leading-none font-semibold text-muted-foreground tabular-nums ${side === "home" ? "-top-1.5" : "-bottom-1.5"}`}
+const EventRail = memo(
+  function EventRail({
+    events,
+    side,
+    color,
+    match,
+    frames,
+    replaying,
+  }: {
+    events: TimelineEvent[]
+    side: TeamSide
+    color: string
+    match: MatchSnapshot
+    frames: readonly RealtimeFrame[]
+    replaying: boolean
+  }) {
+    const positionedEvents = layoutEvents(events, (event) =>
+      eventTimelinePercent(event, match, frames, replaying)
+    )
+
+    return (
+      <div className="relative z-20 h-6 min-w-0">
+        {positionedEvents.map(({ event, percent, offset }) => (
+          <Tooltip key={event.id}>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  className={`absolute z-20 flex size-5 items-center justify-center rounded-full transition-transform outline-none hover:z-30 hover:scale-110 focus-visible:z-30 focus-visible:ring-2 focus-visible:ring-ring ${side === "home" ? "bottom-0" : "top-0"}`}
+                  style={{
+                    left: `${percent}%`,
+                    transform: `translateX(calc(-50% + ${offset}px))`,
+                  }}
+                  aria-label={`${event.label} ${event.minute}'`}
+                />
+              }
             >
-              {event.minute}&apos;
-            </span>
-          </TooltipTrigger>
-          <TooltipContent className="w-max max-w-none gap-0 px-2.5 py-2">
-            <div className="grid grid-cols-[auto_auto] grid-rows-2 items-center gap-x-4 gap-y-1 whitespace-nowrap">
-              <span className="font-semibold text-background tabular-nums">
+              <EventIcon event={event} color={color} />
+              {event.occurrences > 1 && (
+                <span className="pointer-events-none absolute -top-0.5 -right-1.5 z-30 flex min-w-3.5 items-center justify-center rounded-full bg-foreground px-0.5 text-[8px] leading-3.5 font-bold text-background shadow-sm">
+                  {event.occurrences}
+                </span>
+              )}
+              <span
+                className={`pointer-events-none absolute left-1/2 -translate-x-1/2 text-[8px] leading-none font-semibold text-muted-foreground tabular-nums ${side === "home" ? "-top-1.5" : "-bottom-1.5"}`}
+              >
                 {event.minute}&apos;
               </span>
-              <TimelineEventPeople event={event} row="primary" />
-              <span className="text-[10px] font-medium text-background/65">
-                {event.label}
-              </span>
-              <TimelineEventPeople event={event} row="secondary" />
-            </div>
-          </TooltipContent>
-        </Tooltip>
-      ))}
-    </div>
-  )
-}
+            </TooltipTrigger>
+            <TooltipContent className="w-max max-w-none gap-0 px-2.5 py-2">
+              <div className="grid grid-cols-[auto_auto] grid-rows-2 items-center gap-x-4 gap-y-1 whitespace-nowrap">
+                <span className="font-semibold text-background tabular-nums">
+                  {event.minute}&apos;
+                </span>
+                <TimelineEventPeople event={event} row="primary" />
+                <span className="text-[10px] font-medium text-background/65">
+                  {event.label}
+                </span>
+                <TimelineEventPeople event={event} row="secondary" />
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        ))}
+      </div>
+    )
+  },
+  (previous, next) => {
+    if (
+      previous.events !== next.events ||
+      previous.side !== next.side ||
+      previous.color !== next.color ||
+      previous.frames !== next.frames ||
+      previous.replaying !== next.replaying
+    ) {
+      return false
+    }
+    if (next.replaying) {
+      return (
+        replayFirstHalfOffset(previous.match) ===
+        replayFirstHalfOffset(next.match)
+      )
+    }
+    return (
+      previous.match.period === next.match.period &&
+      previous.match.clock.elapsedTick === next.match.clock.elapsedTick
+    )
+  }
+)
 
 function TimelineEventPeople({
   event,
@@ -859,6 +909,33 @@ function PauseIcon() {
 }
 
 function buildTimelineEvents(match: MatchSnapshot, t: (key: string) => string) {
+  const playerById = new Map(match.players.map((player) => [player.id, player]))
+  const goals = match.events
+    .filter((event) => event.type === "goal")
+    .map((event) => ({
+      event,
+      team: event.team ?? playerById.get(event.playerId ?? -1)?.team,
+    }))
+  const assistantsByGoal = new Map<string, string[]>()
+  for (const assist of match.events) {
+    if (assist.type !== "assist_candidate") continue
+    const team = assist.team ?? playerById.get(assist.playerId ?? -1)?.team
+    let closest: (typeof goals)[number] | undefined
+    let closestDistance = Number.POSITIVE_INFINITY
+    for (const goal of goals) {
+      const distance = Math.abs(goal.event.minute - assist.minute)
+      if (goal.team === team && distance <= 2 && distance < closestDistance) {
+        closest = goal
+        closestDistance = distance
+      }
+    }
+    const assistant = playerById.get(assist.playerId ?? -1)?.name
+    if (!closest || !assistant) continue
+    const names = assistantsByGoal.get(closest.event.id) ?? []
+    names.push(assistant)
+    assistantsByGoal.set(closest.event.id, names)
+  }
+
   const matchEvents = match.events
     .filter(
       (event) =>
@@ -868,27 +945,11 @@ function buildTimelineEvents(match: MatchSnapshot, t: (key: string) => string) {
         event.type === "red_card"
     )
     .map((event): TimelineEvent | null => {
-      const player = match.players.find((entry) => entry.id === event.playerId)
+      const player = playerById.get(event.playerId ?? -1)
       const team = event.team ?? player?.team
       if (!team) return null
 
       const eventLabel = labelForEvent(event.type, t)
-      let assistants: string[] = []
-      if (event.type === "goal") {
-        assistants = match.events
-          .filter(
-            (candidate) =>
-              candidate.type === "assist_candidate" &&
-              assistBelongsToGoal(match, candidate, event, team)
-          )
-          .map(
-            (candidate) =>
-              match.players.find((entry) => entry.id === candidate.playerId)
-                ?.name
-          )
-          .filter((name): name is string => Boolean(name))
-      }
-
       return {
         id: event.id,
         type: event.type,
@@ -897,7 +958,8 @@ function buildTimelineEvents(match: MatchSnapshot, t: (key: string) => string) {
         team,
         label: eventLabel,
         primaryPeople: player?.name ? [player.name] : [],
-        secondaryPeople: assistants,
+        secondaryPeople:
+          event.type === "goal" ? (assistantsByGoal.get(event.id) ?? []) : [],
         occurrences: 1,
       }
     })
@@ -937,46 +999,18 @@ function eventTimelineMinute(event: TimelineEvent, match: MatchSnapshot) {
 
   // Player status currently exposes only the display minute. Once the second
   // half begins, Tick includes the first-half stoppage that DisplayTick hides.
-  const firstHalfOffset =
-    match.period >= 2
-      ? Math.max(
-          0,
-          match.clock.elapsedTick / 240 -
-            (match.clock.minute + match.clock.second / 60)
-        )
-      : 0
+  const firstHalfOffset = replayFirstHalfOffset(match)
   return event.minute + (event.minute > 45 ? firstHalfOffset : 0)
 }
 
-function assistBelongsToGoal(
-  match: MatchSnapshot,
-  assist: MatchSnapshot["events"][number],
-  goal: MatchSnapshot["events"][number],
-  team: TeamSide
-) {
-  const assistTeam =
-    assist.team ??
-    match.players.find((player) => player.id === assist.playerId)?.team
-  if (assistTeam !== team) return false
-
-  const closestGoal = match.events
-    .filter((candidate) => {
-      if (candidate.type !== "goal") return false
-      const candidateTeam =
-        candidate.team ??
-        match.players.find((player) => player.id === candidate.playerId)?.team
-      return (
-        candidateTeam === team &&
-        Math.abs(candidate.minute - assist.minute) <= 2
+function replayFirstHalfOffset(match: MatchSnapshot) {
+  return match.period >= 2
+    ? Math.max(
+        0,
+        match.clock.elapsedTick / 240 -
+          (match.clock.minute + match.clock.second / 60)
       )
-    })
-    .sort(
-      (left, right) =>
-        Math.abs(left.minute - assist.minute) -
-        Math.abs(right.minute - assist.minute)
-    )[0]
-
-  return closestGoal?.id === goal.id
+    : 0
 }
 
 function buildSubstitutionEvents(
@@ -1144,7 +1178,24 @@ function replayFrameIndex(percent: number, frames: readonly RealtimeFrame[]) {
     if (frames[middle].tick < targetTick) low = middle + 1
     else high = middle
   }
-  return low
+  if (low === 0) return 0
+  return targetTick - frames[low - 1].tick <= frames[low].tick - targetTick
+    ? low - 1
+    : low
+}
+
+function formatReplayClock(percent: number, frames: readonly RealtimeFrame[]) {
+  const frame = frames[replayFrameIndex(percent, frames)]
+  if (!frame) return "0"
+  const tick = Number.isFinite(frame.displayTick)
+    ? frame.displayTick
+    : frame.tick
+  const displaySeconds = Math.floor(Math.max(0, tick) / 4)
+  const minute = Math.floor(displaySeconds / 60)
+  const plannedSeconds = frame.period <= 1 ? 45 * 60 : 90 * 60
+  return displaySeconds <= plannedSeconds
+    ? `${minute}`
+    : `+${Math.floor((displaySeconds - plannedSeconds) / 60)}`
 }
 
 function liveTimelinePercent(tick: number, match: MatchSnapshot) {

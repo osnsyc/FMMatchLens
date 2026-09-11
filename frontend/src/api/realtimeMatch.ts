@@ -1,6 +1,7 @@
 import { startTransition, useEffect, useRef, useState } from "react"
 
 import { HeatmapDerivations } from "@/api/heatmap"
+import { HistoricalDerivations } from "@/api/replay/replayDerivations"
 import { selectTeamThemeColors } from "@/lib/teamColors"
 
 import type {
@@ -204,7 +205,8 @@ type RealtimeFormationTimelineSlice = {
 }
 
 /** Incremental historical state. Each accepted frame is visited exactly once. */
-class LiveDerivations {
+/** @deprecated Legacy parity oracle; live and replay use HistoricalDerivations. */
+export class LegacyLiveDerivations {
   private previous?: RealtimeFrame
   private xg: XgTimelinePoint[] = [{ minute: 0, home: 0, away: 0 }]
   private events: MatchEvent[] = []
@@ -455,7 +457,7 @@ export function useRealtimeMatch(enabled = true): MatchSnapshot | null {
     let formationHistoryIndex = 0
     let formationHistoryEntries: RealtimeFormationTimelineEntry[] = []
     let formationSnapshots: FormationSnapshot[] = []
-    let derived = new LiveDerivations()
+    let derived = new HistoricalDerivations()
     let historical = derived.snapshot(0)
     let syncing = false
     let syncPending = false
@@ -485,11 +487,11 @@ export function useRealtimeMatch(enabled = true): MatchSnapshot | null {
         setMatch(
           toMatchSnapshot(
             frame,
-            historical.xg,
+            historical.xgTimeline,
             metadata.current,
             historical.events,
             historical.heatmaps,
-            historical.tactical,
+            historical.tacticalEvents,
             historical.momentum,
             historical.rollingMomentum,
             formationSnapshots
@@ -506,7 +508,7 @@ export function useRealtimeMatch(enabled = true): MatchSnapshot | null {
       formationHistoryIndex = 0
       formationHistoryEntries = []
       formationSnapshots = []
-      derived = new LiveDerivations()
+      derived = new HistoricalDerivations()
       historical = derived.snapshot(0)
       if (metadata.current?.matchId !== matchId) metadata.current = null
     }
@@ -768,10 +770,7 @@ export function toMatchSnapshot(
   )
   const homeClubUid = metadata?.home.clubUid
   const awayClubUid = metadata?.away.clubUid
-  const teamThemeColors = selectTeamThemeColors(
-    metadata?.home,
-    metadata?.away
-  )
+  const teamThemeColors = selectTeamThemeColors(metadata?.home, metadata?.away)
 
   return {
     matchId: frame.matchId,
@@ -813,16 +812,20 @@ export function toMatchSnapshot(
       stats: toTeamStats(frame.away),
     },
     players: frame.players.map((player) =>
-      toPlayer(player, playerMetadataBySlot.get(player.slot), metadata?.matchDate)
+      toPlayer(
+        player,
+        playerMetadataBySlot.get(player.slot),
+        metadata?.matchDate
+      )
     ),
-    events: [...events],
+    events,
     heatmaps,
     tacticalEvents,
     momentum,
     rollingMomentum,
     formationSnapshots,
     xgTimeline: xgTimeline?.length
-      ? [...xgTimeline]
+      ? xgTimeline
       : appendXgPoint([{ minute: 0, home: 0, away: 0 }], {
           minute,
           home: frame.home.xg,
@@ -1396,7 +1399,7 @@ function mergeFormationEntryIntoMetadata(
 function toPlayer(
   player: RealtimePlayer,
   metadata?: RealtimePlayerMetadata,
-  matchDate?: string,
+  matchDate?: string
 ): MatchPlayer {
   const uid = metadata?.uid
   return {
@@ -1475,13 +1478,19 @@ function toPlayer(
   }
 }
 
-function calculateAge(dateOfBirth?: string, referenceDate?: string): number | undefined {
+function calculateAge(
+  dateOfBirth?: string,
+  referenceDate?: string
+): number | undefined {
   const birth = parseIsoDate(dateOfBirth)
   const reference = parseIsoDate(referenceDate) ?? new Date()
   if (!birth || birth > reference) return undefined
   let age = reference.getUTCFullYear() - birth.getUTCFullYear()
-  if (reference.getUTCMonth() < birth.getUTCMonth() ||
-      (reference.getUTCMonth() === birth.getUTCMonth() && reference.getUTCDate() < birth.getUTCDate())) {
+  if (
+    reference.getUTCMonth() < birth.getUTCMonth() ||
+    (reference.getUTCMonth() === birth.getUTCMonth() &&
+      reference.getUTCDate() < birth.getUTCDate())
+  ) {
     age -= 1
   }
   return age >= 0 && age <= 120 ? age : undefined
