@@ -79,6 +79,7 @@ export type HeatmapSnapshot = {
    * Use getHeatmap() rather than retaining individual grid references.
    */
   grids: ReadonlyMap<string, HeatmapGrid>
+  revision: number
 }
 
 export type TacticalEventMetricId =

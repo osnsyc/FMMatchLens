@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { memo, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import {
@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/menubar"
 import { PixiTactical } from "@/components/tactical/PixiTactical"
 import type { TacticalHit } from "@/components/tactical/PixiTacticalRenderer"
+import { samePlayerLabels } from "@/lib/matchRenderEquality"
 import {
   buildShotChains,
   buildTacticalScene,
@@ -68,7 +69,9 @@ type HoveredTacticalPoint = {
 
 const emptyShotChains: readonly ShotChain[] = []
 
-export function TacticalBoard({ match }: TacticalBoardProps) {
+export const TacticalBoard = memo(function TacticalBoard({
+  match,
+}: TacticalBoardProps) {
   const { t } = useTranslation()
   const [showNumbers, setShowNumbers] = useState(true)
   const [showAttackFocus, setShowAttackFocus] = useState(true)
@@ -339,6 +342,20 @@ export function TacticalBoard({ match }: TacticalBoardProps) {
         />
       )}
     </section>
+  )
+}, sameTacticalBoardProps)
+
+function sameTacticalBoardProps(
+  previous: TacticalBoardProps,
+  next: TacticalBoardProps
+) {
+  const left = previous.match
+  const right = next.match
+  return (
+    left.tacticalEvents === right.tacticalEvents &&
+    left.home.color === right.home.color &&
+    left.away.color === right.away.color &&
+    samePlayerLabels(left.players, right.players)
   )
 }
 

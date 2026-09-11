@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { useTranslation } from "react-i18next"
 import { ArrowDataTransferHorizontalIcon, Pin02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
@@ -12,6 +12,7 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card"
 import { NativeTabs } from "@/components/uitripled/native-tabs-shadcnui"
+import { sameFormationPlayers } from "@/lib/matchRenderEquality"
 import {
   Timeline,
   TimelineContent,
@@ -84,7 +85,7 @@ const playerMotionVariants = {
   }),
 }
 
-export function FormationPitch({ match }: FormationPitchProps) {
+export const FormationPitch = memo(function FormationPitch({ match }: FormationPitchProps) {
   const { t } = useTranslation()
   const [view, setView] = useState<FormationView>("home-ip")
   const { side, inPossession } = formationSelection(view)
@@ -468,6 +469,22 @@ export function FormationPitch({ match }: FormationPitchProps) {
       </CardContent>
     </section>
   )
+}, sameFormationPitchProps)
+
+function sameFormationPitchProps(previous: FormationPitchProps, next: FormationPitchProps) {
+  const left = previous.match
+  const right = next.match
+  return left.matchId === right.matchId
+    && left.home.uid === right.home.uid
+    && left.home.clubUid === right.home.clubUid
+    && left.home.name === right.home.name
+    && left.home.color === right.home.color
+    && left.away.uid === right.away.uid
+    && left.away.clubUid === right.away.clubUid
+    && left.away.name === right.away.name
+    && left.away.color === right.away.color
+    && left.formationSnapshots === right.formationSnapshots
+    && sameFormationPlayers(left.players, right.players)
 }
 
 function playerSurname(name: string) {

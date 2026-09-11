@@ -20,7 +20,7 @@ import {
   ReplaySession,
   replayFrameIndexAtPercent,
 } from "@/api/replay/replaySession"
-import { replayFixture } from "./replayTestFixtures"
+import { frame, replayFixture } from "./replayTestFixtures"
 
 describe("ReplaySession", () => {
   it("matches the legacy derivation builders at every frame", async () => {
@@ -113,5 +113,35 @@ describe("ReplaySession", () => {
     expect(session.advanceTo(1).home.name).toBe("Home")
     expect(session.advanceTo(2).home.name).toBe("Updated Home")
     expect(replayFrameIndexAtPercent(new Int32Array([0, 100, 500]), 50)).toBe(1)
+  })
+
+  it("preserves render-facing references until their values change", async () => {
+    const fixture = replayFixture()
+    fixture.frames = [frame(0), frame(1), frame(2, { homeXg: 0.1 })]
+    fixture.summary = {
+      ...fixture.summary,
+      frameCount: fixture.frames.length,
+      lastTick: fixture.frames.at(-1)?.tick ?? 0,
+    }
+    const archive = await preprocessReplayArchive(fixture)
+    const session = new ReplaySession(archive)
+
+    const first = session.advanceTo(0)
+    const unchanged = session.advanceTo(1)
+    expect(unchanged).not.toBe(first)
+    expect(unchanged.clock).not.toBe(first.clock)
+    expect(unchanged.home).toBe(first.home)
+    expect(unchanged.away).toBe(first.away)
+    expect(unchanged.players).toBe(first.players)
+    expect(unchanged.xgTimeline).toBe(first.xgTimeline)
+    expect(unchanged.events).toBe(first.events)
+    expect(unchanged.heatmaps).not.toBe(first.heatmaps)
+    expect(unchanged.heatmaps.revision).toBe(first.heatmaps.revision + 1)
+
+    const changed = session.advanceTo(2)
+    expect(changed.xgTimeline).not.toBe(unchanged.xgTimeline)
+    expect(changed.home).not.toBe(unchanged.home)
+    expect(changed.players).toBe(unchanged.players)
+    expect(changed.events).toBe(unchanged.events)
   })
 })

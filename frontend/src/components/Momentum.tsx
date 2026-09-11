@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { memo, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   Area,
@@ -16,6 +16,7 @@ import { CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { NativeTabs } from "@/components/uitripled/native-tabs-shadcnui"
+import { samePlayerLabels } from "@/lib/matchRenderEquality"
 import type { MatchSnapshot, TacticalEventPoint, TeamSide, XgTimelinePoint } from "@/types/match"
 
 type MomentumProps = {
@@ -56,16 +57,29 @@ const eventWeights: Partial<Record<TacticalEventPoint["metricId"], number>> = {
 
 const momentumYTicks = [-1, -0.5, 0, 0.5, 1]
 
-export function Momentum({ match }: MomentumProps) {
+export const Momentum = memo(function Momentum({ match }: MomentumProps) {
   const { t } = useTranslation()
   const [mode, setMode] = useState<MomentumMode>("line")
   const homeColor = match.home.color ?? "var(--team-home-fallback)"
   const awayColor = match.away.color ?? "var(--team-away-fallback)"
   const nativeBarPoints = useMemo(() => buildNativeMomentum(match.momentum), [match.momentum])
   const hasNativeMomentum = nativeBarPoints.length > 0
-  const minutePoints = useMemo(() => buildLineMomentum(match), [match])
+  const minutePoints = useMemo(
+    () => buildLineMomentum(
+      match.rollingMomentum,
+      match.momentum,
+      match.clock.minute,
+      match.xgTimeline,
+      match.tacticalEvents,
+    ),
+    [match.clock.minute, match.momentum, match.rollingMomentum, match.tacticalEvents, match.xgTimeline],
+  )
   const linePoints = useMemo(() => splitAtZeroCrossings(minutePoints), [minutePoints])
-  const goalMarkers = useMemo(() => buildGoalMarkers(match, t("squad.goal")), [match, t])
+  const goalLabel = t("squad.goal")
+  const goalMarkers = useMemo(
+    () => buildGoalMarkers(match.events, match.players, goalLabel),
+    [goalLabel, match.events, match.players],
+  )
   const bars = useMemo(
     () => hasNativeMomentum ? buildNativeBars(nativeBarPoints) : buildFiveMinuteBars(minutePoints),
     [hasNativeMomentum, minutePoints, nativeBarPoints],
@@ -221,19 +235,25 @@ export function Momentum({ match }: MomentumProps) {
       </CardContent>
     </section>
   )
-}
+}, sameMomentumProps)
 
-function buildLineMomentum(match: MatchSnapshot): MomentumPoint[] {
-  if (match.rollingMomentum.length) {
-    return [...match.rollingMomentum]
+function buildLineMomentum(
+  rollingMomentum: MatchSnapshot["rollingMomentum"],
+  momentum: MatchSnapshot["momentum"],
+  currentMinute: number,
+  xgTimeline: MatchSnapshot["xgTimeline"],
+  tacticalEvents: MatchSnapshot["tacticalEvents"],
+): MomentumPoint[] {
+  if (rollingMomentum.length) {
+    return [...rollingMomentum]
       .filter((point) => Number.isFinite(point.value) && Number.isFinite(point.minute))
       .sort((left, right) => left.timeTicks - right.timeTicks)
       .map((point) => toMomentumPoint(point.minute, Math.max(-1, Math.min(1, point.value)), point))
   }
 
-  const native = buildNativeMomentum(match.momentum)
+  const native = buildNativeMomentum(momentum)
   if (native.length) return native
-  return buildEstimatedMomentum(match)
+  return buildEstimatedMomentum(currentMinute, xgTimeline, tacticalEvents)
 }
 
 function buildNativeMomentum(points: MatchSnapshot["momentum"]): MomentumPoint[] {
@@ -244,10 +264,14 @@ function buildNativeMomentum(points: MatchSnapshot["momentum"]): MomentumPoint[]
     .map((point) => toMomentumPoint(point.minute, Math.max(-1, Math.min(1, point.value)), point))
 }
 
-function buildEstimatedMomentum(match: MatchSnapshot): MomentumPoint[] {
-  const throughMinute = Math.max(0, Math.min(90, match.clock.minute))
+function buildEstimatedMomentum(
+  currentMinute: number,
+  xgTimeline: MatchSnapshot["xgTimeline"],
+  tacticalEvents: MatchSnapshot["tacticalEvents"],
+): MomentumPoint[] {
+  const throughMinute = Math.max(0, Math.min(90, currentMinute))
   const raw = Array.from({ length: throughMinute + 1 }, () => 0)
-  const xgByMinute = cumulativeXgByMinute(match.xgTimeline, throughMinute)
+  const xgByMinute = cumulativeXgByMinute(xgTimeline, throughMinute)
 
   for (let minute = 1; minute <= throughMinute; minute += 1) {
     const current = xgByMinute[minute]
@@ -256,7 +280,7 @@ function buildEstimatedMomentum(match: MatchSnapshot): MomentumPoint[] {
     raw[minute] -= Math.max(0, current.away - previous.away) * 2.8
   }
 
-  for (const event of match.tacticalEvents) {
+  for (const event of tacticalEvents) {
     if (event.minute < 0 || event.minute > throughMinute) continue
     const direction = event.team === "home" ? 1 : -1
     raw[Math.floor(event.minute)] += direction * (eventWeights[event.metricId] ?? 0)
@@ -327,11 +351,15 @@ function buildFiveMinuteBars(points: readonly MomentumPoint[]): MomentumBar[] {
   return bars
 }
 
-function buildGoalMarkers(match: MatchSnapshot, goalLabel: string): GoalMarker[] {
-  return match.events
+function buildGoalMarkers(
+  events: MatchSnapshot["events"],
+  players: MatchSnapshot["players"],
+  goalLabel: string,
+): GoalMarker[] {
+  return events
     .filter((event) => event.type === "goal" || event.type === "own_goal")
     .map((event) => {
-      const player = match.players.find((candidate) => candidate.id === event.playerId)
+      const player = players.find((candidate) => candidate.id === event.playerId)
       const eventTeam = event.team ?? player?.team
       if (!eventTeam) return null
       const team = event.type === "own_goal"
@@ -345,6 +373,22 @@ function buildGoalMarkers(match: MatchSnapshot, goalLabel: string): GoalMarker[]
       }
     })
     .filter((marker): marker is GoalMarker => marker != null)
+}
+
+function sameMomentumProps(previous: MomentumProps, next: MomentumProps) {
+  const left = previous.match
+  const right = next.match
+  return left.home.name === right.home.name
+    && left.home.color === right.home.color
+    && left.away.name === right.away.name
+    && left.away.color === right.away.color
+    && left.clock.minute === right.clock.minute
+    && left.momentum === right.momentum
+    && left.rollingMomentum === right.rollingMomentum
+    && left.xgTimeline === right.xgTimeline
+    && left.tacticalEvents === right.tacticalEvents
+    && left.events === right.events
+    && samePlayerLabels(left.players, right.players)
 }
 
 function GoalMarkerLabel({

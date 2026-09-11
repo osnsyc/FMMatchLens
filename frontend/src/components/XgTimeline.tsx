@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { memo, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import {
   CartesianGrid,
@@ -26,6 +26,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card"
+import { samePlayerLabels } from "@/lib/matchRenderEquality"
 import type {
   MatchSnapshot,
   TeamSide,
@@ -45,7 +46,7 @@ type GoalMarker = {
   assistants: string[]
 }
 
-export function XgTimeline({
+export const XgTimeline = memo(function XgTimeline({
   match,
 }: XgTimelineProps) {
   const { t } = useTranslation()
@@ -57,17 +58,19 @@ export function XgTimeline({
     match.away.color ?? "var(--team-away-fallback)"
 
   const timeline = useMemo(
-    () => buildTimeline(match),
-    [match]
+    () => buildTimeline(
+      match.xgTimeline,
+      match.clock.minute,
+      match.home.stats.xg,
+      match.away.stats.xg
+    ),
+    [match.away.stats.xg, match.clock.minute, match.home.stats.xg, match.xgTimeline]
   )
 
   const goalMarkers = useMemo(
     () =>
-      buildGoalMarkers(
-        match,
-        timeline
-      ),
-    [match, timeline]
+      buildGoalMarkers(match.events, match.players, timeline),
+    [match.events, match.players, timeline]
   )
 
   const chartConfig = {
@@ -293,7 +296,7 @@ export function XgTimeline({
       </CardContent>
     </section>
   )
-}
+}, sameXgTimelineProps)
 
 function GoalMarkerLabel({
   color,
@@ -361,14 +364,17 @@ function GoalMarkerLabel({
 }
 
 function buildTimeline(
-  match: MatchSnapshot
+  xgTimeline: MatchSnapshot["xgTimeline"],
+  currentMinute: number,
+  homeXg: number,
+  awayXg: number
 ): XgTimelinePoint[] {
-  if (match.xgTimeline.length) {
-    const throughMinute = Math.max(0, match.clock.minute)
+  if (xgTimeline.length) {
+    const throughMinute = Math.max(0, currentMinute)
     const byMinute = new Map<number, XgTimelinePoint>()
     byMinute.set(0, { minute: 0, home: 0, away: 0 })
 
-    for (const point of match.xgTimeline) {
+    for (const point of xgTimeline) {
       if (point.minute >= 0 && point.minute <= throughMinute) {
         byMinute.set(point.minute, point)
       }
@@ -378,9 +384,9 @@ function buildTimeline(
   }
 
   const current = {
-    minute: Math.max(0, match.clock.minute),
-    home: match.home.stats.xg,
-    away: match.away.stats.xg,
+    minute: Math.max(0, currentMinute),
+    home: homeXg,
+    away: awayXg,
   }
 
   return current.minute === 0
@@ -389,10 +395,11 @@ function buildTimeline(
 }
 
 function buildGoalMarkers(
-  match: MatchSnapshot,
+  events: MatchSnapshot["events"],
+  players: MatchSnapshot["players"],
   points: XgTimelinePoint[]
 ) {
-  return match.events
+  return events
     .filter(
       (event) =>
         event.type === "goal"
@@ -400,7 +407,7 @@ function buildGoalMarkers(
     .map((event) => {
       const team =
         event.team ??
-        match.players.find(
+        players.find(
           (player) =>
             player.id ===
             event.playerId
@@ -414,14 +421,14 @@ function buildGoalMarkers(
         id: event.id,
         minute: event.minute,
         team,
-        scorer: match.players.find((player) => player.id === event.playerId)?.name,
-        assistants: match.events
+        scorer: players.find((player) => player.id === event.playerId)?.name,
+        assistants: events
           .filter((candidate) =>
             candidate.type === "assist_candidate" &&
             candidate.minute === event.minute &&
             candidate.team === team
           )
-          .map((candidate) => match.players.find((player) => player.id === candidate.playerId)?.name)
+          .map((candidate) => players.find((player) => player.id === candidate.playerId)?.name)
           .filter((name): name is string => Boolean(name)),
         xg: xgAtMinute(
           points,
@@ -436,6 +443,21 @@ function buildGoalMarkers(
       ): marker is GoalMarker =>
         marker != null
     )
+}
+
+function sameXgTimelineProps(previous: XgTimelineProps, next: XgTimelineProps) {
+  const left = previous.match
+  const right = next.match
+  return left.home.name === right.home.name
+    && left.home.color === right.home.color
+    && left.home.stats.xg === right.home.stats.xg
+    && left.away.name === right.away.name
+    && left.away.color === right.away.color
+    && left.away.stats.xg === right.away.stats.xg
+    && left.clock.minute === right.clock.minute
+    && left.xgTimeline === right.xgTimeline
+    && left.events === right.events
+    && samePlayerLabels(left.players, right.players)
 }
 
 function xgAtMinute(

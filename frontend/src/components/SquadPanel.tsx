@@ -38,6 +38,7 @@ import type {
 import { playerPositionLabels } from "@/types/match"
 import { nationDisplay } from "@/lib/nations"
 import { shortPlayerName } from "@/lib/player-name"
+import { sameSquadPlayers } from "@/lib/matchRenderEquality"
 
 type SquadPanelProps = {
   title: string
@@ -207,7 +208,7 @@ function ratingClass(
   return "text-foreground"
 }
 
-export function SquadPanel({
+export const SquadPanel = memo(function SquadPanel({
   title,
   teamUid,
   side,
@@ -693,6 +694,19 @@ export function SquadPanel({
       </>
     </TooltipProvider>
   )
+}, sameSquadPanelProps)
+
+function sameSquadPanelProps(previous: SquadPanelProps, next: SquadPanelProps) {
+  return previous.title === next.title
+    && previous.teamUid === next.teamUid
+    && previous.side === next.side
+    && previous.teamColor === next.teamColor
+    && previous.events === next.events
+    && sameSquadPlayers(previous.players, next.players)
+    && sameSquadPlayers(
+      previous.allPlayers ?? previous.players,
+      next.allPlayers ?? next.players,
+    )
 }
 
 const PlayerProfileHover = memo(function PlayerProfileHover({

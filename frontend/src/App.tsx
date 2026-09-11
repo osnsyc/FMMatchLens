@@ -89,21 +89,26 @@ export function App() {
   const sourceMatch = replayMatch ?? realtimeMatch
   const match = useMemo(() => {
     if (!sourceMatch) return null
-
+    const homeColor =
+      sourceMatch.home.themeColors?.[resolvedTheme] ?? sourceMatch.home.color
+    const awayColor =
+      sourceMatch.away.themeColors?.[resolvedTheme] ?? sourceMatch.away.color
+    if (
+      homeColor === sourceMatch.home.color &&
+      awayColor === sourceMatch.away.color
+    ) {
+      return sourceMatch
+    }
     return {
       ...sourceMatch,
-      home: {
-        ...sourceMatch.home,
-        color:
-          sourceMatch.home.themeColors?.[resolvedTheme] ??
-          sourceMatch.home.color,
-      },
-      away: {
-        ...sourceMatch.away,
-        color:
-          sourceMatch.away.themeColors?.[resolvedTheme] ??
-          sourceMatch.away.color,
-      },
+      home:
+        homeColor === sourceMatch.home.color
+          ? sourceMatch.home
+          : { ...sourceMatch.home, color: homeColor },
+      away:
+        awayColor === sourceMatch.away.color
+          ? sourceMatch.away
+          : { ...sourceMatch.away, color: awayColor },
     }
   }, [sourceMatch, resolvedTheme])
   if (!match) {

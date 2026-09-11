@@ -121,7 +121,8 @@ export class ReplaySession {
     this.cachedSnapshot = replaySnapshot(
       this.archive,
       this.index,
-      this.derivations
+      this.derivations,
+      this.cachedSnapshot
     )
     return this.cachedSnapshot
   }
@@ -188,7 +189,8 @@ export function buildInitialReplaySnapshot(archive: ReplayArchive) {
 function replaySnapshot(
   archive: ReplayArchive,
   index: number,
-  derivations: HistoricalDerivations
+  derivations: HistoricalDerivations,
+  previous?: MatchSnapshot
 ) {
   const frame = archive.frames[index]
   const historical = derivations.snapshot(frame.tick)
@@ -204,7 +206,9 @@ function replaySnapshot(
     historical.heatmaps,
     historical.tacticalEvents,
     historical.momentum,
-    historical.rollingMomentum
+    historical.rollingMomentum,
+    undefined,
+    previous
   )
 }
 

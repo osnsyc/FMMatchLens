@@ -45,6 +45,7 @@ export type HeatmapDerivationsState = {
   >
   recentFrames: RecentFrame[]
   halfKey: number
+  revision: number
 }
 
 /**
@@ -60,16 +61,20 @@ export class HeatmapDerivations {
   private recentFrames: RecentFrame[] = []
   private recentStart = 0
   private halfKey = -1
-  private snapshotCache: HeatmapSnapshot = { grids: new Map() }
+  private snapshotCache: HeatmapSnapshot = { grids: new Map(), revision: 0 }
   private indexDirty = true
+  private revision = 0
+  private snapshotRevision = -1
 
   reset() {
     for (const range of ranges) this.stores[range].clear()
     this.recentFrames = []
     this.recentStart = 0
     this.halfKey = -1
-    this.snapshotCache = { grids: new Map() }
+    this.snapshotCache = { grids: new Map(), revision: 0 }
     this.indexDirty = true
+    this.revision = 0
+    this.snapshotRevision = -1
   }
 
   append(frames: readonly RealtimeFrame[]) {
@@ -90,6 +95,7 @@ export class HeatmapDerivations {
 
   appendFrame(frame: RealtimeFrame) {
     this.processFrame(frame)
+    this.revision += 1
   }
 
   snapshot(): HeatmapSnapshot {
@@ -104,9 +110,10 @@ export class HeatmapDerivations {
         if (this.indexDirty) grids.set(`${key}:${range}`, output)
       }
     }
-    if (this.indexDirty) {
-      this.snapshotCache = { grids }
+    if (this.indexDirty || this.snapshotRevision !== this.revision) {
+      this.snapshotCache = { grids, revision: this.revision }
       this.indexDirty = false
+      this.snapshotRevision = this.revision
     }
     return this.snapshotCache
   }
@@ -132,6 +139,7 @@ export class HeatmapDerivations {
       ]),
       recentFrames: this.recentFrames.slice(this.recentStart),
       halfKey: this.halfKey,
+      revision: this.revision,
     }
   }
 
@@ -148,6 +156,8 @@ export class HeatmapDerivations {
     this.recentFrames = state.recentFrames.slice()
     this.recentStart = 0
     this.halfKey = state.halfKey
+    this.revision = state.revision
+    this.snapshotRevision = -1
     this.indexDirty = true
   }
 

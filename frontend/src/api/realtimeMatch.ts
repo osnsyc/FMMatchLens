@@ -2,6 +2,7 @@ import { startTransition, useEffect, useRef, useState } from "react"
 
 import { HeatmapDerivations } from "@/api/heatmap"
 import { HistoricalDerivations } from "@/api/replay/replayDerivations"
+import { reuseMatchSnapshot } from "@/lib/matchSnapshotReuse"
 import { selectTeamThemeColors } from "@/lib/teamColors"
 
 import type {
@@ -457,6 +458,7 @@ export function useRealtimeMatch(enabled = true): MatchSnapshot | null {
     let formationHistoryIndex = 0
     let formationHistoryEntries: RealtimeFormationTimelineEntry[] = []
     let formationSnapshots: FormationSnapshot[] = []
+    let publishedSnapshot: MatchSnapshot | undefined
     let derived = new HistoricalDerivations()
     let historical = derived.snapshot(0)
     let syncing = false
@@ -483,20 +485,21 @@ export function useRealtimeMatch(enabled = true): MatchSnapshot | null {
 
     const publish = (frame: RealtimeFrame | null, lowPriority: boolean) => {
       if (disposed || !enabledRef.current || !frame) return
-      const commit = () =>
-        setMatch(
-          toMatchSnapshot(
-            frame,
-            historical.xgTimeline,
-            metadata.current,
-            historical.events,
-            historical.heatmaps,
-            historical.tacticalEvents,
-            historical.momentum,
-            historical.rollingMomentum,
-            formationSnapshots
-          )
+      const commit = () => {
+        publishedSnapshot = toMatchSnapshot(
+          frame,
+          historical.xgTimeline,
+          metadata.current,
+          historical.events,
+          historical.heatmaps,
+          historical.tacticalEvents,
+          historical.momentum,
+          historical.rollingMomentum,
+          formationSnapshots,
+          publishedSnapshot
         )
+        setMatch(publishedSnapshot)
+      }
       if (lowPriority) startTransition(commit)
       else commit()
     }
@@ -508,6 +511,7 @@ export function useRealtimeMatch(enabled = true): MatchSnapshot | null {
       formationHistoryIndex = 0
       formationHistoryEntries = []
       formationSnapshots = []
+      publishedSnapshot = undefined
       derived = new HistoricalDerivations()
       historical = derived.snapshot(0)
       if (metadata.current?.matchId !== matchId) metadata.current = null
@@ -754,11 +758,12 @@ export function toMatchSnapshot(
   xgTimeline?: MatchSnapshot["xgTimeline"],
   metadata?: RealtimeMatchMetadata | null,
   events: MatchEvent[] = [],
-  heatmaps: HeatmapSnapshot = { grids: new Map() },
+  heatmaps: HeatmapSnapshot = { grids: new Map(), revision: 0 },
   tacticalEvents: TacticalEventPoint[] = [],
   momentum: MatchMomentumPoint[] = [],
   rollingMomentum: MatchMomentumPoint[] = [],
-  formationSnapshots?: FormationSnapshot[]
+  formationSnapshots?: FormationSnapshot[],
+  previous?: MatchSnapshot
 ): MatchSnapshot {
   const clockTick = Number.isFinite(frame.displayTick)
     ? frame.displayTick
@@ -772,7 +777,7 @@ export function toMatchSnapshot(
   const awayClubUid = metadata?.away.clubUid
   const teamThemeColors = selectTeamThemeColors(metadata?.home, metadata?.away)
 
-  return {
+  const next: MatchSnapshot = {
     matchId: frame.matchId,
     clock: {
       minute,
@@ -832,6 +837,7 @@ export function toMatchSnapshot(
           away: frame.away.xg,
         }),
   }
+  return reuseMatchSnapshot(previous, next)
 }
 
 export function buildMomentumTimeline(

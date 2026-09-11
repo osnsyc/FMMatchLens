@@ -205,8 +205,12 @@ export class HistoricalDerivations {
       away: frame.away.xg,
     }
     const last = this.xg.at(-1)
-    if (last?.minute === point.minute) this.xg[this.xg.length - 1] = point
-    else this.xg.push(point)
+    if (last?.minute === point.minute) {
+      if (last.home === point.home && last.away === point.away) return
+      this.xg[this.xg.length - 1] = point
+    } else {
+      this.xg.push(point)
+    }
     this.xgDirty = true
   }
 
@@ -252,6 +256,7 @@ export class HistoricalDerivations {
   }
 
   private appendMatchEvents(previous: RealtimeFrame, frame: RealtimeFrame) {
+    const previousEventCount = this.events.length
     const previousPlayers = new Map(
       previous.players.map((player) => [player.playerId, player])
     )
@@ -311,7 +316,7 @@ export class HistoricalDerivations {
       "away",
       Math.max(0, frame.away.goals - previous.away.goals - identifiedAwayGoals)
     )
-    this.eventsDirty = true
+    if (this.events.length !== previousEventCount) this.eventsDirty = true
   }
 }
 

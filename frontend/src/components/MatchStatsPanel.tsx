@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react"
+import { memo, useState, type CSSProperties } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { NativeTabs } from "@/components/uitripled/native-tabs-shadcnui"
+import { sameTeamStats } from "@/lib/matchRenderEquality"
 import type {
   MatchSnapshot,
   TeamSide,
@@ -139,7 +140,7 @@ function opposite(
     : "home"
 }
 
-export function MatchStatsPanel({
+export const MatchStatsPanel = memo(function MatchStatsPanel({
   match,
 }: MatchStatsPanelProps) {
   const { t } = useTranslation()
@@ -422,4 +423,11 @@ export function MatchStatsPanel({
       </CardContent>
     </section>
   )
+}, sameMatchStatsPanelProps)
+
+function sameMatchStatsPanelProps(previous: MatchStatsPanelProps, next: MatchStatsPanelProps) {
+  return previous.match.home.color === next.match.home.color
+    && previous.match.away.color === next.match.away.color
+    && sameTeamStats(previous.match.home.stats, next.match.home.stats)
+    && sameTeamStats(previous.match.away.stats, next.match.away.stats)
 }

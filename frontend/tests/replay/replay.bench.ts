@@ -49,10 +49,23 @@ describe("17k frame replay derivation", () => {
     const sequentialStart = performance.now()
     const session = new ReplaySession(archive)
     const advanceDurations: number[] = []
+    let xgReferenceChanges = 0
+    let eventReferenceChanges = 0
+    let playerReferenceChanges = 0
+    let previousSnapshot: ReturnType<ReplaySession["advanceTo"]> | undefined
     for (let index = 0; index < archive.frameCount; index += 1) {
       const start = performance.now()
-      session.advanceTo(index)
+      const snapshot = session.advanceTo(index)
       advanceDurations.push(performance.now() - start)
+      if (previousSnapshot) {
+        if (snapshot.xgTimeline !== previousSnapshot.xgTimeline)
+          xgReferenceChanges += 1
+        if (snapshot.events !== previousSnapshot.events)
+          eventReferenceChanges += 1
+        if (snapshot.players !== previousSnapshot.players)
+          playerReferenceChanges += 1
+      }
+      previousSnapshot = snapshot
     }
     const sequentialMilliseconds = performance.now() - sequentialStart
     const sortedAdvanceDurations = advanceDurations.toSorted(
@@ -72,6 +85,9 @@ describe("17k frame replay derivation", () => {
       advanceP95Milliseconds,
       firstSeekMilliseconds,
       secondSeekMilliseconds,
+      xgReferenceChanges,
+      eventReferenceChanges,
+      playerReferenceChanges,
     })
     expect(session.currentIndex).toBe(Math.floor(archive.frameCount * 0.75))
     session.dispose()
