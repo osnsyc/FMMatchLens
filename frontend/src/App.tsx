@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   Coffee01Icon,
@@ -43,6 +43,7 @@ export function App() {
   const [startupArchive, setStartupArchive] = useState<ReplayArchive>()
   const [archiveError, setArchiveError] = useState("")
   const [draggingArchive, setDraggingArchive] = useState(false)
+  const [isTacticalFocusMode, setIsTacticalFocusMode] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const showReplayFrame = useCallback((snapshot: MatchSnapshot) => {
     setReplayMatch(snapshot)
@@ -111,6 +112,29 @@ export function App() {
           : { ...sourceMatch.away, color: awayColor },
     }
   }, [sourceMatch, resolvedTheme])
+  const hasMatch = match !== null
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        !hasMatch ||
+        event.repeat ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.key.toLowerCase() !== "t" ||
+        isEditableTarget(event.target)
+      ) {
+        return
+      }
+
+      setIsTacticalFocusMode((current) => !current)
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [hasMatch])
+
   if (!match) {
     return (
       <main className="relative flex h-svh w-full items-center justify-center overflow-hidden bg-background p-6">
@@ -300,10 +324,19 @@ export function App() {
           {/* Central dashboard */}
           <div
             data-player-profile-blur-target
-            className="grid min-h-0 min-w-0 grid-rows-2 gap-2 md:grid-rows-[minmax(0,0.8fr)_minmax(0,1.25fr)]"
+            data-tactical-focus-mode={isTacticalFocusMode ? "true" : "false"}
+            className={`grid min-h-0 min-w-0 gap-2 ${
+              isTacticalFocusMode
+                ? "grid-rows-1"
+                : "grid-rows-2 md:grid-rows-[minmax(0,0.8fr)_minmax(0,1.25fr)]"
+            }`}
           >
             {/* Top row: momentum | xG | formation */}
-            <div className="grid min-h-0 min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,3fr)]">
+            <div
+              className={`${
+                isTacticalFocusMode ? "hidden" : "grid"
+              } min-h-0 min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,3fr)]`}
+            >
               <Card className="min-h-0 min-w-0 overflow-hidden p-0">
                 <Momentum match={match} />
               </Card>
@@ -318,16 +351,29 @@ export function App() {
             </div>
 
             {/* Bottom row: stats | tactical board | zone */}
-            <div className="grid min-h-0 min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(180px,2.2fr)_minmax(0,6fr)_minmax(220px,2.5fr)]">
-              <Card className="min-h-0 min-w-0 overflow-hidden p-0">
+            <div
+              className={`grid min-h-0 min-w-0 grid-cols-1 gap-2 ${
+                isTacticalFocusMode
+                  ? ""
+                  : "md:grid-cols-[minmax(180px,2.2fr)_minmax(0,6fr)_minmax(220px,2.5fr)]"
+              }`}
+            >
+              <Card
+                className={`${isTacticalFocusMode ? "hidden" : ""} min-h-0 min-w-0 overflow-hidden p-0`}
+              >
                 <MatchStatsPanel match={match} />
               </Card>
 
-              <Card className="min-h-0 min-w-0 overflow-hidden p-0">
+              <Card
+                data-tactical-board
+                className="min-h-0 min-w-0 overflow-hidden p-0"
+              >
                 <TacticalBoard match={match} />
               </Card>
 
-              <Card className="min-h-0 min-w-0 overflow-hidden p-0">
+              <Card
+                className={`${isTacticalFocusMode ? "hidden" : ""} min-h-0 min-w-0 overflow-hidden p-0`}
+              >
                 <ZonePanel match={match} />
               </Card>
             </div>
@@ -364,6 +410,14 @@ export function App() {
         </Card>
       </div>
     </main>
+  )
+}
+
+function isEditableTarget(target: EventTarget | null) {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable ||
+      target.matches("input, textarea, select, [role='textbox']"))
   )
 }
 
