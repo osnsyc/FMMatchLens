@@ -48,6 +48,8 @@ import type {
   TacticalEventPoint,
   TeamSide,
 } from "@/types/match"
+import { useTheme } from "@/components/theme-provider"
+import { cssVizTokens } from "@/theme/vizTokens"
 
 type TacticalBoardProps = {
   match: MatchSnapshot
@@ -73,6 +75,7 @@ export const TacticalBoard = memo(function TacticalBoard({
   match,
 }: TacticalBoardProps) {
   const { t } = useTranslation()
+  const { settings, resolvedScheme } = useTheme()
   const [showNumbers, setShowNumbers] = useState(true)
   const [showAttackFocus, setShowAttackFocus] = useState(true)
   const [selectedShotId, setSelectedShotId] = useState<string | null>(null)
@@ -124,8 +127,9 @@ export const TacticalBoard = memo(function TacticalBoard({
       homeColor: match.home.color ?? "var(--team-home-fallback)",
       awayColor: match.away.color ?? "var(--team-away-fallback)",
       showNumbers,
+      tokens: cssVizTokens(settings.presetId, resolvedScheme, settings.colorVision),
     }),
-    [match.away.color, match.home.color, showNumbers]
+    [match.away.color, match.home.color, resolvedScheme, settings.colorVision, settings.presetId, showNumbers]
   )
 
   const toggleMetric = (metric: DataMetric) => {
@@ -282,7 +286,7 @@ export const TacticalBoard = memo(function TacticalBoard({
           </aside>
 
           <div className="tactical-pitch-viewport flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden">
-            <div className="tactical-pitch relative shrink-0 overflow-hidden rounded-md bg-muted">
+            <div className="tactical-pitch relative shrink-0 overflow-hidden rounded-md bg-[var(--tactical-pitch-surface)] text-[var(--pitch-line)]">
               <div className="pointer-events-none absolute inset-0 bg-primary/[0.025]" />
               <PitchSvg />
 

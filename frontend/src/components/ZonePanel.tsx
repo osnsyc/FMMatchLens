@@ -242,7 +242,7 @@ export function ZonePanel({ match }: ZonePanelProps) {
           className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-3"
         >
           <div
-            className="relative shrink-0 overflow-hidden rounded-md bg-muted"
+            className="relative shrink-0 overflow-hidden rounded-md bg-[var(--heatmap-pitch-surface)] text-[var(--pitch-line)]"
             style={{
               width: `${pitchSize.width}px`,
               height: `${pitchSize.height}px`,
@@ -387,7 +387,7 @@ export function ZonePanel({ match }: ZonePanelProps) {
                   }}
                 >
                   <span
-                    className={`flex size-7 items-center justify-center rounded-full border-2 border-background text-xs font-bold text-background shadow-sm transition-transform hover:scale-110 ${
+                    className={`flex size-7 items-center justify-center rounded-full border-2 border-background text-xs font-bold text-[var(--heatmap-player-number)] shadow-sm transition-transform hover:scale-110 ${
                       selectedPlayer?.id === label.player.id
                         ? "ring-2 ring-ring ring-offset-1 ring-offset-background"
                         : ""

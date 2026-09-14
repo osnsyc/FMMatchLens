@@ -388,7 +388,7 @@ export const FormationPitch = memo(function FormationPitch({ match }: FormationP
         )}
 
         <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-3">
-          <div className="relative aspect-[148/100] h-full max-h-full max-w-full shrink-0 overflow-hidden rounded-md bg-muted">
+          <div className="relative aspect-[148/100] h-full max-h-full max-w-full shrink-0 overflow-hidden rounded-md bg-[var(--formation-pitch-surface)]">
             <PitchMarkings />
             <div className="pointer-events-none absolute inset-0">
               <AnimatePresence custom={resetsToPrevious}>
@@ -423,7 +423,7 @@ export const FormationPitch = memo(function FormationPitch({ match }: FormationP
                         render={<div className="flex max-w-36 flex-col items-center text-center" />}
                       >
                         <Avatar className="size-6 overflow-visible shadow-sm" style={{ backgroundColor: teamColor }}>
-                          <AvatarFallback className="bg-transparent text-[10px] font-bold text-background">
+                          <AvatarFallback className="bg-transparent text-[10px] font-bold text-[var(--formation-player-number)]">
                             {player.shirtNumber ?? "?"}
                           </AvatarFallback>
                           {player.status?.subbedOnMinute != null && (

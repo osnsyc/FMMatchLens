@@ -26,20 +26,20 @@ in vec2 vTextureCoord;
 out vec4 finalColor;
 uniform sampler2D uTexture;
 uniform float uScale;
+uniform vec3 uStop0;
+uniform vec3 uStop1;
+uniform vec3 uStop2;
+uniform vec3 uStop3;
+uniform vec3 uStop4;
+uniform vec3 uStop5;
 
 vec3 heatColor(float value) {
-  vec3 blue = vec3(0.1412, 0.3412, 1.0);
-  vec3 cyan = vec3(0.0863, 0.7843, 1.0);
-  vec3 green = vec3(0.2078, 0.9020, 0.4353);
-  vec3 yellow = vec3(1.0, 0.8824, 0.2902);
-  vec3 orange = vec3(1.0, 0.5412, 0.1647);
-  vec3 red = vec3(1.0, 0.1843, 0.2706);
-  if (value <= 0.15) return blue;
-  if (value <= 0.35) return mix(blue, cyan, (value - 0.15) / 0.20);
-  if (value <= 0.55) return mix(cyan, green, (value - 0.35) / 0.20);
-  if (value <= 0.75) return mix(green, yellow, (value - 0.55) / 0.20);
-  if (value <= 0.90) return mix(yellow, orange, (value - 0.75) / 0.15);
-  return mix(orange, red, (value - 0.90) / 0.10);
+  if (value <= 0.15) return uStop0;
+  if (value <= 0.35) return mix(uStop0, uStop1, (value - 0.15) / 0.20);
+  if (value <= 0.55) return mix(uStop1, uStop2, (value - 0.35) / 0.20);
+  if (value <= 0.75) return mix(uStop2, uStop3, (value - 0.55) / 0.20);
+  if (value <= 0.90) return mix(uStop3, uStop4, (value - 0.75) / 0.15);
+  return mix(uStop4, uStop5, (value - 0.90) / 0.10);
 }
 
 void main(void) {
@@ -86,6 +86,12 @@ export class HeatmapLutFilter extends Filter {
   constructor() {
     const heatmapUniforms = new UniformGroup({
       uScale: { value: 1, type: "f32" },
+      uStop0: { value: [0.1412, 0.3412, 1], type: "vec3<f32>" },
+      uStop1: { value: [0.0863, 0.7843, 1], type: "vec3<f32>" },
+      uStop2: { value: [0.2078, 0.902, 0.4353], type: "vec3<f32>" },
+      uStop3: { value: [1, 0.8824, 0.2902], type: "vec3<f32>" },
+      uStop4: { value: [1, 0.5412, 0.1647], type: "vec3<f32>" },
+      uStop5: { value: [1, 0.1843, 0.2706], type: "vec3<f32>" },
     })
     super({
       glProgram: GlProgram.from({
@@ -102,6 +108,13 @@ export class HeatmapLutFilter extends Filter {
 
   set scale(value: number) {
     this.heatmapUniforms.uniforms.uScale = value
+  }
+
+  setStops(stops: readonly number[][]) {
+    stops.forEach((stop, index) => {
+      this.heatmapUniforms.uniforms[`uStop${index}`] = stop
+    })
+    this.heatmapUniforms.update()
   }
 }
 

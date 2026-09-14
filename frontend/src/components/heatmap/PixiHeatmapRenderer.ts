@@ -109,6 +109,11 @@ export class PixiHeatmapRenderer {
     this.renderOnce()
   }
 
+  updateLut(stops: readonly number[][]) {
+    this.lutFilter.setStops(stops)
+    this.renderOnce()
+  }
+
   resize(width: number, height: number) {
     const nextWidth = Math.max(1, Math.round(width))
     const nextHeight = Math.max(1, Math.round(height))

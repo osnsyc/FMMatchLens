@@ -34,10 +34,11 @@ import { buildInitialReplaySnapshot } from "@/api/replay/replaySession"
 import type { ReplayArchive } from "@/api/replay/replayTypes"
 import { changeLanguage, type SupportedLanguage } from "@/i18n"
 import type { MatchSnapshot } from "@/types/match"
+import { selectTeamDisplayColors } from "@/lib/teamColors"
 
 export function App() {
   const { t, i18n } = useTranslation()
-  const { resolvedTheme } = useTheme()
+  const { settings, resolvedScheme, preset } = useTheme()
   const [replayMatch, setReplayMatch] = useState<MatchSnapshot | null>(null)
   const realtimeMatch = useRealtimeMatch(replayMatch === null)
   const [startupArchive, setStartupArchive] = useState<ReplayArchive>()
@@ -90,10 +91,18 @@ export function App() {
   const sourceMatch = replayMatch ?? realtimeMatch
   const match = useMemo(() => {
     if (!sourceMatch) return null
-    const homeColor =
-      sourceMatch.home.themeColors?.[resolvedTheme] ?? sourceMatch.home.color
-    const awayColor =
-      sourceMatch.away.themeColors?.[resolvedTheme] ?? sourceMatch.away.color
+    const displayColors = selectTeamDisplayColors(
+      sourceMatch.home.colorSource ?? colorSourceFromCss(sourceMatch.home.color),
+      sourceMatch.away.colorSource ?? colorSourceFromCss(sourceMatch.away.color),
+      {
+        presetId: settings.presetId,
+        resolvedScheme,
+        colorVision: settings.colorVision,
+        fixedTeamColors: preset.teamColors,
+      }
+    )
+    const homeColor = displayColors.home
+    const awayColor = displayColors.away
     if (
       homeColor === sourceMatch.home.color &&
       awayColor === sourceMatch.away.color
@@ -111,7 +120,7 @@ export function App() {
           ? sourceMatch.away
           : { ...sourceMatch.away, color: awayColor },
     }
-  }, [sourceMatch, resolvedTheme])
+  }, [sourceMatch, resolvedScheme, settings.colorVision, settings.presetId, preset])
   const hasMatch = match !== null
 
   useEffect(() => {
@@ -269,7 +278,7 @@ export function App() {
                 href={__KOFI_URL__}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#ff5e5b]/35 bg-[#ff5e5b]/10 px-2.5 text-xs font-semibold text-[#e84d4a] transition-colors hover:border-[#ff5e5b]/60 hover:bg-[#ff5e5b]/20 focus-visible:ring-2 focus-visible:ring-[#ff5e5b]/30 focus-visible:outline-none dark:text-[#ff817f]"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[color:color-mix(in_srgb,var(--brand-kofi)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--brand-kofi)_10%,transparent)] px-2.5 text-xs font-semibold text-[color:var(--brand-kofi)] transition-colors hover:border-[color:color-mix(in_srgb,var(--brand-kofi-hover)_60%,transparent)] hover:bg-[color:color-mix(in_srgb,var(--brand-kofi-hover)_20%,transparent)] focus-visible:ring-2 focus-visible:ring-[color:color-mix(in_srgb,var(--brand-kofi)_30%,transparent)] focus-visible:outline-none"
                 aria-label={__KOFI_LABEL__}
               >
                 <HugeiconsIcon
@@ -419,6 +428,11 @@ function isEditableTarget(target: EventTarget | null) {
     (target.isContentEditable ||
       target.matches("input, textarea, select, [role='textbox']"))
   )
+}
+
+function colorSourceFromCss(color?: string) {
+  if (!color || !/^#[0-9a-f]{6}$/i.test(color)) return undefined
+  return { backgroundColour: Number.parseInt(color.slice(1), 16) }
 }
 
 export default App

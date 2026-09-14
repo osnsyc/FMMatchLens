@@ -1,0 +1,218 @@
+:root[data-preset="opta-inspired"][data-scheme="light"] {
+  --font-preset-heading: "Big Shoulders Text Variable", "Arial Narrow", sans-serif;
+  --font-preset-sans: "Inter Variable", Arial, sans-serif;
+  --font-preset-data: "IBM Plex Mono", monospace;
+
+  --surface-page: #f7f5f8;
+  --surface-panel: #ffffff;
+  --surface-panel-muted: #f0ebf3;
+  --surface-popover: #ffffff;
+  --surface-input: #f3eef5;
+  --surface-overlay: rgb(29 10 48 / 48%);
+
+  --text-primary: #1d0a30;
+  --text-secondary: #46364f;
+  --text-muted: #75687d;
+  --text-inverse: #ffffff;
+
+  --border-subtle: #e6dfe9;
+  --border-default: #cec3d4;
+  --border-strong: #9b8ba4;
+  --border-focus: #fd4890;
+
+  --action-primary: #fd4890;
+  --action-primary-hover: #e9367e;
+  --action-on-primary: #1d0a30;
+  --action-selected: #ffe1ed;
+  --action-selected-text: #1d0a30;
+
+  --status-positive: #16745a;
+  --status-negative: #b92f3b;
+  --status-warning: #8a6200;
+  --status-info: #176b85;
+
+  --viz-home-fallback: #6327c6;
+  --viz-away-fallback: #dc3a44;
+  --viz-series-1: #6327c6;
+  --viz-series-2: #dc3a44;
+  --viz-series-3: #fd4890;
+  --viz-series-4: #16745a;
+  --viz-series-5: #a46d00;
+  --viz-grid: rgb(29 10 48 / 9%);
+  --viz-axis: #75687d;
+
+  --formation-pitch-surface: transparent;
+  --formation-player-number: var(--surface-page);
+  --heatmap-pitch-surface: transparent;
+  --heatmap-player-number: var(--surface-page);
+  --tactical-pitch-surface: transparent;
+  --pitch-line: #604e6c;
+  --pitch-zone: rgb(99 39 198 / 10%);
+  --pitch-label: #46364f;
+
+  --event-important: #8a6200;
+  --event-contrast: #6327c6;
+  --event-marker-foreground: #ffffff;
+  --event-marker-shadow: rgb(29 10 48 / 24%);
+  --event-trajectory: #604e6c;
+  --event-selected: #dc3a44;
+  --event-historical: #8c7e94;
+
+  --heatmap-stop-0: #eee8f2;
+  --heatmap-stop-1: #d8c9e7;
+  --heatmap-stop-2: #b595d3;
+  --heatmap-stop-3: #8a5abb;
+  --heatmap-stop-4: #dc3a44;
+  --heatmap-stop-5: #fd9d5b;
+
+  --effect-highlight: rgb(253 72 144 / 13%);
+  --effect-shadow: rgb(29 10 48 / 15%);
+  --effect-panel-glow: transparent;
+  --effect-card-glow: transparent;
+  --gradient-page: linear-gradient(145deg, #f7f5f8 0%, #ffffff 58%, #f0ebf3 100%);
+  --gradient-control-active: linear-gradient(135deg, #fd4890, #e9367e);
+  --radius: 0.375rem;
+}
+
+:root[data-preset="opta-inspired"][data-scheme="dark"] {
+  --font-preset-heading: "Big Shoulders Text Variable", "Arial Narrow", sans-serif;
+  --font-preset-sans: "Inter Variable", Arial, sans-serif;
+  --font-preset-data: "IBM Plex Mono", monospace;
+
+  --surface-page: #130422;
+  --surface-panel: #1d0a30;
+  --surface-panel-muted: #29153c;
+  --surface-popover: #261039;
+  --surface-input: #321847;
+  --surface-overlay: rgb(19 4 34 / 78%);
+
+  --text-primary: #ffffff;
+  --text-secondary: #eee9f1;
+  --text-muted: #b8abbf;
+  --text-inverse: #1d0a30;
+
+  --border-subtle: #3c264e;
+  --border-default: #543a66;
+  --border-strong: #765b88;
+  --border-focus: #fd4890;
+
+  --action-primary: #fd4890;
+  --action-primary-hover: #ff6da7;
+  --action-on-primary: #1d0a30;
+  --action-selected: #4a1735;
+  --action-selected-text: #ffffff;
+
+  --status-positive: #38d6a3;
+  --status-negative: #ff6b7a;
+  --status-warning: #ffd166;
+  --status-info: #55c7e8;
+
+  --viz-home-fallback: #6327c6;
+  --viz-away-fallback: #dc3a44;
+  --viz-series-1: #6327c6;
+  --viz-series-2: #dc3a44;
+  --viz-series-3: #fd4890;
+  --viz-series-4: #ffd166;
+  --viz-series-5: #38d6a3;
+  --viz-grid: rgb(255 255 255 / 8%);
+  --viz-axis: #b8abbf;
+
+  --formation-pitch-surface: transparent;
+  --formation-player-number: #f7f5f8;
+  --heatmap-pitch-surface: transparent;
+  --heatmap-player-number: #f7f5f8;
+  --tactical-pitch-surface: transparent;
+  --pitch-line: #e6ddeb;
+  --pitch-zone: rgb(253 72 144 / 12%);
+  --pitch-label: #eee9f1;
+
+  --event-important: #ffd166;
+  --event-contrast: #ffffff;
+  --event-marker-foreground: #1d0a30;
+  --event-marker-shadow: rgb(0 0 0 / 68%);
+  --event-trajectory: #d8ccde;
+  --event-selected: #fd4890;
+  --event-historical: #9f90a8;
+
+  --heatmap-stop-0: #24113a;
+  --heatmap-stop-1: #4d1d6f;
+  --heatmap-stop-2: #7b2f9d;
+  --heatmap-stop-3: #c33783;
+  --heatmap-stop-4: #fd4890;
+  --heatmap-stop-5: #ffd166;
+
+  --effect-highlight: rgb(253 72 144 / 18%);
+  --effect-shadow: rgb(0 0 0 / 26%);
+  --effect-panel-glow: transparent;
+  --effect-card-glow: rgb(255 255 255 / 3%);
+  --gradient-page: linear-gradient(145deg, #130422 0%, #1d0a30 58%, #130422 100%);
+  --gradient-control-active: linear-gradient(135deg, #fd4890, #d93278);
+  --radius: 0.375rem;
+}
+
+:root[data-preset="opta-inspired"] body {
+  letter-spacing: 0.005em;
+}
+
+:root[data-preset="opta-inspired"] [data-slot="card"] {
+  background: var(--surface-panel);
+  border-color: var(--border-subtle);
+  box-shadow: none;
+}
+
+:root[data-preset="opta-inspired"] [data-slot="card-header"],
+:root[data-preset="opta-inspired"] [data-slot="card-title"] {
+  font-family: var(--font-preset-heading);
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+:root[data-preset="opta-inspired"] :is(
+  [data-slot="button"],
+  [data-slot="tabs-trigger"],
+  [data-slot="menubar-trigger"]
+) {
+  font-family: var(--font-preset-heading);
+  font-weight: 700;
+  letter-spacing: 0.035em;
+}
+
+:root[data-preset="opta-inspired"] :is(
+  .tabular-nums,
+  [data-slot="chart"],
+  [data-slot="slider-value"]
+) {
+  font-family: var(--font-preset-data);
+}
+
+:root[data-preset="opta-inspired"] :is(
+  [data-slot="dropdown-menu-content"],
+  [data-slot="select-content"],
+  [data-slot="tooltip-content"]
+) {
+  box-shadow: 0 12px 28px var(--effect-shadow);
+}
+
+:root[data-preset="opta-inspired"] :is(
+  [data-slot="dropdown-menu-radio-item"][data-state="checked"],
+  [data-slot="dropdown-menu-checkbox-item"][data-state="checked"],
+  [data-slot="tabs-trigger"][data-state="active"]
+) {
+  color: var(--action-selected-text);
+  background: var(--action-selected);
+}
+
+:root[data-preset="opta-inspired"] .tactical-pitch {
+  border: 1px solid var(--border-default);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 3%);
+}
+
+:root[data-preset="opta-inspired"][data-scheme="dark"] svg :is(
+  [fill="#6327c6"],
+  [fill="#dc3a44"],
+  [stroke="#6327c6"],
+  [stroke="#dc3a44"]
+) {
+  filter: drop-shadow(0 0 1px rgb(255 255 255 / 72%));
+}

@@ -1,0 +1,36 @@
+:root[data-color-vision="colorblind"][data-preset] {
+  --status-positive: #0072b2;
+  --status-negative: #d55e00;
+  --status-warning: #e69f00;
+  --viz-home-fallback: #0072b2;
+  --viz-away-fallback: #d55e00;
+  --viz-series-1: #0072b2;
+  --viz-series-2: #e69f00;
+  --viz-series-3: #009e73;
+  --viz-series-4: #cc79a7;
+  --viz-series-5: #56b4e9;
+  --heatmap-stop-0: #00204c;
+  --heatmap-stop-1: #31446b;
+  --heatmap-stop-2: #666970;
+  --heatmap-stop-3: #958f5f;
+  --heatmap-stop-4: #c8b932;
+  --heatmap-stop-5: #ffee00;
+}
+
+:root[data-preset="opta-inspired"][data-color-vision="colorblind"] {
+  --viz-home-fallback: #6327c6;
+  --viz-away-fallback: #dc3a44;
+}
+
+:root[data-preset="wyscout-inspired"][data-color-vision="colorblind"] {
+  --viz-home-fallback: #e05a35;
+  --viz-away-fallback: #26648c;
+}
+
+:root[data-contrast="high"][data-preset] {
+  --text-muted: var(--text-secondary);
+  --border-subtle: var(--border-strong);
+  --border-default: var(--border-strong);
+  --effect-panel-glow: transparent;
+  --effect-card-glow: transparent;
+}

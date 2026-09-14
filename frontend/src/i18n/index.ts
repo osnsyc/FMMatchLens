@@ -33,6 +33,21 @@ const resources = {
         position: "位置",
         status: "状态",
       },
+      appearance: {
+        open: "打开外观设置",
+        title: "外观设置",
+        preset: "主题预设",
+        presets: { fm: "FMMatchLens", opta: "Opta Inspired", wyscout: "Wyscout Inspired" },
+        scheme: { label: "明暗模式", system: "跟随系统", light: "亮色", dark: "暗色" },
+        schemeLocked: {
+          light: "{{preset}} 仅提供亮色版本，已冻结明暗选择。",
+          dark: "{{preset}} 仅提供暗色版本，已冻结明暗选择。",
+        },
+        colorVision: { label: "色觉模式", standard: "标准", colorblind: "色盲友好" },
+        contrast: { label: "对比度", normal: "标准", high: "高对比度" },
+        experimental: "实验性",
+        reset: "重置外观设置",
+      },
       timeline: {
         sourceLabel: "选择实时比赛或比赛存档",
         liveMatch: "实时比赛",
@@ -459,6 +474,21 @@ const resources = {
         player: "Player",
         position: "Position",
         status: "Status",
+      },
+      appearance: {
+        open: "Open appearance settings",
+        title: "Appearance",
+        preset: "Theme preset",
+        presets: { fm: "FMMatchLens", opta: "Opta Inspired", wyscout: "Wyscout Inspired" },
+        scheme: { label: "Color scheme", system: "Use system", light: "Light", dark: "Dark" },
+        schemeLocked: {
+          light: "{{preset}} is available in light mode only.",
+          dark: "{{preset}} is available in dark mode only.",
+        },
+        colorVision: { label: "Color vision", standard: "Standard", colorblind: "Colorblind friendly" },
+        contrast: { label: "Contrast", normal: "Standard", high: "High contrast" },
+        experimental: "Experimental",
+        reset: "Reset appearance",
       },
       timeline: {
         sourceLabel: "Select live match or archive",

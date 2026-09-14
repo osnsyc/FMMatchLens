@@ -36,6 +36,77 @@ const MIN_GRAPHIC_CONTRAST = 3
 
 let cachedColorConfig: TeamColorConfig | undefined
 
+export type TeamColorAppearance = {
+  presetId: string
+  resolvedScheme: "light" | "dark"
+  colorVision: "standard" | "colorblind"
+  fixedTeamColors?: { home: string; away: string }
+}
+
+const displayColorCache = new Map<string, { home: string; away: string }>()
+
+export function selectTeamDisplayColors(
+  homeSource: TeamColorSource | undefined,
+  awaySource: TeamColorSource | undefined,
+  appearance: TeamColorAppearance
+): { home: string; away: string } {
+  if (appearance.fixedTeamColors) {
+    return {
+      home: appearance.fixedTeamColors.home,
+      away: appearance.fixedTeamColors.away,
+    }
+  }
+
+  const sourceKey = [homeSource, awaySource]
+    .flatMap((source) => [source?.backgroundColour, source?.foregroundColour, source?.outlineColour])
+    .join(":")
+  const cacheKey = `${appearance.presetId}:${appearance.resolvedScheme}:${appearance.colorVision}:${sourceKey}`
+  const cached = displayColorCache.get(cacheKey)
+  if (cached) return cached
+
+  const config = readCurrentColorConfig()
+  const homeCandidates = candidatesFrom(homeSource, config.fallbacks.home)
+  const awayCandidates = candidatesFrom(awaySource, config.fallbacks.away)
+  const pairs = homeCandidates.flatMap((home) => awayCandidates.map((away) => ({
+    home,
+    away,
+    deltaE: oklabDeltaE(home.lab, away.lab),
+  })))
+  const distinct = pairs.filter((pair) => pair.deltaE >= MIN_TEAM_DELTA_E)
+  const selected = selectPairForTheme(
+    distinct.length > 0 ? distinct : keepMostDistinctPairs(pairs),
+    config.surfaces[appearance.resolvedScheme]
+  )
+  const result = { home: selected.home.color, away: selected.away.color }
+  displayColorCache.set(cacheKey, result)
+  return result
+}
+
+export function teamColorCacheKey(appearance: TeamColorAppearance) {
+  return `${appearance.presetId}:${appearance.resolvedScheme}:${appearance.colorVision}`
+}
+
+function readCurrentColorConfig(): TeamColorConfig {
+  const canvas = document.createElement("canvas")
+  canvas.width = 1
+  canvas.height = 1
+  const context = canvas.getContext("2d", { willReadFrequently: true })
+  if (!context) throw new Error("Unable to read theme colors")
+  const style = getComputedStyle(document.documentElement)
+  const page = readCssColor(context, style.getPropertyValue("--surface-page"))
+  const panel = compositeColor(
+    readCssColor(context, style.getPropertyValue("--surface-panel")),
+    page
+  )
+  return {
+    surfaces: { light: [page, panel], dark: [page, panel] },
+    fallbacks: {
+      home: rgbToHex(readCssColor(context, style.getPropertyValue("--viz-home-fallback"))),
+      away: rgbToHex(readCssColor(context, style.getPropertyValue("--viz-away-fallback"))),
+    },
+  }
+}
+
 export function selectTeamThemeColors(
   homeSource?: TeamColorSource,
   awaySource?: TeamColorSource

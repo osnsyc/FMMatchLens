@@ -32,6 +32,7 @@ import type {
   TeamSide,
   XgTimelinePoint,
 } from "@/types/match"
+import { useTheme } from "@/components/theme-provider"
 
 type XgTimelineProps = {
   match: MatchSnapshot
@@ -50,6 +51,8 @@ export const XgTimeline = memo(function XgTimeline({
   match,
 }: XgTimelineProps) {
   const { t } = useTranslation()
+  const { settings } = useTheme()
+  const colorblind = settings.colorVision === "colorblind"
 
   const homeColor =
     match.home.color ?? "var(--team-home-fallback)"
@@ -253,6 +256,7 @@ export const XgTimeline = memo(function XgTimeline({
               type="stepAfter"
               stroke="var(--color-away)"
               strokeWidth={2}
+              strokeDasharray={colorblind ? "7 4" : undefined}
               dot={false}
               activeDot={{
                 r: 3,

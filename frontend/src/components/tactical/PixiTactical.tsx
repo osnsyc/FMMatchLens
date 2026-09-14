@@ -114,18 +114,9 @@ export function PixiTactical({
     })
     resizeObserver.observe(host)
 
-    const themeObserver = new MutationObserver(() => {
-      rendererRef.current?.updateAppearance(latestRef.current.appearance)
-    })
-    themeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class", "style", "data-theme"],
-    })
-
     return () => {
       disposed = true
       resizeObserver.disconnect()
-      themeObserver.disconnect()
       rendererRef.current?.destroy()
       rendererRef.current = null
     }

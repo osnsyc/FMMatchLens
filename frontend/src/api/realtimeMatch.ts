@@ -3,7 +3,6 @@ import { startTransition, useEffect, useRef, useState } from "react"
 import { HeatmapDerivations } from "@/api/heatmap"
 import { HistoricalDerivations } from "@/api/replay/replayDerivations"
 import { reuseMatchSnapshot } from "@/lib/matchSnapshotReuse"
-import { selectTeamThemeColors } from "@/lib/teamColors"
 
 import type {
   FormationSnapshot,
@@ -775,7 +774,6 @@ export function toMatchSnapshot(
   )
   const homeClubUid = metadata?.home.clubUid
   const awayClubUid = metadata?.away.clubUid
-  const teamThemeColors = selectTeamThemeColors(metadata?.home, metadata?.away)
 
   const next: MatchSnapshot = {
     matchId: frame.matchId,
@@ -792,8 +790,7 @@ export function toMatchSnapshot(
       uid: metadata?.home.uid,
       clubUid: homeClubUid,
       name: metadata?.home.name || "Home",
-      color: teamThemeColors.home.dark,
-      themeColors: teamThemeColors.home,
+      colorSource: metadata?.home,
       logoPath: metadata?.home.logoPath,
       manager: metadata?.home.manager,
       logoUrl:
@@ -806,8 +803,7 @@ export function toMatchSnapshot(
       uid: metadata?.away.uid,
       clubUid: awayClubUid,
       name: metadata?.away.name || "Away",
-      color: teamThemeColors.away.dark,
-      themeColors: teamThemeColors.away,
+      colorSource: metadata?.away,
       logoPath: metadata?.away.logoPath,
       manager: metadata?.away.manager,
       logoUrl:

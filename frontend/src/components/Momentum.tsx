@@ -18,6 +18,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { NativeTabs } from "@/components/uitripled/native-tabs-shadcnui"
 import { samePlayerLabels } from "@/lib/matchRenderEquality"
 import type { MatchSnapshot, TacticalEventPoint, TeamSide, XgTimelinePoint } from "@/types/match"
+import { useTheme } from "@/components/theme-provider"
 
 type MomentumProps = {
   match: MatchSnapshot
@@ -59,6 +60,8 @@ const momentumYTicks = [-1, -0.5, 0, 0.5, 1]
 
 export const Momentum = memo(function Momentum({ match }: MomentumProps) {
   const { t } = useTranslation()
+  const { settings } = useTheme()
+  const colorblind = settings.colorVision === "colorblind"
   const [mode, setMode] = useState<MomentumMode>("line")
   const homeColor = match.home.color ?? "var(--team-home-fallback)"
   const awayColor = match.away.color ?? "var(--team-away-fallback)"
@@ -191,6 +194,7 @@ export const Momentum = memo(function Momentum({ match }: MomentumProps) {
                   fill={awayColor}
                   fillOpacity={0.5}
                   strokeWidth={2}
+                  strokeDasharray={colorblind ? "7 4" : undefined}
                   dot={false}
                   activeDot={{ r: 3 }}
                   isAnimationActive={false}

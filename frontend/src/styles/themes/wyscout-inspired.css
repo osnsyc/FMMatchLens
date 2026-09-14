@@ -1,0 +1,123 @@
+:root[data-preset="wyscout-inspired"] {
+  --font-preset-heading: "ABCSocial", "Inter Variable", sans-serif;
+  --font-preset-sans: "Inter Variable", sans-serif;
+  --surface-page: #f4f6f8;
+  --surface-panel: #ffffff;
+  --surface-panel-muted: #edf0f2;
+  --surface-popover: #ffffff;
+  --surface-input: #e1e6ea;
+  --surface-overlay: rgb(18 32 43 / 58%);
+  --text-primary: #18242d;
+  --text-secondary: #3b4b57;
+  --text-muted: #6c7881;
+  --text-inverse: #ffffff;
+  --border-subtle: #e1e6e9;
+  --border-default: #c8d0d6;
+  --border-strong: #8b9aa5;
+  --border-focus: #e05a35;
+  --action-primary: #e05a35;
+  --action-primary-hover: #c94a28;
+  --action-on-primary: #ffffff;
+  --action-selected: #fbe2da;
+  --action-selected-text: #8d321b;
+  --status-positive: #16705a;
+  --status-negative: #c63d4f;
+  --status-warning: #916000;
+  --status-info: #26648c;
+  --viz-home-fallback: #e05a35;
+  --viz-away-fallback: #26648c;
+  --viz-series-1: #e05a35;
+  --viz-series-2: #26648c;
+  --viz-series-3: #16705a;
+  --viz-series-4: #a56c00;
+  --viz-series-5: #755593;
+  --viz-grid: rgb(24 36 45 / 8%);
+  --viz-axis: #6c7881;
+  --formation-pitch-surface: transparent;
+  --formation-player-number: var(--surface-page);
+  --heatmap-pitch-surface: transparent;
+  --heatmap-player-number: var(--surface-page);
+  --tactical-pitch-surface: transparent;
+  --pitch-line: #607984;
+  --pitch-zone: rgb(224 90 53 / 10%);
+  --pitch-label: #3b4b57;
+  --event-important: #916000;
+  --event-contrast: #174c6f;
+  --event-marker-foreground: #ffffff;
+  --event-marker-shadow: rgb(18 32 43 / 42%);
+  --event-trajectory: #3b4b57;
+  --event-selected: #e05a35;
+  --event-historical: #73818b;
+  --heatmap-stop-0: #e7f0f5;
+  --heatmap-stop-1: #b8d5e4;
+  --heatmap-stop-2: #72afcb;
+  --heatmap-stop-3: #2c789e;
+  --heatmap-stop-4: #ed8a59;
+  --heatmap-stop-5: #e05a35;
+  --effect-highlight: rgb(255 255 255 / 72%);
+  --effect-shadow: rgb(18 32 43 / 18%);
+  --effect-panel-glow: transparent;
+  --effect-card-glow: rgb(255 255 255 / 68%);
+  --gradient-page: linear-gradient(145deg, #f4f6f8, #e9eef2 62%, #f8fafb);
+  --gradient-control-active: linear-gradient(135deg, #e05a35, #c94a28);
+  --radius: 0.25rem;
+}
+
+:root[data-preset="wyscout-inspired"] body {
+  letter-spacing: 0;
+}
+
+:root[data-preset="wyscout-inspired"] [data-slot="card"] {
+  border-color: var(--border-subtle);
+  background: var(--surface-panel);
+  box-shadow: 0 1px 3px var(--effect-shadow);
+}
+
+:root[data-preset="wyscout-inspired"] [data-slot="card"]::before {
+  display: none;
+}
+
+:root[data-preset="wyscout-inspired"] [data-slot="card"]:hover {
+  border-color: var(--border-default);
+  box-shadow: 0 3px 10px var(--effect-shadow);
+}
+
+:root[data-preset="wyscout-inspired"] [data-slot="card-title"]::before {
+  width: 2px;
+  border-radius: 0;
+  background: var(--action-primary);
+  box-shadow: none;
+}
+
+:root[data-preset="wyscout-inspired"] :is(
+  [data-slot="button"],
+  [data-slot="tabs-trigger"],
+  [data-slot="menubar-trigger"]
+) {
+  font-family: var(--font-preset-sans);
+  font-weight: 600;
+}
+
+:root[data-preset="wyscout-inspired"] :is(
+  [data-slot="dropdown-menu-content"],
+  [data-slot="select-content"],
+  [data-slot="tooltip-content"]
+) {
+  border-color: var(--border-default);
+  box-shadow: 0 10px 24px var(--effect-shadow);
+}
+
+:root[data-preset="wyscout-inspired"] :is(
+  [data-slot="dropdown-menu-radio-item"][data-state="checked"],
+  [data-slot="dropdown-menu-checkbox-item"][data-state="checked"],
+  [data-slot="tabs-trigger"][data-state="active"],
+  [data-slot="tabs-trigger"][data-active]
+) {
+  color: var(--action-selected-text);
+  background: var(--action-selected);
+}
+
+:root[data-preset="wyscout-inspired"] .tactical-pitch {
+  border: 1px solid var(--border-default);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 52%);
+}

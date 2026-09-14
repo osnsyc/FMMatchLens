@@ -19,11 +19,13 @@ import {
   type TacticalScene,
 } from "@/components/tactical/tacticalScene"
 import type { MatchPlayer, TeamSide } from "@/types/match"
+import type { ResolvedVizTokens } from "@/theme/types"
 
 export type TacticalAppearance = {
   homeColor: string
   awayColor: string
   showNumbers: boolean
+  tokens: ResolvedVizTokens
 }
 
 export type TacticalHit = {
@@ -619,13 +621,16 @@ export class PixiTacticalRenderer {
     appearance: TacticalAppearance
   ): ResolvedAppearance {
     return {
-      homeColor: this.resolveCssColor(appearance.homeColor, 0x4f6fd8),
-      awayColor: this.resolveCssColor(appearance.awayColor, 0xdf3f65),
-      background: this.resolveCssColor("var(--background)", 0x0a0f1e),
-      important: this.resolveCssColor("var(--important-event)", 0xf6c453),
-      contrast: this.resolveCssColor("var(--event-contrast)", 0xf4f0ff),
+      homeColor: this.resolveCssColor(appearance.homeColor, 0x0072b2),
+      awayColor: this.resolveCssColor(appearance.awayColor, 0xd55e00),
+      background: this.resolveCssColor(
+        appearance.tokens.tacticalPitchSurface,
+        0x0a0f1e
+      ),
+      important: this.resolveCssColor(appearance.tokens.eventImportant, 0xf6c453),
+      contrast: this.resolveCssColor(appearance.tokens.eventContrast, 0xf4f0ff),
       foreground: this.resolveCssColor(
-        "var(--event-marker-foreground)",
+        appearance.tokens.eventMarkerForeground,
         0x0a0f1e
       ),
     }
@@ -638,7 +643,7 @@ export class PixiTacticalRenderer {
     if (!computed) return fallback
     const context = this.colorCanvasContext
     context.clearRect(0, 0, 1, 1)
-    context.fillStyle = "#000000"
+    context.fillStyle = "rgb(0, 0, 0)"
     context.fillStyle = computed
     context.fillRect(0, 0, 1, 1)
     const [red, green, blue] = context.getImageData(0, 0, 1, 1).data

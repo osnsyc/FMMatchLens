@@ -1,222 +1,203 @@
 /* eslint-disable react-refresh/only-export-components */
 import * as React from "react"
 
-type Theme = "dark" | "light" | "system"
-type ResolvedTheme = "dark" | "light"
+import { getThemePreset } from "@/theme/registry"
+import { isSchemeLocked, resolveScheme } from "@/theme/resolveAppearance"
+import {
+  APPEARANCE_STORAGE_KEY,
+  defaultAppearance,
+  loadAppearance,
+  parseAppearance,
+  serializeAppearance,
+} from "@/theme/storage"
+import type {
+  AppearanceSettings,
+  ColorVisionMode,
+  ContrastMode,
+  Scheme,
+  SchemePreference,
+  ThemePreset,
+} from "@/theme/types"
 
 type ThemeProviderProps = {
   children: React.ReactNode
-  defaultTheme?: Theme
-  storageKey?: string
   disableTransitionOnChange?: boolean
 }
 
-type ThemeProviderState = {
-  theme: Theme
-  resolvedTheme: ResolvedTheme
-  setTheme: (theme: Theme) => void
+export type AppearanceContextValue = {
+  settings: AppearanceSettings
+  preset: ThemePreset
+  resolvedScheme: Scheme
+  schemeLocked: boolean
+  schemeLockReason?: string
+  setPreset: (id: string) => void
+  setSchemePreference: (value: SchemePreference) => void
+  setColorVision: (value: ColorVisionMode) => void
+  setContrast: (value: ContrastMode) => void
+  resetAppearance: () => void
+  theme: SchemePreference
+  resolvedTheme: Scheme
+  setTheme: (value: SchemePreference) => void
 }
 
 const COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)"
-const THEME_VALUES: Theme[] = ["dark", "light", "system"]
+const ThemeProviderContext = React.createContext<AppearanceContextValue | undefined>(undefined)
 
-const ThemeProviderContext = React.createContext<
-  ThemeProviderState | undefined
->(undefined)
-
-function isTheme(value: string | null): value is Theme {
-  if (value === null) {
-    return false
-  }
-
-  return THEME_VALUES.includes(value as Theme)
-}
-
-function getSystemTheme(): ResolvedTheme {
-  if (window.matchMedia(COLOR_SCHEME_QUERY).matches) {
-    return "dark"
-  }
-
-  return "light"
+function getSystemScheme(): Scheme {
+  return window.matchMedia(COLOR_SCHEME_QUERY).matches ? "dark" : "light"
 }
 
 function disableTransitionsTemporarily() {
   const style = document.createElement("style")
-  style.appendChild(
-    document.createTextNode(
-      "*,*::before,*::after{-webkit-transition:none!important;transition:none!important}"
-    )
-  )
+  style.textContent = "*,*::before,*::after{-webkit-transition:none!important;transition:none!important}"
   document.head.appendChild(style)
-
   return () => {
     window.getComputedStyle(document.body)
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        style.remove()
-      })
-    })
+    requestAnimationFrame(() => requestAnimationFrame(() => style.remove()))
   }
 }
 
 function isEditableTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) {
-    return false
-  }
-
-  if (target.isContentEditable) {
-    return true
-  }
-
-  const editableParent = target.closest(
-    "input, textarea, select, [contenteditable='true']"
+  return target instanceof HTMLElement && (
+    target.isContentEditable ||
+    target.closest("input, textarea, select, [contenteditable='true']") !== null
   )
-  if (editableParent) {
-    return true
-  }
+}
 
-  return false
+function applyRootAppearance(settings: AppearanceSettings, scheme: Scheme) {
+  const root = document.documentElement
+  root.dataset.preset = settings.presetId
+  root.dataset.scheme = scheme
+  root.dataset.colorVision = settings.colorVision
+  root.dataset.contrast = settings.contrast
+  root.classList.remove("light", "dark")
+  root.classList.add(scheme)
+  root.style.colorScheme = scheme
+  const themeColor = getComputedStyle(root).getPropertyValue("--surface-page").trim()
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+  if (meta && themeColor) meta.content = themeColor
 }
 
 export function ThemeProvider({
   children,
-  defaultTheme = "dark",
-  storageKey = "theme",
   disableTransitionOnChange = true,
   ...props
 }: ThemeProviderProps) {
-  const [theme, setThemeState] = React.useState<Theme>(() => {
-    const storedTheme = localStorage.getItem(storageKey)
-    if (isTheme(storedTheme)) {
-      return storedTheme
-    }
-
-    return defaultTheme
-  })
-  const [systemTheme, setSystemTheme] = React.useState<ResolvedTheme>(
-    getSystemTheme
+  const [settings, setSettings] = React.useState<AppearanceSettings>(() =>
+    loadAppearance(localStorage)
   )
-  const resolvedTheme = theme === "system" ? systemTheme : theme
+  const settingsRef = React.useRef(settings)
+  const [systemScheme, setSystemScheme] = React.useState<Scheme>(getSystemScheme)
+  const preset = getThemePreset(settings.presetId)
+  const resolvedScheme = resolveScheme(settings.schemePreference, systemScheme, preset)
+  const schemeLocked = isSchemeLocked(preset)
 
-  const setTheme = React.useCallback(
-    (nextTheme: Theme) => {
-      localStorage.setItem(storageKey, nextTheme)
-      setThemeState(nextTheme)
+  const updateSettings = React.useCallback(
+    (update: (current: AppearanceSettings) => AppearanceSettings) => {
+      const next = update(settingsRef.current)
+      settingsRef.current = next
+      applyRootAppearance(
+        next,
+        resolveScheme(next.schemePreference, getSystemScheme(), getThemePreset(next.presetId))
+      )
+      localStorage.setItem(APPEARANCE_STORAGE_KEY, serializeAppearance(next))
+      setSettings(next)
     },
-    [storageKey]
+    []
   )
 
-  const applyTheme = React.useCallback(
-    (nextTheme: ResolvedTheme) => {
-      const root = document.documentElement
-      const restoreTransitions = disableTransitionOnChange
-        ? disableTransitionsTemporarily()
-        : null
-
-      root.classList.remove("light", "dark")
-      root.classList.add(nextTheme)
-
-      if (restoreTransitions) {
-        restoreTransitions()
-      }
-    },
-    [disableTransitionOnChange]
-  )
+  const setPreset = React.useCallback((id: string) => {
+    updateSettings((current) => ({ ...current, presetId: getThemePreset(id).id }))
+  }, [updateSettings])
+  const setSchemePreference = React.useCallback((schemePreference: SchemePreference) => {
+    updateSettings((current) => ({ ...current, schemePreference }))
+  }, [updateSettings])
+  const setColorVision = React.useCallback((colorVision: ColorVisionMode) => {
+    updateSettings((current) => ({ ...current, colorVision }))
+  }, [updateSettings])
+  const setContrast = React.useCallback((contrast: ContrastMode) => {
+    updateSettings((current) => ({ ...current, contrast }))
+  }, [updateSettings])
+  const resetAppearance = React.useCallback(() => {
+    updateSettings(() => defaultAppearance)
+  }, [updateSettings])
 
   React.useLayoutEffect(() => {
-    applyTheme(resolvedTheme)
-  }, [resolvedTheme, applyTheme])
+    const restore = disableTransitionOnChange ? disableTransitionsTemporarily() : undefined
+    applyRootAppearance(settings, resolvedScheme)
+    restore?.()
+  }, [disableTransitionOnChange, resolvedScheme, settings])
 
   React.useEffect(() => {
-    if (theme !== "system") {
-      return undefined
-    }
-
     const mediaQuery = window.matchMedia(COLOR_SCHEME_QUERY)
     const handleChange = () => {
-      setSystemTheme(mediaQuery.matches ? "dark" : "light")
+      const next = mediaQuery.matches ? "dark" : "light"
+      const current = settingsRef.current
+      applyRootAppearance(
+        current,
+        resolveScheme(current.schemePreference, next, getThemePreset(current.presetId))
+      )
+      setSystemScheme(next)
     }
-
     mediaQuery.addEventListener("change", handleChange)
-
-    return () => {
-      mediaQuery.removeEventListener("change", handleChange)
-    }
-  }, [theme])
+    return () => mediaQuery.removeEventListener("change", handleChange)
+  }, [])
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat) {
-        return
-      }
-
-      if (event.metaKey || event.ctrlKey || event.altKey) {
-        return
-      }
-
-      if (isEditableTarget(event.target)) {
-        return
-      }
-
-      if (event.key.toLowerCase() !== "d") {
-        return
-      }
-
-      setThemeState((currentTheme) => {
-        const nextTheme =
-          currentTheme === "dark"
-            ? "light"
-            : currentTheme === "light"
-              ? "dark"
-              : getSystemTheme() === "dark"
-                ? "light"
-                : "dark"
-
-        localStorage.setItem(storageKey, nextTheme)
-        return nextTheme
-      })
+      if (
+        event.repeat || event.metaKey || event.ctrlKey || event.altKey ||
+        isEditableTarget(event.target) || event.key.toLowerCase() !== "d"
+      ) return
+      const current = settingsRef.current
+      const currentPreset = getThemePreset(current.presetId)
+      if (isSchemeLocked(currentPreset)) return
+      const currentResolved = resolveScheme(current.schemePreference, getSystemScheme(), currentPreset)
+      updateSettings(() => ({
+          ...current,
+          schemePreference: currentResolved === "dark" ? "light" : "dark",
+      }))
     }
-
     window.addEventListener("keydown", handleKeyDown)
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown)
-    }
-  }, [storageKey])
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [updateSettings])
 
   React.useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
-      if (event.storageArea !== localStorage) {
-        return
+      if (event.storageArea === localStorage && event.key === APPEARANCE_STORAGE_KEY) {
+        const next = parseAppearance(event.newValue)
+        settingsRef.current = next
+        applyRootAppearance(
+          next,
+          resolveScheme(next.schemePreference, getSystemScheme(), getThemePreset(next.presetId))
+        )
+        setSettings(next)
       }
-
-      if (event.key !== storageKey) {
-        return
-      }
-
-      if (isTheme(event.newValue)) {
-        setThemeState(event.newValue)
-        return
-      }
-
-      setThemeState(defaultTheme)
     }
-
     window.addEventListener("storage", handleStorageChange)
+    return () => window.removeEventListener("storage", handleStorageChange)
+  }, [])
 
-    return () => {
-      window.removeEventListener("storage", handleStorageChange)
-    }
-  }, [defaultTheme, storageKey])
-
-  const value = React.useMemo(
-    () => ({
-      theme,
-      resolvedTheme,
-      setTheme,
-    }),
-    [theme, resolvedTheme, setTheme]
-  )
+  const value = React.useMemo<AppearanceContextValue>(() => ({
+    settings,
+    preset,
+    resolvedScheme,
+    schemeLocked,
+    schemeLockReason: schemeLocked
+      ? `appearance.schemeLocked.${preset.defaultScheme}`
+      : undefined,
+    setPreset,
+    setSchemePreference,
+    setColorVision,
+    setContrast,
+    resetAppearance,
+    theme: settings.schemePreference,
+    resolvedTheme: resolvedScheme,
+    setTheme: setSchemePreference,
+  }), [
+    preset, resetAppearance, resolvedScheme, schemeLocked, setColorVision,
+    setContrast, setPreset, setSchemePreference, settings,
+  ])
 
   return (
     <ThemeProviderContext.Provider {...props} value={value}>
@@ -225,12 +206,8 @@ export function ThemeProvider({
   )
 }
 
-export const useTheme = () => {
+export function useTheme() {
   const context = React.useContext(ThemeProviderContext)
-
-  if (context === undefined) {
-    throw new Error("useTheme must be used within a ThemeProvider")
-  }
-
+  if (!context) throw new Error("useTheme must be used within a ThemeProvider")
   return context
 }

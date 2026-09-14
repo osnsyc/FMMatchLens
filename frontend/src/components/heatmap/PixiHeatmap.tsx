@@ -5,6 +5,7 @@ import {
   type HeatmapColorScale,
 } from "@/components/heatmap/PixiHeatmapRenderer"
 import type { HeatmapGrid } from "@/types/match"
+import { useTheme } from "@/components/theme-provider"
 
 type PixiHeatmapProps = {
   grid: HeatmapGrid
@@ -19,6 +20,7 @@ export function PixiHeatmap({
   height,
   colorScale,
 }: PixiHeatmapProps) {
+  const { settings, resolvedScheme } = useTheme()
   const hostRef = useRef<HTMLDivElement | null>(null)
   const rendererRef = useRef<PixiHeatmapRenderer | null>(null)
   const gridRef = useRef(grid)
@@ -49,6 +51,7 @@ export function PixiHeatmap({
           return
         }
         rendererRef.current = renderer
+        renderer.updateLut(readHeatmapStops())
         renderer.update(gridRef.current, colorScaleRef.current)
       } catch (error) {
         renderer?.destroy()
@@ -71,8 +74,26 @@ export function PixiHeatmap({
   }, [colorScale, grid])
 
   useEffect(() => {
+    rendererRef.current?.updateLut(readHeatmapStops())
+  }, [resolvedScheme, settings.colorVision, settings.presetId])
+
+  useEffect(() => {
     if (width > 0 && height > 0) rendererRef.current?.resize(width, height)
   }, [height, width])
 
   return <div ref={hostRef} className="size-full" />
+}
+
+function readHeatmapStops() {
+  const style = getComputedStyle(document.documentElement)
+  return Array.from({ length: 6 }, (_, index) =>
+    cssColorToRgb(style.getPropertyValue(`--heatmap-stop-${index}`))
+  )
+}
+
+function cssColorToRgb(color: string): number[] {
+  const match = color.trim().match(/^#([0-9a-f]{6})$/i)
+  if (!match) return [0, 0, 0]
+  const value = Number.parseInt(match[1], 16)
+  return [((value >> 16) & 255) / 255, ((value >> 8) & 255) / 255, (value & 255) / 255]
 }

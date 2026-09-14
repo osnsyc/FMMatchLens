@@ -311,6 +311,7 @@ export type MatchSnapshot = {
     clubUid?: number
     name: string
     color?: string
+    colorSource?: import("@/lib/teamColors").TeamColorSource
     themeColors?: TeamThemeColors
     logoPath?: string
     logoUrl?: string
@@ -323,6 +324,7 @@ export type MatchSnapshot = {
     clubUid?: number
     name: string
     color?: string
+    colorSource?: import("@/lib/teamColors").TeamColorSource
     themeColors?: TeamThemeColors
     logoPath?: string
     logoUrl?: string
