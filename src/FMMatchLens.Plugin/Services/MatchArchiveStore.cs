@@ -13,6 +13,7 @@ internal sealed class MatchArchiveStore : IDisposable
     private readonly ArchiveWriteOptions _options;
     private ArchiveWriter? _archiveWriter;
     private string? _currentMatchId;
+    private string? _currentPath;
     private string? _currentHomeName;
     private string? _currentAwayName;
     private string? _currentMatchDate;
@@ -36,9 +37,10 @@ internal sealed class MatchArchiveStore : IDisposable
             CloseWriterLocked();
             try
             {
-                var path = GetPath(matchId);
+                var path = GetAvailablePath(GetPath(matchId));
                 _archiveWriter = new ArchiveWriter(path, matchId, startedUnixMilliseconds, _options);
                 _currentMatchId = matchId;
+                _currentPath = path;
                 _currentHomeName = null;
                 _currentAwayName = null;
                 _currentMatchDate = null;
@@ -85,7 +87,7 @@ internal sealed class MatchArchiveStore : IDisposable
         lock (_gate)
         {
             if (_archiveWriter is null || matchId != _currentMatchId) return;
-            var path = GetPath(matchId);
+            var path = _currentPath ?? GetPath(matchId);
             var homeName = _currentHomeName;
             var awayName = _currentAwayName;
             var matchDate = _currentMatchDate;
@@ -194,6 +196,7 @@ internal sealed class MatchArchiveStore : IDisposable
                 : $"{SafeFileNamePart(matchDate)}-{SafeFileNamePart(homeName)}-vs-{SafeFileNamePart(awayName)}-{homeGoals}-{awayGoals}.fmlens";
             var renamedPath = Path.Combine(_directory, fileName);
             if (string.Equals(path, renamedPath, StringComparison.OrdinalIgnoreCase)) return path;
+            renamedPath = GetAvailablePath(renamedPath);
             File.Move(path, renamedPath);
             return renamedPath;
         }
@@ -214,6 +217,20 @@ internal sealed class MatchArchiveStore : IDisposable
         return string.IsNullOrWhiteSpace(sanitized) ? "Unknown" : sanitized;
     }
 
+    private static string GetAvailablePath(string path)
+    {
+        if (!File.Exists(path)) return path;
+
+        var directory = Path.GetDirectoryName(path) ?? string.Empty;
+        var stem = Path.GetFileNameWithoutExtension(path);
+        var extension = Path.GetExtension(path);
+        for (var suffix = 1; ; suffix++)
+        {
+            var candidate = Path.Combine(directory, $"{stem}_{suffix}{extension}");
+            if (!File.Exists(candidate)) return candidate;
+        }
+    }
+
     private static bool IsSafeMatchId(string matchId) =>
         matchId.Length is > 0 and <= 80 && matchId.All(character => char.IsLetterOrDigit(character) || character is '-' or '_');
 
@@ -222,6 +239,7 @@ internal sealed class MatchArchiveStore : IDisposable
         _archiveWriter?.Dispose();
         _archiveWriter = null;
         _currentMatchId = null;
+        _currentPath = null;
         _currentHomeName = null;
         _currentAwayName = null;
         _currentMatchDate = null;
