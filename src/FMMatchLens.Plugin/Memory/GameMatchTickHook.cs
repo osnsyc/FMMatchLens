@@ -41,7 +41,6 @@ internal sealed class GameMatchTickHook : IDisposable
     private const int MaxStoredMomentumTrajectoryPoints = 4;
     private const int MonitoredMomentumEventCount = 4;
 
-    private readonly int _instructionOffset;
     private readonly RealtimeMatchTimeline _timeline;
     private readonly MatchUpdateDelegate _hookDelegate;
     private readonly MemoryReader _memoryReader = new();
@@ -102,24 +101,29 @@ internal sealed class GameMatchTickHook : IDisposable
     private int _drainStage;
     private int _isDrainingTickRecords;
     private int _isLoggingDiagnostics;
+    private int _instructionOffset;
     private bool _started;
+    private bool _unsupportedBuild;
 
-    public GameMatchTickHook(
-        RealtimeMatchTimeline timeline,
-        int instructionOffset)
+    public GameMatchTickHook(RealtimeMatchTimeline timeline)
     {
         _timeline = timeline;
-        _instructionOffset = instructionOffset;
         _hookDelegate = MatchUpdateHook;
     }
 
     public bool IsStarted => _started;
+    public bool ShouldRetry => !_unsupportedBuild;
 
     public bool Start(bool logModuleNotLoaded = true)
     {
         if (_started)
         {
             return true;
+        }
+
+        if (_unsupportedBuild)
+        {
+            return false;
         }
 
         if (IntPtr.Size != 8)
@@ -139,6 +143,31 @@ internal sealed class GameMatchTickHook : IDisposable
             return false;
         }
 
+        GamePluginBuild build;
+        string modulePath;
+        string sha256;
+        try
+        {
+            if (!GamePluginBuildCatalog.TryResolve(moduleBase, out build, out modulePath, out sha256))
+            {
+                _unsupportedBuild = true;
+                PluginLogger.Warning(
+                    $"Unsupported game_plugin.dll build; GAME_MATCH hook was not installed. " +
+                    $"sha256={sha256}, path={modulePath}");
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            if (logModuleNotLoaded)
+            {
+                PluginLogger.Warning($"Unable to identify game_plugin.dll build: {ex.Message}");
+            }
+
+            return false;
+        }
+
+        _instructionOffset = build.MatchTickHookRva;
         _targetAddress = moduleBase + _instructionOffset;
 
         try
@@ -172,7 +201,9 @@ internal sealed class GameMatchTickHook : IDisposable
                 $"GAME_MATCH match-update post hook installed with permanent native trampoline at " +
                 $"game_plugin.dll+0x{_instructionOffset:X} ({FormatPointer(_targetAddress)}), " +
                 $"trampoline={FormatPointer(_detour.TrampolinePtr)}.");
-            PluginLogger.Info("GAME_MATCH match-update hook installed.");
+            PluginLogger.Info(
+                $"GAME_MATCH match-update hook installed for {build.Distribution} build " +
+                $"(sha256={build.Sha256}, rva=0x{build.MatchTickHookRva:X}).");
             return true;
         }
         catch (Exception ex)

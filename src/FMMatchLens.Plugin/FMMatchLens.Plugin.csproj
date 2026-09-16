@@ -55,7 +55,6 @@
       <ProjectMetadataLine Include="    public const string AuthorBlogUrl = &quot;$(AuthorBlogUrl)&quot;%3B" />
       <ProjectMetadataLine Include="    public const string KoFiUrl = &quot;$(KoFiUrl)&quot;%3B" />
       <ProjectMetadataLine Include="    public const int ApiPort = $(ApiPort)%3B" />
-      <ProjectMetadataLine Include="    public const int GameMatchTickHookOffset = $(GameMatchTickHookOffset)%3B" />
       <ProjectMetadataLine Include="}" />
       <Compile Include="$(GeneratedProjectMetadataFile)" Visible="false" />
     </ItemGroup>

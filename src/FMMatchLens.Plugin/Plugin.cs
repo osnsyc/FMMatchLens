@@ -49,13 +49,18 @@ public sealed class Plugin : BasePlugin
         _apiServer = new LocalApiServer(realtimeTimeline, _archiveStore, _graphicsAssets);
 
         _apiServer.Start();
-        _gameMatchTickHook = new GameMatchTickHook(
-            realtimeTimeline,
-            ProjectMetadata.GameMatchTickHookOffset);
+        _gameMatchTickHook = new GameMatchTickHook(realtimeTimeline);
         if (!_gameMatchTickHook.Start())
         {
-            PluginLogger.Info("GAME_MATCH tick hook will retry until game_plugin.dll is loaded.");
-            _hookRetryTimer = new Timer(_ => TryInstallGameMatchTickHook(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+            if (_gameMatchTickHook.ShouldRetry)
+            {
+                PluginLogger.Info("GAME_MATCH tick hook will retry while game_plugin.dll build detection is pending.");
+                _hookRetryTimer = new Timer(
+                    _ => TryInstallGameMatchTickHook(),
+                    null,
+                    TimeSpan.FromSeconds(1),
+                    TimeSpan.FromSeconds(1));
+            }
         }
     }
 
@@ -87,6 +92,11 @@ public sealed class Plugin : BasePlugin
         try
         {
             if (_gameMatchTickHook.Start(false))
+            {
+                _hookRetryTimer?.Dispose();
+                _hookRetryTimer = null;
+            }
+            else if (!_gameMatchTickHook.ShouldRetry)
             {
                 _hookRetryTimer?.Dispose();
                 _hookRetryTimer = null;
