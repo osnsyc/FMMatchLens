@@ -140,7 +140,6 @@ internal sealed class GameMatchTickHook : IDisposable
         }
 
         _targetAddress = moduleBase + _instructionOffset;
-        _momentumCalculator.SetModuleBase(moduleBase);
 
         try
         {

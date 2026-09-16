@@ -157,18 +157,6 @@ internal static class Offsets
         public const int LongitudinalPosition = 0x04;
     }
 
-    public static class MomentumWeightingTable
-    {
-        public const int GlobalRva = 0x4E375F8;
-        public const int EntriesBegin = 0x08;
-        public const int EntriesEnd = 0x10;
-        public const int EntrySize = 0x08;
-        public const int EventType = 0x00;
-        public const int VerticalSixth = 0x01;
-        public const int HorizontalThird = 0x02;
-        public const int Weight = 0x04;
-    }
-
     public static class Team
     {
         // Pointer to the team's manager wrapper. Manager.Person resolves to the

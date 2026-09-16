@@ -5,8 +5,8 @@ using System.Runtime.InteropServices;
 namespace FMMatchLens.Plugin.Memory;
 
 /// <summary>
-/// Read-only managed port of game_plugin.dll+0x2303250. The native hook only
-/// copies event deltas; a background worker owns history and full scans.
+/// Read-only managed Momentum calculator. The native hook only copies event
+/// deltas; a background worker owns history and full scans.
 /// </summary>
 internal sealed class MomentumCalculator : IDisposable
 {
@@ -17,10 +17,63 @@ internal sealed class MomentumCalculator : IDisposable
     private const int NoStartExpansionMask = 0x240201;
     private const int NoEndExpansionMask = 0x120100;
     private const int MaxEvents = 100_000;
-    private const int MaxWeights = 4_096;
     private const int RollingStep = 120;
     private const int RollingWindow = 1_200;
     private const int MaxOutput = 512;
+
+    // Confirmed FM26 Momentum weights, embedded so calculation does not depend on
+    // the version-specific game_plugin.dll weighting-table global RVA.
+    private static readonly Weight[] Weights =
+    [
+        new(1, 4, 0, 10),
+        new(1, 4, 1, 15),
+        new(1, 4, 2, 10),
+        new(1, 5, 0, 25),
+        new(1, 5, 1, 50),
+        new(1, 5, 2, 25),
+        new(2, 4, 0, 5),
+        new(2, 4, 1, 10),
+        new(2, 4, 2, 5),
+        new(2, 5, 0, 5),
+        new(2, 5, 1, 20),
+        new(2, 5, 2, 5),
+        new(3, 4, 0, 5),
+        new(3, 4, 1, 15),
+        new(3, 4, 2, 5),
+        new(3, 5, 0, 10),
+        new(3, 5, 1, 35),
+        new(3, 5, 2, 10),
+        new(4, 4, 0, 5),
+        new(4, 4, 1, 10),
+        new(4, 4, 2, 5),
+        new(4, 5, 0, 10),
+        new(4, 5, 1, 30),
+        new(4, 5, 2, 10),
+        new(5, 4, 0, 5),
+        new(5, 4, 1, 10),
+        new(5, 4, 2, 5),
+        new(5, 5, 0, 10),
+        new(5, 5, 1, 30),
+        new(5, 5, 2, 10),
+        new(7, 3, 0, 2),
+        new(7, 3, 1, 2),
+        new(7, 3, 2, 2),
+        new(7, 4, 0, 2),
+        new(7, 4, 1, 4),
+        new(7, 4, 2, 3),
+        new(7, 5, 0, 3),
+        new(7, 5, 1, 5),
+        new(7, 5, 2, 3),
+        new(54, 3, 0, 2),
+        new(54, 3, 1, 2),
+        new(54, 3, 2, 2),
+        new(54, 4, 0, 2),
+        new(54, 4, 1, 3),
+        new(54, 4, 2, 2),
+        new(54, 5, 0, 2),
+        new(54, 5, 1, 4),
+        new(54, 5, 2, 2),
+    ];
 
     private readonly ConcurrentQueue<Work> _jobs = new();
     private readonly AutoResetEvent _jobReady = new(false);
@@ -29,8 +82,6 @@ internal sealed class MomentumCalculator : IDisposable
     private readonly Queue<MomentumTickData> _rollingOutput = new();
     private readonly Window[] _captureWindows = new Window[RawRealtimeTickFrame.MaxMomentumPoints];
     private readonly Thread _worker;
-    private Weight[]? _weights;
-    private nint _moduleBase;
     private nint _match;
     private nint _source;
     private nint _begin;
@@ -46,15 +97,6 @@ internal sealed class MomentumCalculator : IDisposable
         _worker.Start();
     }
 
-    public void SetModuleBase(nint moduleBase)
-    {
-        if (_moduleBase == moduleBase) return;
-        _moduleBase = moduleBase;
-        _weights = null;
-        ResetCapture();
-        Queue(new Work(true, 0, Array.Empty<Event>(), default, Array.Empty<Window>(), 0, false, -1, -1));
-    }
-
     /// <remarks>Runs on the native callback and never waits for calculation.</remarks>
     public void Capture(
         nint match,
@@ -65,8 +107,7 @@ internal sealed class MomentumCalculator : IDisposable
     {
         nativeCount = 0;
         rollingCount = 0;
-        if (_disposed || _moduleBase == default || match == default ||
-            !TryReadSource(match, out var source) || !EnsureWeights()) return;
+        if (_disposed || match == default || !TryReadSource(match, out var source)) return;
 
         var reset = match != _match || source.Address != _source ||
             source.Begin != _begin || source.Count < _eventCount;
@@ -261,33 +302,6 @@ internal sealed class MomentumCalculator : IDisposable
         return true;
     }
 
-    private bool EnsureWeights()
-    {
-        if (_weights is not null) return true;
-        var global = _moduleBase + Offsets.MomentumWeightingTable.GlobalRva;
-        if (!VirtualMemory.IsReadable(global, IntPtr.Size)) return false;
-        var table = Marshal.ReadIntPtr(global);
-        if (!VirtualMemory.IsReadable(table, Offsets.MomentumWeightingTable.EntriesEnd + IntPtr.Size)) return false;
-        var begin = Marshal.ReadIntPtr(table + Offsets.MomentumWeightingTable.EntriesBegin);
-        var end = Marshal.ReadIntPtr(table + Offsets.MomentumWeightingTable.EntriesEnd);
-        var length = (long)end - (long)begin;
-        if (begin == default || length <= 0 || length % Offsets.MomentumWeightingTable.EntrySize != 0 ||
-            length / Offsets.MomentumWeightingTable.EntrySize > MaxWeights || length > int.MaxValue ||
-            !VirtualMemory.IsReadable(begin, (int)length)) return false;
-        var weights = new Weight[(int)(length / Offsets.MomentumWeightingTable.EntrySize)];
-        for (var i = 0; i < weights.Length; i++)
-        {
-            var address = begin + i * Offsets.MomentumWeightingTable.EntrySize;
-            weights[i] = new Weight(
-                Marshal.ReadByte(address + Offsets.MomentumWeightingTable.EventType),
-                Marshal.ReadByte(address + Offsets.MomentumWeightingTable.VerticalSixth),
-                Marshal.ReadByte(address + Offsets.MomentumWeightingTable.HorizontalThird),
-                unchecked((uint)Marshal.ReadInt32(address + Offsets.MomentumWeightingTable.Weight)));
-        }
-        _weights = weights;
-        return true;
-    }
-
     private static int BuildWindows(in NativeSource source, Window[] windows, out ulong signature)
     {
         var firstEnd = Math.Max(FirstHalfEnd, unchecked((int)source.FirstEnd));
@@ -363,9 +377,9 @@ internal sealed class MomentumCalculator : IDisposable
         var reverse = (item.Flags & Offsets.MomentumEvent.ReverseDirectionMask) != 0;
         var vertical = Vertical(item.Y, source.HalfLength, reverse);
         var horizontal = Horizontal(item.X, source.HalfWidth, reverse);
-        foreach (var weight in _weights!)
+        foreach (var weight in Weights)
             if (weight.EventType == item.EventType && weight.Vertical == vertical && weight.Horizontal == horizontal)
-                return unchecked((int)weight.Value);
+                return weight.Value;
         return 0;
     }
 
@@ -424,7 +438,7 @@ internal sealed class MomentumCalculator : IDisposable
     private readonly record struct Source(float HalfWidth, float HalfLength);
     private readonly record struct Event(ushort Tick, byte EventType, byte Team, ushort Flags, float X, float Y);
     private readonly record struct Window(int Time, int Start, int End);
-    private readonly record struct Weight(byte EventType, byte Vertical, byte Horizontal, uint Value);
+    private readonly record struct Weight(byte EventType, byte Vertical, byte Horizontal, int Value);
     private readonly record struct Work(
         bool Reset, int Start, Event[] Events, Source Source, Window[] Windows, int PointCount,
         bool Official, int FirstRolling, int LastRolling);
