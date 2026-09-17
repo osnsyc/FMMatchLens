@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 import {
   Coffee01Icon,
@@ -8,6 +16,8 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
 import { BrandIcon } from "@/components/BrandIcon"
 import {
   Select,
@@ -16,17 +26,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { FormationPitch } from "@/components/FormationPitch"
-import { MatchStatsPanel } from "@/components/MatchStatsPanel"
-import { MatchTimeline } from "@/components/MatchTimeline"
-import { Momentum } from "@/components/Momentum"
 import { ScoreHeader } from "@/components/ScoreHeader"
-import { SquadPanel } from "@/components/SquadPanel"
-import { TacticalBoard } from "@/components/TacticalBoard"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useTheme } from "@/components/theme-provider"
-import { XgTimeline } from "@/components/XgTimeline"
-import { ZonePanel } from "@/components/ZonePanel"
 import { useRealtimeMatch } from "@/api/realtimeMatch"
 import { parseLocalArchive } from "@/api/localArchive"
 import { preprocessReplayArchive } from "@/api/replay/replayPreprocessor"
@@ -36,40 +38,98 @@ import { changeLanguage, type SupportedLanguage } from "@/i18n"
 import type { MatchSnapshot } from "@/types/match"
 import { selectTeamDisplayColors } from "@/lib/teamColors"
 
+const FormationPitch = lazy(() =>
+  import("@/components/FormationPitch").then((module) => ({
+    default: module.FormationPitch,
+  }))
+)
+const MatchStatsPanel = lazy(() =>
+  import("@/components/MatchStatsPanel").then((module) => ({
+    default: module.MatchStatsPanel,
+  }))
+)
+const MatchTimeline = lazy(() =>
+  import("@/components/MatchTimeline").then((module) => ({
+    default: module.MatchTimeline,
+  }))
+)
+const Momentum = lazy(() =>
+  import("@/components/Momentum").then((module) => ({
+    default: module.Momentum,
+  }))
+)
+const SquadPanel = lazy(() =>
+  import("@/components/SquadPanel").then((module) => ({
+    default: module.SquadPanel,
+  }))
+)
+const TacticalBoard = lazy(() =>
+  import("@/components/TacticalBoard").then((module) => ({
+    default: module.TacticalBoard,
+  }))
+)
+const XgTimeline = lazy(() =>
+  import("@/components/XgTimeline").then((module) => ({
+    default: module.XgTimeline,
+  }))
+)
+const ZonePanel = lazy(() =>
+  import("@/components/ZonePanel").then((module) => ({
+    default: module.ZonePanel,
+  }))
+)
+
 export function App() {
   const { t, i18n } = useTranslation()
   const { settings, resolvedScheme, preset } = useTheme()
   const [replayMatch, setReplayMatch] = useState<MatchSnapshot | null>(null)
-  const realtimeMatch = useRealtimeMatch(replayMatch === null)
+  const [experimentalLiveEnabled, setExperimentalLiveEnabled] = useState(false)
+  const liveConnectionEnabled =
+    !__ONLINE_DEMO_ENABLED__ || experimentalLiveEnabled
+  const realtimeMatch = useRealtimeMatch(
+    replayMatch === null && liveConnectionEnabled
+  )
   const [startupArchive, setStartupArchive] = useState<ReplayArchive>()
   const [archiveError, setArchiveError] = useState("")
   const [draggingArchive, setDraggingArchive] = useState(false)
+  const [isDemoLoading, setIsDemoLoading] = useState(false)
   const [isTacticalFocusMode, setIsTacticalFocusMode] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const demoAbortRef = useRef<AbortController | null>(null)
   const showReplayFrame = useCallback((snapshot: MatchSnapshot) => {
     setReplayMatch(snapshot)
   }, [])
   const returnToLive = useCallback(() => setReplayMatch(null), [])
+  const prepareStartupArchive = useCallback(
+    async (buffer: ArrayBuffer, fileName: string) => {
+      if (!fileName.toLowerCase().endsWith(".fmlens")) {
+        throw new Error(t("timeline.chooseArchive"))
+      }
+      const parsed = await parseLocalArchive(buffer, fileName)
+      return preprocessReplayArchive({
+        summary: parsed.archive,
+        metadata: parsed.metadata,
+        metadataTimeline: parsed.metadataTimeline,
+        frames: parsed.frames,
+      })
+    },
+    [t]
+  )
+  const showStartupArchive = useCallback((archive: ReplayArchive) => {
+    setStartupArchive(archive)
+    setReplayMatch(buildInitialReplaySnapshot(archive))
+  }, [])
   const openStartupArchive = useCallback(
     async (file: File) => {
+      demoAbortRef.current?.abort()
+      demoAbortRef.current = null
+      setIsDemoLoading(false)
       setDraggingArchive(false)
       setArchiveError("")
       try {
-        if (!file.name.toLowerCase().endsWith(".fmlens")) {
-          throw new Error(t("timeline.chooseArchive"))
-        }
-        const parsed = await parseLocalArchive(
-          await file.arrayBuffer(),
-          file.name
+        showStartupArchive(
+          await prepareStartupArchive(await file.arrayBuffer(), file.name)
         )
-        const archive = await preprocessReplayArchive({
-          summary: parsed.archive,
-          metadata: parsed.metadata,
-          metadataTimeline: parsed.metadataTimeline,
-          frames: parsed.frames,
-        })
-        setStartupArchive(archive)
-        setReplayMatch(buildInitialReplaySnapshot(archive))
       } catch (error) {
         setArchiveError(
           error instanceof Error
@@ -78,8 +138,38 @@ export function App() {
         )
       }
     },
-    [t]
+    [prepareStartupArchive, showStartupArchive, t]
   )
+  const openDemoArchive = useCallback(async () => {
+    const controller = new AbortController()
+    demoAbortRef.current?.abort()
+    demoAbortRef.current = controller
+    setArchiveError("")
+    setIsDemoLoading(true)
+    try {
+      const response = await fetch(__DEMO_ARCHIVE_URL__, {
+        signal: controller.signal,
+        cache: "force-cache",
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const archive = await prepareStartupArchive(
+        await response.arrayBuffer(),
+        "online-demo.fmlens"
+      )
+      if (!controller.signal.aborted) showStartupArchive(archive)
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setArchiveError(t("timeline.demoArchiveReadFailed"))
+        console.error("Unable to load online demo archive", error)
+      }
+    } finally {
+      if (demoAbortRef.current === controller) {
+        demoAbortRef.current = null
+        setIsDemoLoading(false)
+      }
+    }
+  }, [prepareStartupArchive, showStartupArchive, t])
+  useEffect(() => () => demoAbortRef.current?.abort(), [])
   const currentLanguage: SupportedLanguage =
     i18n.language === "en" ? "en" : "zh-CN"
   const handleLanguageChange = (value: string | null) => {
@@ -92,8 +182,10 @@ export function App() {
   const match = useMemo(() => {
     if (!sourceMatch) return null
     const displayColors = selectTeamDisplayColors(
-      sourceMatch.home.colorSource ?? colorSourceFromCss(sourceMatch.home.color),
-      sourceMatch.away.colorSource ?? colorSourceFromCss(sourceMatch.away.color),
+      sourceMatch.home.colorSource ??
+        colorSourceFromCss(sourceMatch.home.color),
+      sourceMatch.away.colorSource ??
+        colorSourceFromCss(sourceMatch.away.color),
       {
         presetId: settings.presetId,
         resolvedScheme,
@@ -120,7 +212,13 @@ export function App() {
           ? sourceMatch.away
           : { ...sourceMatch.away, color: awayColor },
     }
-  }, [sourceMatch, resolvedScheme, settings.colorVision, settings.presetId, preset])
+  }, [
+    sourceMatch,
+    resolvedScheme,
+    settings.colorVision,
+    settings.presetId,
+    preset,
+  ])
   const hasMatch = match !== null
 
   useEffect(() => {
@@ -150,23 +248,40 @@ export function App() {
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_25%,color-mix(in_oklch,var(--primary)_18%,transparent),transparent_38%)]" />
         <div className="relative flex w-full max-w-lg flex-col items-center">
           <Card className="w-full overflow-hidden border-border/70 bg-card/90 p-0 shadow-2xl backdrop-blur-xl">
-            <div className="h-1 bg-gradient-to-r from-transparent via-primary to-transparent" />
             <div className="flex flex-col items-center px-8 py-10 text-center sm:px-12">
               <BrandIcon className="mb-5 size-20 text-primary drop-shadow-[0_0_24px_color-mix(in_oklch,var(--primary)_55%,transparent)]" />
               <h1 className="font-fm-universe text-3xl tracking-tight text-foreground">
                 FMMatchLens
               </h1>
-              <div className="mt-6 flex items-center gap-2 text-sm font-medium text-foreground">
+              {__ONLINE_DEMO_ENABLED__ && (
+                <label className="mt-6 flex cursor-pointer items-center gap-2 text-xs font-medium text-muted-foreground">
+                  <Switch
+                    size="sm"
+                    checked={experimentalLiveEnabled}
+                    onCheckedChange={setExperimentalLiveEnabled}
+                    aria-label={t("timeline.connectMatch")}
+                  />
+                  <span>{t("timeline.connectMatch")}</span>
+                  <Badge variant="outline">
+                    {t("timeline.experimentalBadge")}
+                  </Badge>
+                </label>
+              )}
+              <div
+                className={`${__ONLINE_DEMO_ENABLED__ ? "mt-3" : "mt-6"} flex items-center gap-2 text-sm font-medium text-foreground`}
+              >
                 <span className="relative flex size-2.5">
-                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60" />
-                  <span className="relative inline-flex size-2.5 rounded-full bg-primary" />
+                  {liveConnectionEnabled && (
+                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60" />
+                  )}
+                  <span
+                    className={`relative inline-flex size-2.5 rounded-full ${liveConnectionEnabled ? "bg-primary" : "bg-muted-foreground/40"}`}
+                  />
                 </span>
-                {t("timeline.waitingForConnection")}
+                {liveConnectionEnabled
+                  ? t("timeline.waitingForConnection")
+                  : t("timeline.enableLiveConnection")}
               </div>
-              <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
-                {t("timeline.waitingDescription")}
-              </p>
-
               <input
                 ref={fileInputRef}
                 type="file"
@@ -179,7 +294,7 @@ export function App() {
                 }}
               />
               <div
-                className={`mt-7 flex w-full flex-col items-center rounded-xl border border-dashed px-5 py-5 transition-colors ${draggingArchive ? "border-primary bg-primary/10" : "border-border bg-background/40"}`}
+                className={`mt-7 flex min-h-44 w-full max-w-sm flex-col items-center justify-center rounded-xl border border-dashed px-5 py-7 transition-colors ${draggingArchive ? "border-primary bg-primary/10" : "border-border bg-background/40"}`}
                 onDragEnter={(event) => {
                   event.preventDefault()
                   setDraggingArchive(true)
@@ -203,14 +318,35 @@ export function App() {
                 <span className="text-xs text-muted-foreground">
                   {t("timeline.dropArchive")}
                 </span>
-                <Button
-                  type="button"
-                  size="lg"
-                  className="mt-3 min-w-32"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  {t("timeline.openArchive")}
-                </Button>
+                <div className="mt-4 flex items-center gap-3">
+                  {__ONLINE_DEMO_ENABLED__ && (
+                    <>
+                      <Button
+                        type="button"
+                        size="lg"
+                        variant="outline"
+                        className="min-w-32"
+                        disabled={isDemoLoading}
+                        onClick={() => void openDemoArchive()}
+                      >
+                        {isDemoLoading
+                          ? t("timeline.loadingDemo")
+                          : t("timeline.onlineDemo")}
+                      </Button>
+                      <span className="text-xs text-muted-foreground">
+                        {t("timeline.archiveChoiceSeparator")}
+                      </span>
+                    </>
+                  )}
+                  <Button
+                    type="button"
+                    size="lg"
+                    className="min-w-32"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {t("timeline.openArchive")}
+                  </Button>
+                </div>
               </div>
               {archiveError && (
                 <p className="mt-3 text-xs text-destructive">{archiveError}</p>
@@ -300,124 +436,132 @@ export function App() {
 
   return (
     <main className="scrollbar-hidden h-svh w-full overflow-auto bg-background p-4 sm:p-6">
-      <div
-        data-player-profile-blur-scope
-        className="grid h-full min-h-0 w-full min-w-0 grid-cols-1 grid-rows-[64px_minmax(0,1fr)_88px] gap-2 md:min-w-[1360px]"
+      <Suspense
+        fallback={
+          <div className="grid h-full place-items-center text-sm text-muted-foreground">
+            {t("timeline.loadingDemo")}
+          </div>
+        }
       >
-        {/* Score header */}
-        <Card
-          data-player-profile-blur-target
-          className="min-h-0 border-transparent bg-transparent p-0 shadow-none"
+        <div
+          data-player-profile-blur-scope
+          className="grid h-full min-h-0 w-full min-w-0 grid-cols-1 grid-rows-[64px_minmax(0,1fr)_88px] gap-2 md:min-w-[1360px]"
         >
-          <ScoreHeader match={match} />
-        </Card>
-
-        {/* Main layout: home squad | central dashboard | away squad */}
-        <div className="grid min-h-0 min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(260px,1fr)_minmax(0,6fr)_minmax(260px,1fr)]">
-          {/* Home squad */}
+          {/* Score header */}
           <Card
-            data-squad-panel
-            className="min-h-0 min-w-0 overflow-hidden p-0"
+            data-player-profile-blur-target
+            className="min-h-0 border-transparent bg-transparent p-0 shadow-none"
           >
-            <SquadPanel
-              title={match.home.name}
-              teamUid={match.home.uid}
-              side="home"
-              players={homePlayers}
-              allPlayers={match.players}
-              events={match.events}
-              teamColor={match.home.color}
-            />
+            <ScoreHeader match={match} />
           </Card>
 
-          {/* Central dashboard */}
-          <div
-            data-player-profile-blur-target
-            data-tactical-focus-mode={isTacticalFocusMode ? "true" : "false"}
-            className={`grid min-h-0 min-w-0 gap-2 ${
-              isTacticalFocusMode
-                ? "grid-rows-1"
-                : "grid-rows-2 md:grid-rows-[minmax(0,0.8fr)_minmax(0,1.25fr)]"
-            }`}
-          >
-            {/* Top row: momentum | xG | formation */}
-            <div
-              className={`${
-                isTacticalFocusMode ? "hidden" : "grid"
-              } min-h-0 min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,3fr)]`}
+          {/* Main layout: home squad | central dashboard | away squad */}
+          <div className="grid min-h-0 min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(260px,1fr)_minmax(0,6fr)_minmax(260px,1fr)]">
+            {/* Home squad */}
+            <Card
+              data-squad-panel
+              className="min-h-0 min-w-0 overflow-hidden p-0"
             >
-              <Card className="min-h-0 min-w-0 overflow-hidden p-0">
-                <Momentum match={match} />
-              </Card>
+              <SquadPanel
+                title={match.home.name}
+                teamUid={match.home.uid}
+                side="home"
+                players={homePlayers}
+                allPlayers={match.players}
+                events={match.events}
+                teamColor={match.home.color}
+              />
+            </Card>
 
-              <Card className="min-h-0 min-w-0 overflow-hidden p-0">
-                <XgTimeline match={match} />
-              </Card>
-
-              <Card className="min-h-0 min-w-0 overflow-hidden p-0">
-                <FormationPitch match={match} />
-              </Card>
-            </div>
-
-            {/* Bottom row: stats | tactical board | zone */}
+            {/* Central dashboard */}
             <div
-              className={`grid min-h-0 min-w-0 grid-cols-1 gap-2 ${
+              data-player-profile-blur-target
+              data-tactical-focus-mode={isTacticalFocusMode ? "true" : "false"}
+              className={`grid min-h-0 min-w-0 gap-2 ${
                 isTacticalFocusMode
-                  ? ""
-                  : "md:grid-cols-[minmax(180px,2.2fr)_minmax(0,6fr)_minmax(220px,2.5fr)]"
+                  ? "grid-rows-1"
+                  : "grid-rows-2 md:grid-rows-[minmax(0,0.8fr)_minmax(0,1.25fr)]"
               }`}
             >
-              <Card
-                className={`${isTacticalFocusMode ? "hidden" : ""} min-h-0 min-w-0 overflow-hidden p-0`}
+              {/* Top row: momentum | xG | formation */}
+              <div
+                className={`${
+                  isTacticalFocusMode ? "hidden" : "grid"
+                } min-h-0 min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,3fr)]`}
               >
-                <MatchStatsPanel match={match} />
-              </Card>
+                <Card className="min-h-0 min-w-0 overflow-hidden p-0">
+                  <Momentum match={match} />
+                </Card>
 
-              <Card
-                data-tactical-board
-                className="min-h-0 min-w-0 overflow-hidden p-0"
-              >
-                <TacticalBoard match={match} />
-              </Card>
+                <Card className="min-h-0 min-w-0 overflow-hidden p-0">
+                  <XgTimeline match={match} />
+                </Card>
 
-              <Card
-                className={`${isTacticalFocusMode ? "hidden" : ""} min-h-0 min-w-0 overflow-hidden p-0`}
+                <Card className="min-h-0 min-w-0 overflow-hidden p-0">
+                  <FormationPitch match={match} />
+                </Card>
+              </div>
+
+              {/* Bottom row: stats | tactical board | zone */}
+              <div
+                className={`grid min-h-0 min-w-0 grid-cols-1 gap-2 ${
+                  isTacticalFocusMode
+                    ? ""
+                    : "md:grid-cols-[minmax(180px,2.2fr)_minmax(0,6fr)_minmax(220px,2.5fr)]"
+                }`}
               >
-                <ZonePanel match={match} />
-              </Card>
+                <Card
+                  className={`${isTacticalFocusMode ? "hidden" : ""} min-h-0 min-w-0 overflow-hidden p-0`}
+                >
+                  <MatchStatsPanel match={match} />
+                </Card>
+
+                <Card
+                  data-tactical-board
+                  className="min-h-0 min-w-0 overflow-hidden p-0"
+                >
+                  <TacticalBoard match={match} />
+                </Card>
+
+                <Card
+                  className={`${isTacticalFocusMode ? "hidden" : ""} min-h-0 min-w-0 overflow-hidden p-0`}
+                >
+                  <ZonePanel match={match} />
+                </Card>
+              </div>
             </div>
+
+            {/* Away squad */}
+            <Card
+              data-squad-panel
+              className="min-h-0 min-w-0 overflow-hidden p-0"
+            >
+              <SquadPanel
+                title={match.away.name}
+                teamUid={match.away.uid}
+                side="away"
+                players={awayPlayers}
+                allPlayers={match.players}
+                events={match.events}
+                teamColor={match.away.color}
+              />
+            </Card>
           </div>
 
-          {/* Away squad */}
+          {/* Match timeline */}
           <Card
-            data-squad-panel
-            className="min-h-0 min-w-0 overflow-hidden p-0"
+            data-player-profile-blur-target
+            className="min-h-0 border-transparent bg-transparent p-0 shadow-none"
           >
-            <SquadPanel
-              title={match.away.name}
-              teamUid={match.away.uid}
-              side="away"
-              players={awayPlayers}
-              allPlayers={match.players}
-              events={match.events}
-              teamColor={match.away.color}
+            <MatchTimeline
+              match={match}
+              initialLocalArchive={startupArchive}
+              onReplayFrame={showReplayFrame}
+              onLive={returnToLive}
             />
           </Card>
         </div>
-
-        {/* Match timeline */}
-        <Card
-          data-player-profile-blur-target
-          className="min-h-0 border-transparent bg-transparent p-0 shadow-none"
-        >
-          <MatchTimeline
-            match={match}
-            initialLocalArchive={startupArchive}
-            onReplayFrame={showReplayFrame}
-            onLive={returnToLive}
-          />
-        </Card>
-      </div>
+      </Suspense>
     </main>
   )
 }

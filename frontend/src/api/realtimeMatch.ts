@@ -440,14 +440,16 @@ export function useRealtimeMatch(enabled = true): MatchSnapshot | null {
   const [match, setMatch] = useState<MatchSnapshot | null>(null)
   const metadata = useRef<RealtimeMatchMetadata | null>(null)
   const enabledRef = useRef(enabled)
-  const resumeRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     enabledRef.current = enabled
-    if (enabled) resumeRef.current?.()
   }, [enabled])
 
   useEffect(() => {
+    // Do not even create the localhost WebSocket or issue an API request until
+    // the caller explicitly enables live connectivity.
+    if (!enabled) return
+
     let disposed = false
     let socket: WebSocket | null = null
     let reconnectTimer: number | undefined
@@ -729,12 +731,6 @@ export function useRealtimeMatch(enabled = true): MatchSnapshot | null {
       socket.onerror = () => socket?.close()
     }
 
-    resumeRef.current = () => {
-      if (disposed) return
-      void fetchCurrent()
-      void syncHistory()
-      void syncFormationState()
-    }
     const syncTimer = window.setInterval(() => {
       if (enabledRef.current) void syncHistory()
     }, 1_000)
@@ -745,11 +741,10 @@ export function useRealtimeMatch(enabled = true): MatchSnapshot | null {
       if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer)
       window.clearInterval(syncTimer)
       socket?.close()
-      resumeRef.current = null
     }
-  }, [])
+  }, [enabled])
 
-  return match
+  return enabled ? match : null
 }
 
 export function toMatchSnapshot(
@@ -796,7 +791,7 @@ export function toMatchSnapshot(
       logoUrl:
         homeClubUid != null
           ? graphicsAssetUrl("club", homeClubUid, "logo")
-          : undefined,
+          : archivedAssetUrl(metadata?.home.logoPath),
       stats: toTeamStats(frame.home),
     },
     away: {
@@ -809,7 +804,7 @@ export function toMatchSnapshot(
       logoUrl:
         awayClubUid != null
           ? graphicsAssetUrl("club", awayClubUid, "logo")
-          : undefined,
+          : archivedAssetUrl(metadata?.away.logoPath),
       stats: toTeamStats(frame.away),
     },
     players: frame.players.map((player) =>
@@ -1353,7 +1348,9 @@ function toFormationSnapshot(
           details?.displayName,
         portraitPath: details?.portraitPath,
         portraitUrl:
-          uid != null ? graphicsAssetUrl("person", uid, "portrait") : undefined,
+          uid != null
+            ? graphicsAssetUrl("person", uid, "portrait")
+            : archivedAssetUrl(details?.portraitPath),
         team: player.team,
         shirtNumber: details?.shirtNumber,
         position: details?.position,
@@ -1416,7 +1413,9 @@ function toPlayer(
       metadata?.displayName,
     portraitPath: metadata?.portraitPath,
     portraitUrl:
-      uid != null ? graphicsAssetUrl("person", uid, "portrait") : undefined,
+      uid != null
+        ? graphicsAssetUrl("person", uid, "portrait")
+        : archivedAssetUrl(metadata?.portraitPath),
     team: player.team,
     shirtNumber: metadata?.shirtNumber,
     position: metadata?.position,
@@ -1510,6 +1509,18 @@ function graphicsAssetUrl(
   imageType: string
 ): string {
   return `${apiBase}/api/assets/${encodeURIComponent(entityType)}/${uid}/${encodeURIComponent(imageType)}`
+}
+
+function archivedAssetUrl(path: string | undefined) {
+  if (!path) return undefined
+  try {
+    const url = new URL(path)
+    return url.protocol === "https:" && url.hostname === "img.osnsyc.top"
+      ? url.toString()
+      : undefined
+  } catch {
+    return undefined
+  }
 }
 
 function normalize(value: number, min: number, max: number): number {

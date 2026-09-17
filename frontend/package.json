@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:pages": "vite --mode pages",
     "build": "tsc -b && vite build",
+    "build:pages": "tsc -b && vite build --mode pages",
     "test": "vitest run",
     "test:watch": "vitest",
     "benchmark:replay": "vitest run --config tests/vitest.benchmark.config.ts --disableConsoleIntercept",

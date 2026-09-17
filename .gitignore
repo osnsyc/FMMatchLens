@@ -6,6 +6,9 @@ coverage/
 artifacts/
 TestResults/
 *.tsbuildinfo
+__pycache__/
+*.py[cod]
+.uv-cache/
 
 # Dependencies
 node_modules/

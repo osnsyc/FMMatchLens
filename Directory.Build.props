@@ -10,6 +10,7 @@
     <MaintainerEmail>osnsyc@gmail.com</MaintainerEmail>
     <ProjectUrl>https://github.com/osnsyc/FMMatchLens</ProjectUrl>
     <GitHubProjectUrl>$(ProjectUrl)</GitHubProjectUrl>
+    <DemoArchiveUrl>https://img.osnsyc.top/fmmatchlens-demo/demo.fmlens</DemoArchiveUrl>
     <AuthorBlogUrl>https://osnsyc.top/</AuthorBlogUrl>
     <KoFiUrl>https://ko-fi.com/osnsyc</KoFiUrl>
     <KoFiLabel>Support on Ko-fi</KoFiLabel>
