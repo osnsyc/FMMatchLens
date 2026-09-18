@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -7,6 +7,8 @@ import {
   getHeatmapColorScaleBounds,
 } from "@/api/heatmap"
 import { PixiHeatmap } from "@/components/heatmap/PixiHeatmap"
+import { PitchMarkings } from "@/components/pitch/PitchMarkings"
+import { resolvePitchDimensions } from "@/components/pitch/pitchGeometry"
 import {
   CardAction,
   CardContent,
@@ -26,6 +28,8 @@ type ZonePanelProps = {
   match: MatchSnapshot
 }
 
+const PITCH_FRAME_GAP = 4
+
 type HeatLabel = {
   x: number
   y: number
@@ -35,6 +39,7 @@ type HeatLabel = {
 
 export function ZonePanel({ match }: ZonePanelProps) {
   const { t } = useTranslation()
+  const pitchDimensions = resolvePitchDimensions(match.pitchDimensions)
   const [selectedTeam, setSelectedTeam] = useState<TeamSide>("home")
   const [selectedPlayerByTeam, setSelectedPlayerByTeam] = useState<
     Record<TeamSide, number | null>
@@ -44,6 +49,11 @@ export function ZonePanel({ match }: ZonePanelProps) {
     useState<PositionHeatmapRange>("full")
   const pitchHostRef = useRef<HTMLDivElement | null>(null)
   const [pitchSize, setPitchSize] = useState({ width: 0, height: 0 })
+  const pitchFrameAspect = pitchDimensions.width / pitchDimensions.length
+  const innerPitchSize = {
+    width: Math.max(0, pitchSize.width - PITCH_FRAME_GAP * pitchFrameAspect * 2),
+    height: Math.max(0, pitchSize.height - PITCH_FRAME_GAP * 2),
+  }
   const teamColor =
     match[selectedTeam].color ??
     (selectedTeam === "home"
@@ -136,7 +146,7 @@ export function ZonePanel({ match }: ZonePanelProps) {
     const updatePitchSize = () => {
       const availableWidth = host.clientWidth
       const availableHeight = host.clientHeight
-      const pitchRatio = 100 / 148
+      const pitchRatio = pitchDimensions.width / pitchDimensions.length
 
       if (availableWidth <= 0 || availableHeight <= 0) {
         return
@@ -165,7 +175,7 @@ export function ZonePanel({ match }: ZonePanelProps) {
     return () => {
       resizeObserver.disconnect()
     }
-  }, [])
+  }, [pitchDimensions.length, pitchDimensions.width])
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -242,11 +252,12 @@ export function ZonePanel({ match }: ZonePanelProps) {
           className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-3"
         >
           <div
-            className="relative shrink-0 overflow-hidden rounded-md bg-[var(--heatmap-pitch-surface)] text-[var(--pitch-line)]"
+            className="pitch-frame relative shrink-0 text-[var(--pitch-line)]"
             style={{
               width: `${pitchSize.width}px`,
               height: `${pitchSize.height}px`,
-            }}
+              "--pitch-frame-aspect": pitchFrameAspect,
+            } as CSSProperties}
             onClick={() => {
               setSelectedPlayerByTeam((current) => ({
                 ...current,
@@ -254,120 +265,28 @@ export function ZonePanel({ match }: ZonePanelProps) {
               }))
             }}
           >
-            <div
-              className="pointer-events-none absolute inset-0"
-              aria-hidden="true"
-            >
-              {pitchSize.width > 1 && pitchSize.height > 1 && (
-                <PixiHeatmap
-                  grid={heatmapGrid}
-                  width={pitchSize.width}
-                  height={pitchSize.height}
-                  colorScale={heatmapColorScale}
-                />
-              )}
-            </div>
+            <div className="relative size-full bg-[var(--heatmap-pitch-surface)]">
+              <div
+                className="pointer-events-none absolute inset-0"
+                aria-hidden="true"
+              >
+                {innerPitchSize.width > 1 && innerPitchSize.height > 1 && (
+                  <PixiHeatmap
+                    grid={heatmapGrid}
+                    width={innerPitchSize.width}
+                    height={innerPitchSize.height}
+                    colorScale={heatmapColorScale}
+                  />
+                )}
+              </div>
 
-            <svg
-              className="pointer-events-none absolute inset-0 size-full"
-              viewBox="0 0 100 148"
-              preserveAspectRatio="none"
-              aria-hidden="true"
-            >
-              <rect
-                x="1"
-                y="1"
-                width="98"
-                height="146"
-                rx="2"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="0.8"
-                className="text-foreground/40"
+              <PitchMarkings
+                dimensions={pitchDimensions}
+                orientation="vertical"
               />
-              <line
-                x1="1"
-                y1="74"
-                x2="99"
-                y2="74"
-                stroke="currentColor"
-                strokeWidth="0.6"
-                className="text-foreground/35"
-              />
-              <circle
-                cx="50"
-                cy="74"
-                r="10"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="0.6"
-                className="text-foreground/35"
-              />
-              <circle
-                cx="50"
-                cy="74"
-                r="0.8"
-                fill="currentColor"
-                className="text-foreground/40"
-              />
-              <rect
-                x="30"
-                y="1"
-                width="40"
-                height="18"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="0.6"
-                className="text-foreground/35"
-              />
-              <rect
-                x="30"
-                y="129"
-                width="40"
-                height="18"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="0.6"
-                className="text-foreground/35"
-              />
-              <rect
-                x="39"
-                y="1"
-                width="22"
-                height="7"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="0.6"
-                className="text-foreground/35"
-              />
-              <rect
-                x="39"
-                y="140"
-                width="22"
-                height="7"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="0.6"
-                className="text-foreground/35"
-              />
-              <path
-                d="M38 19a15 15 0 0 0 24 0"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="0.6"
-                className="text-foreground/35"
-              />
-              <path
-                d="M38 129a15 15 0 0 1 24 0"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="0.6"
-                className="text-foreground/35"
-              />
-            </svg>
 
-            <div className="pointer-events-none absolute inset-0">
-              {heatLabels.map((label) => (
+              <div className="pointer-events-none absolute inset-0">
+                {heatLabels.map((label) => (
                 <button
                   type="button"
                   key={`heat-player-${label.player.id}`}
@@ -400,7 +319,8 @@ export function ZonePanel({ match }: ZonePanelProps) {
                     {getPlayerSurname(label.player)}
                   </span>
                 </button>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         </div>

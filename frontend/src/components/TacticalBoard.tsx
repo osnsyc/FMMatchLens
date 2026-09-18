@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react"
+import { memo, useMemo, useState, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import {
@@ -27,7 +27,12 @@ import {
   MenubarTrigger,
 } from "@/components/ui/menubar"
 import { PixiTactical } from "@/components/tactical/PixiTactical"
-import type { TacticalHit } from "@/components/tactical/PixiTacticalRenderer"
+import {
+  TACTICAL_EVENT_OVERSCAN_PX,
+  type TacticalHit,
+} from "@/components/tactical/PixiTacticalRenderer"
+import { PitchMarkings } from "@/components/pitch/PitchMarkings"
+import { resolvePitchDimensions } from "@/components/pitch/pitchGeometry"
 import { samePlayerLabels } from "@/lib/matchRenderEquality"
 import {
   buildShotChains,
@@ -54,7 +59,6 @@ import { cssVizTokens } from "@/theme/vizTokens"
 type TacticalBoardProps = {
   match: MatchSnapshot
 }
-
 type HorizontalZone = 0 | 1 | 2
 
 type LaneShare = {
@@ -75,6 +79,11 @@ export const TacticalBoard = memo(function TacticalBoard({
   match,
 }: TacticalBoardProps) {
   const { t } = useTranslation()
+  const pitchDimensions = resolvePitchDimensions(match.pitchDimensions)
+  const pitchStyle = {
+    "--pitch-aspect-ratio": pitchDimensions.length / pitchDimensions.width,
+    "--pitch-frame-gap": `${TACTICAL_EVENT_OVERSCAN_PX}px`,
+  } as CSSProperties
   const { settings, resolvedScheme } = useTheme()
   const [showNumbers, setShowNumbers] = useState(true)
   const [showAttackFocus, setShowAttackFocus] = useState(true)
@@ -286,50 +295,55 @@ export const TacticalBoard = memo(function TacticalBoard({
           </aside>
 
           <div className="tactical-pitch-viewport flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden">
-            <div className="tactical-pitch relative shrink-0 overflow-hidden rounded-md bg-[var(--tactical-pitch-surface)] text-[var(--pitch-line)]">
-              <div className="pointer-events-none absolute inset-0 bg-primary/[0.025]" />
-              <PitchSvg />
+            <div
+              className="tactical-pitch pitch-frame relative shrink-0 text-[var(--pitch-line)]"
+              style={pitchStyle}
+            >
+              <div className="relative size-full bg-[var(--tactical-pitch-surface)]">
+                <div className="pointer-events-none absolute inset-0 bg-primary/[0.025]" />
+                <PitchMarkings dimensions={pitchDimensions} />
 
-              {showAttackFocus && activeSelectedShotId == null && (
-                <AttackFocus laneShares={momentumLaneShares} />
-              )}
+                {showAttackFocus && activeSelectedShotId == null && (
+                  <AttackFocus laneShares={momentumLaneShares} />
+                )}
 
-              <PixiTactical
-                scene={scene}
-                players={playerById}
-                appearance={appearance}
-                selectedShotId={activeSelectedShotId}
-                shotChains={visibleShotChains}
-                onHover={(hit, clientX, clientY) => {
-                  setHovered((current) => {
-                    if (!hit) return null
-                    if (
-                      current?.point.id === hit.point.id &&
-                      current.clientX === clientX &&
-                      current.clientY === clientY
-                    )
-                      return current
-                    return { point: hit.point, clientX, clientY }
-                  })
-                }}
-                onPointClick={(hit: TacticalHit) => {
-                  if (!hit.historical && hit.point.group === "shots") {
-                    setSelectedShotId(hit.point.id)
-                  }
-                }}
-                onEmptyClick={() => setSelectedShotId(null)}
-              />
+                <PixiTactical
+                  scene={scene}
+                  players={playerById}
+                  appearance={appearance}
+                  selectedShotId={activeSelectedShotId}
+                  shotChains={visibleShotChains}
+                  onHover={(hit, clientX, clientY) => {
+                    setHovered((current) => {
+                      if (!hit) return null
+                      if (
+                        current?.point.id === hit.point.id &&
+                        current.clientX === clientX &&
+                        current.clientY === clientY
+                      )
+                        return current
+                      return { point: hit.point, clientX, clientY }
+                    })
+                  }}
+                  onPointClick={(hit: TacticalHit) => {
+                    if (!hit.historical && hit.point.group === "shots") {
+                      setSelectedShotId(hit.point.id)
+                    }
+                  }}
+                  onEmptyClick={() => setSelectedShotId(null)}
+                />
 
-              {(selectedMetricList.length === 0 ||
-                scene.points.length === 0) && (
-                <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center">
-                  <div className="rounded-md border bg-background/90 px-3 py-2 text-xs text-muted-foreground shadow-sm backdrop-blur-sm">
-                    {selectedMetricList.length === 0
-                      ? t("dataMap.noMetrics")
-                      : t("dataMap.noData")}
+                {(selectedMetricList.length === 0 ||
+                  scene.points.length === 0) && (
+                  <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center">
+                    <div className="rounded-md border bg-background/90 px-3 py-2 text-xs text-muted-foreground shadow-sm backdrop-blur-sm">
+                      {selectedMetricList.length === 0
+                        ? t("dataMap.noMetrics")
+                        : t("dataMap.noData")}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -357,6 +371,8 @@ function sameTacticalBoardProps(
   const right = next.match
   return (
     left.tacticalEvents === right.tacticalEvents &&
+    left.pitchDimensions?.length === right.pitchDimensions?.length &&
+    left.pitchDimensions?.width === right.pitchDimensions?.width &&
     left.home.color === right.home.color &&
     left.away.color === right.away.color &&
     samePlayerLabels(left.players, right.players)
@@ -659,106 +675,4 @@ function ShapeElement({
     case "diamond":
       return <polygon points="10,2 18,10 10,18 2,10" {...common} />
   }
-}
-
-function PitchSvg() {
-  return (
-    <svg
-      className="pointer-events-none absolute inset-0 size-full"
-      viewBox="0 0 148 100"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <rect
-        x="1"
-        y="1"
-        width="146"
-        height="98"
-        rx="2"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="0.8"
-        className="text-foreground/40"
-      />
-      <line
-        x1="74"
-        y1="1"
-        x2="74"
-        y2="99"
-        stroke="currentColor"
-        strokeWidth="0.6"
-        className="text-foreground/35"
-      />
-      <circle
-        cx="74"
-        cy="50"
-        r="10"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="0.6"
-        className="text-foreground/35"
-      />
-      <circle
-        cx="74"
-        cy="50"
-        r="0.8"
-        fill="currentColor"
-        className="text-foreground/40"
-      />
-      <rect
-        x="1"
-        y="30"
-        width="18"
-        height="40"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="0.6"
-        className="text-foreground/35"
-      />
-      <rect
-        x="129"
-        y="30"
-        width="18"
-        height="40"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="0.6"
-        className="text-foreground/35"
-      />
-      <rect
-        x="1"
-        y="39"
-        width="7"
-        height="22"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="0.6"
-        className="text-foreground/35"
-      />
-      <rect
-        x="140"
-        y="39"
-        width="7"
-        height="22"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="0.6"
-        className="text-foreground/35"
-      />
-      <path
-        d="M19 38a15 15 0 0 1 0 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="0.6"
-        className="text-foreground/35"
-      />
-      <path
-        d="M129 38a15 15 0 0 0 0 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="0.6"
-        className="text-foreground/35"
-      />
-    </svg>
-  )
 }

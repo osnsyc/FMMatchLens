@@ -116,8 +116,3 @@
   color: var(--action-selected-text);
   background: var(--action-selected);
 }
-
-:root[data-preset="wyscout-inspired"] .tactical-pitch {
-  border: 1px solid var(--border-default);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 52%);
-}

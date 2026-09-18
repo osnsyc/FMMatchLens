@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react"
 
 import {
   PixiTacticalRenderer,
+  TACTICAL_EVENT_OVERSCAN_PX,
   type TacticalAppearance,
   type TacticalHit,
 } from "@/components/tactical/PixiTacticalRenderer"
@@ -72,14 +73,16 @@ export function PixiTactical({
     if (!host) return
     let disposed = false
     const bounds = host.getBoundingClientRect()
+    const fieldWidth = Math.max(1, bounds.width - TACTICAL_EVENT_OVERSCAN_PX * 2)
+    const fieldHeight = Math.max(1, bounds.height - TACTICAL_EVENT_OVERSCAN_PX * 2)
 
     void (async () => {
       let renderer: PixiTacticalRenderer | undefined
       try {
         renderer = await PixiTacticalRenderer.create(
           host,
-          bounds.width,
-          bounds.height,
+          fieldWidth,
+          fieldHeight,
           latestRef.current.appearance
         )
         if (disposed) {
@@ -108,8 +111,8 @@ export function PixiTactical({
     const resizeObserver = new ResizeObserver(([entry]) => {
       if (!entry) return
       rendererRef.current?.resize(
-        entry.contentRect.width,
-        entry.contentRect.height
+        Math.max(1, entry.contentRect.width - TACTICAL_EVENT_OVERSCAN_PX * 2),
+        Math.max(1, entry.contentRect.height - TACTICAL_EVENT_OVERSCAN_PX * 2)
       )
     })
     resizeObserver.observe(host)
@@ -153,7 +156,8 @@ export function PixiTactical({
   return (
     <div
       ref={hostRef}
-      className="absolute inset-0 z-10 cursor-default"
+      className="absolute z-10 cursor-default"
+      style={{ inset: -TACTICAL_EVENT_OVERSCAN_PX }}
       role="img"
       aria-label="Tactical event map"
       onPointerMove={(event) => {
@@ -163,9 +167,15 @@ export function PixiTactical({
         latestRef.current.onHover(
           hit,
           hit
-            ? bounds.left + (hit.point.x / 100) * bounds.width
+            ? bounds.left + TACTICAL_EVENT_OVERSCAN_PX +
+              (hit.point.x / 100) *
+                (bounds.width - TACTICAL_EVENT_OVERSCAN_PX * 2)
             : event.clientX,
-          hit ? bounds.top + (hit.point.y / 100) * bounds.height : event.clientY
+          hit
+            ? bounds.top + TACTICAL_EVENT_OVERSCAN_PX +
+              (hit.point.y / 100) *
+                (bounds.height - TACTICAL_EVENT_OVERSCAN_PX * 2)
+            : event.clientY
         )
       }}
       onPointerLeave={() => {

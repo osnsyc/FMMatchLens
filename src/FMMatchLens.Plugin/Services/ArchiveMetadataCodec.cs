@@ -20,7 +20,10 @@ internal static class ArchiveMetadataCodec
     private const byte AllTeamDeltaFlags = HomeTeamFlag | AwayTeamFlag;
     private const byte MatchDateExtensionFlag = 1 << 0;
     private const byte TeamManagersExtensionFlag = 1 << 1;
-    private const byte AllMetadataExtensionFlags = MatchDateExtensionFlag | TeamManagersExtensionFlag;
+    private const byte PitchDimensionsExtensionFlag = 1 << 2;
+    private const byte AllMetadataExtensionFlags = MatchDateExtensionFlag | TeamManagersExtensionFlag | PitchDimensionsExtensionFlag;
+    private const byte PitchDimensionsDeltaFlag = 1 << 0;
+    private const byte AllMetadataDeltaExtensionFlags = PitchDimensionsDeltaFlag;
 
     private readonly record struct PlayerDelta(
         RealtimePlayerMetadata Player,
@@ -66,7 +69,8 @@ internal static class ArchiveMetadataCodec
         foreach (var player in metadata.Players.OrderBy(item => item.Slot)) WritePlayer(writer, player, ids, structureMinor);
         var extensionFlags = (byte)(
             (!string.IsNullOrWhiteSpace(metadata.MatchDate) ? MatchDateExtensionFlag : 0) |
-            (metadata.Home.Manager.HasValue || metadata.Away.Manager.HasValue ? TeamManagersExtensionFlag : 0));
+            (metadata.Home.Manager.HasValue || metadata.Away.Manager.HasValue ? TeamManagersExtensionFlag : 0) |
+            (structureMinor >= 5 && HasPitchDimensions(metadata) ? PitchDimensionsExtensionFlag : 0));
         if (extensionFlags != 0)
         {
             writer.Write(extensionFlags);
@@ -75,6 +79,11 @@ internal static class ArchiveMetadataCodec
             {
                 WriteManager(writer, metadata.Home.Manager, ids);
                 WriteManager(writer, metadata.Away.Manager, ids);
+            }
+            if ((extensionFlags & PitchDimensionsExtensionFlag) != 0)
+            {
+                writer.Write(metadata.HalfPitchWidth!.Value);
+                writer.Write(metadata.HalfPitchLength!.Value);
             }
         }
         return stream.ToArray();
@@ -104,10 +113,15 @@ internal static class ArchiveMetadataCodec
                 throw new ArchiveFormatException("duplicate_player_uid", "Metadata contains a duplicate player UID.");
         }
         string? matchDate = null;
+        float? halfPitchWidth = null;
+        float? halfPitchLength = null;
         if (stream.Position < stream.Length)
         {
             var extensionFlags = reader.ReadByte();
-            if (extensionFlags == 0 || (extensionFlags & ~AllMetadataExtensionFlags) != 0)
+            var allowedExtensionFlags = structureMinor >= 5
+                ? AllMetadataExtensionFlags
+                : MatchDateExtensionFlag | TeamManagersExtensionFlag;
+            if (extensionFlags == 0 || (extensionFlags & ~allowedExtensionFlags) != 0)
                 throw new ArchiveFormatException("unknown_metadata_extension", "Metadata contains unknown extension fields.");
             if ((extensionFlags & MatchDateExtensionFlag) != 0)
                 matchDate = ArchiveBinary.ReadString(reader);
@@ -116,9 +130,16 @@ internal static class ArchiveMetadataCodec
                 home = home with { Manager = ReadManager(reader, strings) };
                 away = away with { Manager = ReadManager(reader, strings) };
             }
+            if ((extensionFlags & PitchDimensionsExtensionFlag) != 0)
+            {
+                halfPitchWidth = ReadPitchHalf(reader);
+                halfPitchLength = ReadPitchHalf(reader);
+            }
         }
         if (stream.Position != stream.Length) throw new ArchiveFormatException("trailing_data", "Metadata record contains trailing bytes.");
-        return (revision, new RealtimeMatchMetadata(matchId, startedUnixMilliseconds, capturedTick, home, away, players, matchDate));
+        return (revision, new RealtimeMatchMetadata(
+            matchId, startedUnixMilliseconds, capturedTick, home, away, players,
+            matchDate, halfPitchWidth, halfPitchLength));
     }
 
     public static bool TryEncodeDelta(
@@ -158,7 +179,12 @@ internal static class ArchiveMetadataCodec
         // memory refreshes into repeated metadata deltas.
         var homeChanged = (previous.Home with { Manager = null }) != (incoming.Home with { Manager = null });
         var awayChanged = (previous.Away with { Manager = null }) != (incoming.Away with { Manager = null });
-        if (!homeChanged && !awayChanged && deltas.Count == 0)
+        var effectiveHalfPitchWidth = incoming.HalfPitchWidth ?? previous.HalfPitchWidth;
+        var effectiveHalfPitchLength = incoming.HalfPitchLength ?? previous.HalfPitchLength;
+        var pitchDimensionsChanged =
+            previous.HalfPitchWidth != effectiveHalfPitchWidth ||
+            previous.HalfPitchLength != effectiveHalfPitchLength;
+        if (!homeChanged && !awayChanged && deltas.Count == 0 && !pitchDimensionsChanged)
         {
             encoding = default!;
             return false;
@@ -175,7 +201,9 @@ internal static class ArchiveMetadataCodec
             homeChanged ? incoming.Home with { Manager = previous.Home.Manager } : previous.Home,
             awayChanged ? incoming.Away with { Manager = previous.Away.Manager } : previous.Away,
             players,
-            incoming.MatchDate ?? previous.MatchDate);
+            incoming.MatchDate ?? previous.MatchDate,
+            effectiveHalfPitchWidth,
+            effectiveHalfPitchLength);
         var strings = BuildDeltaStringTable(effective, deltas, homeChanged, awayChanged);
         var ids = BuildStringIds(strings);
         using var stream = new MemoryStream();
@@ -201,6 +229,15 @@ internal static class ArchiveMetadataCodec
             ArchiveBinary.WriteVarInt64(writer, delta.Player.PlayerId);
             if (delta.InPossessionChanged) WriteAssignment(writer, delta.Player.InPossession, ids);
             if (delta.OutOfPossessionChanged) WriteAssignment(writer, delta.Player.OutOfPossession, ids);
+        }
+        var deltaExtensionFlags = (byte)(pitchDimensionsChanged && HasPitchDimensions(effective)
+            ? PitchDimensionsDeltaFlag
+            : 0);
+        writer.Write(deltaExtensionFlags);
+        if ((deltaExtensionFlags & PitchDimensionsDeltaFlag) != 0)
+        {
+            writer.Write(effective.HalfPitchWidth!.Value);
+            writer.Write(effective.HalfPitchLength!.Value);
         }
 
         encoding = new ArchiveMetadataDeltaEncoding(stream.ToArray(), effective, deltas.Count, newPlayerCount);
@@ -260,6 +297,19 @@ internal static class ArchiveMetadataCodec
         var orderedPlayers = players.Values.OrderBy(player => player.Slot).ToArray();
         if (orderedPlayers.Length > byte.MaxValue || orderedPlayers.Select(player => player.Slot).Distinct().Count() != orderedPlayers.Length)
             throw new ArchiveFormatException("duplicate_slot", "Metadata delta produces a duplicate player slot.");
+        var halfPitchWidth = previous.HalfPitchWidth;
+        var halfPitchLength = previous.HalfPitchLength;
+        if (structureMinor >= 5)
+        {
+            var extensionFlags = reader.ReadByte();
+            if ((extensionFlags & ~AllMetadataDeltaExtensionFlags) != 0)
+                throw new ArchiveFormatException("unknown_metadata_delta_field", "Metadata delta contains unknown extension fields.");
+            if ((extensionFlags & PitchDimensionsDeltaFlag) != 0)
+            {
+                halfPitchWidth = ReadPitchHalf(reader);
+                halfPitchLength = ReadPitchHalf(reader);
+            }
+        }
         if (stream.Position != stream.Length) throw new ArchiveFormatException("trailing_data", "Metadata delta contains trailing bytes.");
         return (revision, new RealtimeMatchMetadata(
             matchId,
@@ -268,7 +318,9 @@ internal static class ArchiveMetadataCodec
             home,
             away,
             orderedPlayers,
-            previous.MatchDate));
+            previous.MatchDate,
+            halfPitchWidth,
+            halfPitchLength));
     }
 
     private static List<string> BuildStringTable(RealtimeMatchMetadata metadata)
@@ -624,6 +676,20 @@ internal static class ArchiveMetadataCodec
     private static int? ReadNullableInt(BinaryReader reader) => reader.ReadBoolean()
         ? checked((int)ArchiveBinary.ReadVarInt64(reader))
         : null;
+
+    private static bool HasPitchDimensions(RealtimeMatchMetadata metadata) =>
+        metadata.HalfPitchWidth is > 0 &&
+        metadata.HalfPitchLength is > 0 &&
+        float.IsFinite(metadata.HalfPitchWidth.Value) &&
+        float.IsFinite(metadata.HalfPitchLength.Value);
+
+    private static float ReadPitchHalf(BinaryReader reader)
+    {
+        var value = reader.ReadSingle();
+        return value > 0 && float.IsFinite(value)
+            ? value
+            : throw new ArchiveFormatException("invalid_pitch", "Metadata contains invalid pitch dimensions.");
+    }
 
     private static TeamSide ReadTeamSide(BinaryReader reader)
     {

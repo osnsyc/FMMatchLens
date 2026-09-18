@@ -297,6 +297,11 @@ export type TeamThemeColors = {
 
 export type MatchSnapshot = {
   matchId?: string
+  /** Actual venue dimensions in metres when available. */
+  pitchDimensions?: {
+    length: number
+    width: number
+  }
   clock: {
     minute: number
     second: number

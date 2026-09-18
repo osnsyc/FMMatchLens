@@ -167,17 +167,28 @@ internal sealed class RealtimeMatchTimeline
                         null,
                         null,
                         null,
-                        null)).ToArray());
+                        null)).ToArray(),
+                    HalfPitchWidth: ValidPitchHalf(frame.HalfPitchWidth),
+                    HalfPitchLength: ValidPitchHalf(frame.HalfPitchLength));
                 AppendMetadataTimelineEntryLocked(_metadata, frame);
                 _archives.WriteMetadata(_metadata);
             }
-            else if (_metadataTimeline.Count == 0 ||
-                     !OnPitchRosterEquals(_metadataTimeline[^1].Frame, frame))
+            else
             {
-                AppendMetadataTimelineEntryLocked(
-                    _metadata with { CapturedTick = frame.Tick },
-                    frame,
-                    forceAppend: true);
+                var withPitch = MergePitchDimensions(_metadata, frame);
+                if (withPitch != _metadata)
+                {
+                    _metadata = withPitch;
+                    _archives.WriteMetadata(_metadata);
+                }
+                if (_metadataTimeline.Count == 0 ||
+                    !OnPitchRosterEquals(_metadataTimeline[^1].Frame, frame))
+                {
+                    AppendMetadataTimelineEntryLocked(
+                        _metadata with { CapturedTick = frame.Tick },
+                        frame,
+                        forceAppend: true);
+                }
             }
 
             _archives.Append(frame);
@@ -207,7 +218,9 @@ internal sealed class RealtimeMatchTimeline
                 home,
                 away,
                 players.ToArray(),
-                matchDate));
+                matchDate,
+                ValidPitchHalf(_current?.HalfPitchWidth),
+                ValidPitchHalf(_current?.HalfPitchLength)));
             var candidate = _metadata is null ? incoming : MergeMetadata(_metadata, incoming);
             if (_metadata is not null && MetadataContentEquals(_metadata, candidate))
             {
@@ -465,7 +478,9 @@ internal sealed class RealtimeMatchTimeline
             MergeTeamMetadata(current.Home, incoming.Home, "Home"),
             MergeTeamMetadata(current.Away, incoming.Away, "Away"),
             players.Values.OrderBy(player => player.Slot).ToArray(),
-            incoming.MatchDate ?? current.MatchDate);
+            incoming.MatchDate ?? current.MatchDate,
+            incoming.HalfPitchWidth ?? current.HalfPitchWidth,
+            incoming.HalfPitchLength ?? current.HalfPitchLength);
     }
 
     private static RealtimeTeamMetadata MergeTeamMetadata(
@@ -583,6 +598,8 @@ internal sealed class RealtimeMatchTimeline
     private static bool MetadataContentEquals(RealtimeMatchMetadata left, RealtimeMatchMetadata right)
     {
         if (left.MatchDate != right.MatchDate ||
+            left.HalfPitchWidth != right.HalfPitchWidth ||
+            left.HalfPitchLength != right.HalfPitchLength ||
             left.Home != right.Home || left.Away != right.Away || left.Players.Count != right.Players.Count)
         {
             return false;
@@ -603,6 +620,26 @@ internal sealed class RealtimeMatchTimeline
 
         return true;
     }
+
+    private static RealtimeMatchMetadata MergePitchDimensions(
+        RealtimeMatchMetadata metadata,
+        RealtimeTickFrame frame)
+    {
+        var halfWidth = ValidPitchHalf(frame.HalfPitchWidth);
+        var halfLength = ValidPitchHalf(frame.HalfPitchLength);
+        return halfWidth.HasValue && halfLength.HasValue &&
+               (metadata.HalfPitchWidth != halfWidth || metadata.HalfPitchLength != halfLength)
+            ? metadata with
+            {
+                CapturedTick = frame.Tick,
+                HalfPitchWidth = halfWidth,
+                HalfPitchLength = halfLength
+            }
+            : metadata;
+    }
+
+    private static float? ValidPitchHalf(float? value) =>
+        value is > 0 && float.IsFinite(value.Value) ? value : null;
 
     private static bool PositionFamiliaritiesEqual(
         IReadOnlyDictionary<string, int>? left,

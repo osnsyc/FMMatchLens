@@ -28,12 +28,12 @@ internal static class ArchiveWireFormat
     // The chunked archive format introduced by commit b28a3d2 is 2.1.
     // Momentum-event sequence/completion fields and trajectories define 2.2.
     // Team-manager metadata defines 2.3. Player birth date, nation UID, body
-    // type, and guide value define 2.4.
+    // type, and guide value define 2.4. Pitch dimensions in metadata define 2.5.
     // The file-header version is the sole authority for payload decoding; do not
     // add an independent version byte inside ArchiveFrameCodec payloads.
     internal const ushort StructureMajor = 2;
     internal const ushort FirstSupportedStructureMinor = 1;
-    internal const ushort StructureMinor = 4;
+    internal const ushort StructureMinor = 5;
     internal const byte Legacy21BlockStructure = 1;
     internal const byte Legacy21FramePayloadMarker = 1;
 }

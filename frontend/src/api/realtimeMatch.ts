@@ -161,6 +161,8 @@ export type RealtimeMatchMetadata = {
   startedUnixMilliseconds: number
   capturedTick: number
   matchDate?: string
+  halfPitchWidth?: number
+  halfPitchLength?: number
   home: RealtimeTeamMetadata
   away: RealtimeTeamMetadata
   players: RealtimePlayerMetadata[]
@@ -772,6 +774,7 @@ export function toMatchSnapshot(
 
   const next: MatchSnapshot = {
     matchId: frame.matchId,
+    pitchDimensions: toPitchDimensions(metadata),
     clock: {
       minute,
       second,
@@ -829,6 +832,19 @@ export function toMatchSnapshot(
         }),
   }
   return reuseMatchSnapshot(previous, next)
+}
+
+export function toPitchDimensions(metadata?: RealtimeMatchMetadata | null) {
+  const halfWidth = metadata?.halfPitchWidth
+  const halfLength = metadata?.halfPitchLength
+  return halfWidth != null &&
+    halfLength != null &&
+    Number.isFinite(halfWidth) &&
+    Number.isFinite(halfLength) &&
+    halfWidth > 0 &&
+    halfLength > 0
+    ? { length: halfLength * 2, width: halfWidth * 2 }
+    : undefined
 }
 
 export function buildMomentumTimeline(

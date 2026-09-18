@@ -12,6 +12,8 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card"
 import { NativeTabs } from "@/components/uitripled/native-tabs-shadcnui"
+import { PitchMarkings } from "@/components/pitch/PitchMarkings"
+import { resolvePitchDimensions } from "@/components/pitch/pitchGeometry"
 import { sameFormationPlayers } from "@/lib/matchRenderEquality"
 import {
   Timeline,
@@ -87,6 +89,7 @@ const playerMotionVariants = {
 
 export const FormationPitch = memo(function FormationPitch({ match }: FormationPitchProps) {
   const { t } = useTranslation()
+  const pitchDimensions = resolvePitchDimensions(match.pitchDimensions)
   const [view, setView] = useState<FormationView>("home-ip")
   const { side, inPossession } = formationSelection(view)
   const liveEntries = useMemo(
@@ -388,22 +391,32 @@ export const FormationPitch = memo(function FormationPitch({ match }: FormationP
         )}
 
         <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-3">
-          <div className="relative aspect-[148/100] h-full max-h-full max-w-full shrink-0 overflow-hidden rounded-md bg-[var(--formation-pitch-surface)]">
-            <PitchMarkings />
-            <div className="pointer-events-none absolute inset-0">
-              <AnimatePresence custom={resetsToPrevious}>
-              {entries.map(({ player, assignment, x, y }) => {
-                const roleNamespace = inPossession
-                  ? "inPossessionRoleNames"
-                  : "outOfPossessionRoleNames"
-                const roleName = t(`${roleNamespace}.${assignment.roleAbbreviation}`, {
-                  defaultValue: assignment.role,
-                })
-                const entersPitch = !comparisonPlayerIds.has(player.id)
-                const shouldAnimateEntrance = !resetsToPrevious && entersPitch
-                const entryDelay = !resetsToPrevious && entersPitch && hasOutgoingPlayers ? 0.6 : 0
-                const movementDuration = resetsToPrevious ? 0 : 0.7
-                return (
+          <div
+            className="pitch-frame relative h-full max-h-full max-w-full shrink-0"
+            style={{
+              aspectRatio: `${pitchDimensions.length} / ${pitchDimensions.width}`,
+              "--pitch-frame-aspect": pitchDimensions.length / pitchDimensions.width,
+            } as CSSProperties}
+          >
+            <div className="relative size-full bg-[var(--formation-pitch-surface)]">
+              <PitchMarkings
+                dimensions={pitchDimensions}
+                lineClassName="text-border"
+              />
+              <div className="pointer-events-none absolute inset-0">
+                <AnimatePresence custom={resetsToPrevious}>
+                {entries.map(({ player, assignment, x, y }) => {
+                  const roleNamespace = inPossession
+                    ? "inPossessionRoleNames"
+                    : "outOfPossessionRoleNames"
+                  const roleName = t(`${roleNamespace}.${assignment.roleAbbreviation}`, {
+                    defaultValue: assignment.role,
+                  })
+                  const entersPitch = !comparisonPlayerIds.has(player.id)
+                  const shouldAnimateEntrance = !resetsToPrevious && entersPitch
+                  const entryDelay = !resetsToPrevious && entersPitch && hasOutgoingPlayers ? 0.6 : 0
+                  const movementDuration = resetsToPrevious ? 0 : 0.7
+                  return (
                   <motion.div
                     key={`formation-${view}-${player.id}`}
                     className="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2"
@@ -460,9 +473,10 @@ export const FormationPitch = memo(function FormationPitch({ match }: FormationP
                       </HoverCardContent>
                     </HoverCard>
                   </motion.div>
-                )
-              })}
-              </AnimatePresence>
+                  )
+                })}
+                </AnimatePresence>
+              </div>
             </div>
           </div>
         </div>
@@ -475,6 +489,8 @@ function sameFormationPitchProps(previous: FormationPitchProps, next: FormationP
   const left = previous.match
   const right = next.match
   return left.matchId === right.matchId
+    && left.pitchDimensions?.length === right.pitchDimensions?.length
+    && left.pitchDimensions?.width === right.pitchDimensions?.width
     && left.home.uid === right.home.uid
     && left.home.clubUid === right.home.clubUid
     && left.home.name === right.home.name
@@ -609,23 +625,6 @@ function formationChangeDescription(
 
 function formatFormationTime(minute: number) {
   return `${Math.max(0, minute)}′`
-}
-
-function PitchMarkings() {
-  return (
-    <svg className="absolute inset-0 size-full" viewBox="0 0 148 100" preserveAspectRatio="none" aria-hidden="true">
-      <rect x="1" y="1" width="146" height="98" rx="2" fill="none" stroke="currentColor" strokeWidth="0.8" className="text-border" />
-      <line x1="74" y1="1" x2="74" y2="99" stroke="currentColor" strokeWidth="0.6" className="text-border" />
-      <circle cx="74" cy="50" r="10" fill="none" stroke="currentColor" strokeWidth="0.6" className="text-border" />
-      <circle cx="74" cy="50" r="0.8" fill="currentColor" className="text-border" />
-      <rect x="1" y="30" width="18" height="40" fill="none" stroke="currentColor" strokeWidth="0.6" className="text-border" />
-      <rect x="129" y="30" width="18" height="40" fill="none" stroke="currentColor" strokeWidth="0.6" className="text-border" />
-      <rect x="1" y="39" width="7" height="22" fill="none" stroke="currentColor" strokeWidth="0.6" className="text-border" />
-      <rect x="140" y="39" width="7" height="22" fill="none" stroke="currentColor" strokeWidth="0.6" className="text-border" />
-      <path d="M19 38a15 15 0 0 1 0 24" fill="none" stroke="currentColor" strokeWidth="0.6" className="text-border" />
-      <path d="M129 38a15 15 0 0 0 0 24" fill="none" stroke="currentColor" strokeWidth="0.6" className="text-border" />
-    </svg>
-  )
 }
 
 function formationSelection(view: FormationView): { side: TeamSide; inPossession: boolean } {

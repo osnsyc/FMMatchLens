@@ -203,11 +203,6 @@
   background: var(--action-selected);
 }
 
-:root[data-preset="opta-inspired"] .tactical-pitch {
-  border: 1px solid var(--border-default);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 3%);
-}
-
 :root[data-preset="opta-inspired"][data-scheme="dark"] svg :is(
   [fill="#6327c6"],
   [fill="#dc3a44"],

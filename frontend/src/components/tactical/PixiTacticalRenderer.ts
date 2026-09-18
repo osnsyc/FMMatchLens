@@ -57,6 +57,7 @@ type MarkerRecord = {
 const GRID_SIZE = 20
 const BASE_MARKER_SIZE = 20
 const HIT_DISTANCE_EPSILON = 0.001
+export const TACTICAL_EVENT_OVERSCAN_PX = 8
 
 /** Persistent, demand-rendered tactical scene with incremental event diffs. */
 export class PixiTacticalRenderer {
@@ -97,6 +98,10 @@ export class PixiTacticalRenderer {
     this.width = width
     this.height = height
     this.appearance = appearance
+    this.stage.position.set(
+      TACTICAL_EVENT_OVERSCAN_PX,
+      TACTICAL_EVENT_OVERSCAN_PX
+    )
 
     this.colorProbe = document.createElement("span")
     this.colorProbe.className = "pointer-events-none absolute size-0 opacity-0"
@@ -136,8 +141,14 @@ export class PixiTacticalRenderer {
     appearance: TacticalAppearance
   ) {
     const renderer = await autoDetectRenderer({
-      width: Math.max(1, Math.round(width)),
-      height: Math.max(1, Math.round(height)),
+      width: Math.max(
+        1,
+        Math.round(width + TACTICAL_EVENT_OVERSCAN_PX * 2)
+      ),
+      height: Math.max(
+        1,
+        Math.round(height + TACTICAL_EVENT_OVERSCAN_PX * 2)
+      ),
       backgroundAlpha: 0,
       antialias: true,
       preference: ["webgl"],
@@ -264,8 +275,10 @@ export class PixiTacticalRenderer {
 
   hitTest(localX: number, localY: number): TacticalHit | null {
     if (this.width <= 0 || this.height <= 0) return null
-    const normalizedX = (localX / this.width) * 100
-    const normalizedY = (localY / this.height) * 100
+    const fieldX = localX - TACTICAL_EVENT_OVERSCAN_PX
+    const fieldY = localY - TACTICAL_EVENT_OVERSCAN_PX
+    const normalizedX = (fieldX / this.width) * 100
+    const normalizedY = (fieldY / this.height) * 100
     const cellX = clamp(
       Math.floor(normalizedX / (100 / GRID_SIZE)),
       0,
@@ -285,8 +298,8 @@ export class PixiTacticalRenderer {
         const y = cellY + offsetY
         if (x < 0 || y < 0 || x >= GRID_SIZE || y >= GRID_SIZE) continue
         for (const record of this.spatialGrid.get(y * GRID_SIZE + x) ?? []) {
-          const dx = localX - (record.point.x / 100) * this.width
-          const dy = localY - (record.point.y / 100) * this.height
+          const dx = fieldX - (record.point.x / 100) * this.width
+          const dy = fieldY - (record.point.y / 100) * this.height
           const distance = Math.hypot(dx, dy)
           const inHitArea = distance <= record.point.size * 0.75
           const closer = distance < bestDistance - HIT_DISTANCE_EPSILON
@@ -317,7 +330,10 @@ export class PixiTacticalRenderer {
       return
     this.width = width
     this.height = height
-    this.renderer.resize(nextWidth, nextHeight)
+    this.renderer.resize(
+      nextWidth + TACTICAL_EVENT_OVERSCAN_PX * 2,
+      nextHeight + TACTICAL_EVENT_OVERSCAN_PX * 2
+    )
     for (const record of this.allMarkers()) this.positionMarker(record)
     for (const record of this.markerByEventId.values()) {
       if (this.trajectoryByEventId.has(record.point.id))
