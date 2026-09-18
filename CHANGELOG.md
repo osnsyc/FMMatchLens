@@ -3,6 +3,30 @@
 
 This file records the project's important changes. Version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-09-18
+
+### Added
+
+- Added a persisted appearance system with FMMatchLens, Opta-inspired, and Wyscout-inspired presets, system/light/dark scheme preferences, colorblind-friendly visualization encodings, and a high-contrast mode.
+- Added a paginated match-archive browser with separate live, local-file, and server sources; richer date, score, completion, manager-control, and player-result summaries; refresh controls; and drag-and-drop loading.
+- Added a Cloudflare Pages build and online demo mode with a hosted sample archive, code-split assets, cache headers, and an explicit opt-in before attempting a local live connection.
+- Added Steam and Xbox Game Pass `game_plugin.dll` build detection by SHA-256 so the plugin can select the correct match-hook address and report unsupported builds safely.
+- Added venue pitch dimensions to the realtime API and `.fmlens` archive format 2.5 while retaining read compatibility with earlier 2.x archives.
+
+### Changed
+
+- Unified formation, heatmap, and Tactical Board pitch geometry, including regulation markings, venue-aware proportions, outer gutters, and rendering for events beyond the touchlines.
+- Improved responsive panel headers and standardized pitch player badges, shirt numbers, status markers, and theme-aware number colors.
+- Cached archive summaries and paginated `/api/archives` responses to keep large archive libraries responsive.
+- Embedded the confirmed FM26 Momentum weighting table, removing its dependency on a version-specific in-memory global address.
+- Updated frontend runtime and development dependencies.
+
+### Fixed
+
+- Preserved every recording when a new or completed archive would otherwise reuse an existing filename by assigning a unique suffixed path.
+- Corrected penalty-area arcs, goal areas, corner arcs, pitch orientation, and Tactical Board edge clipping.
+- Corrected project URL resolution in frontend builds and restricted archived remote image loading to the trusted demo asset host.
+
 ## [0.3.0] - 2026-09-11
 
 ### Added
@@ -102,7 +126,8 @@ This file records the project's important changes. Version numbers follow [Seman
 - Two plugin logging modes: release and debug.
 - Centralized project metadata, CI checks, and an automated tag-based release pipeline.
 
-[Unreleased]: https://github.com/osnsyc/FMMatchLens/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/osnsyc/FMMatchLens/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/osnsyc/FMMatchLens/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/osnsyc/FMMatchLens/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/osnsyc/FMMatchLens/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/osnsyc/FMMatchLens/compare/v0.2.0...v0.2.1
