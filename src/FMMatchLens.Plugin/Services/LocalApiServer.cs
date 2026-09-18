@@ -199,7 +199,13 @@ internal sealed class LocalApiServer : IDisposable
                         cancellationToken).ConfigureAwait(false);
                     break;
                 case "/api/archives":
-                    await WriteJsonAsync(context.Response, _archives.List(), cancellationToken).ConfigureAwait(false);
+                    var archiveQuery = context.Request.QueryString;
+                    await WriteJsonAsync(
+                        context.Response,
+                        _archives.List(
+                            ParseQueryInt(archiveQuery["page"], 0),
+                            ParseQueryInt(archiveQuery["pageSize"], 5)),
+                        cancellationToken).ConfigureAwait(false);
                     break;
                 default:
                     context.Response.StatusCode = 404;

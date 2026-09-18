@@ -29,6 +29,11 @@ export function useReplaySession(
 
   const activate = useCallback(
     (archive: ReplayArchive) => {
+      generationRef.current += 1
+      abortRef.current?.abort()
+      abortRef.current = undefined
+      setPreprocessing(false)
+      setProgress(0)
       sessionRef.current?.dispose()
       const session = new ReplaySession(archive)
       sessionRef.current = session
@@ -38,39 +43,33 @@ export function useReplaySession(
     [onSnapshot]
   )
 
-  const prepare = useCallback(
-    async (input: ReplayPreprocessInput) => {
-      const generation = generationRef.current + 1
-      generationRef.current = generation
-      abortRef.current?.abort()
-      sessionRef.current?.dispose()
-      sessionRef.current = undefined
-      const controller = new AbortController()
-      abortRef.current = controller
-      setPreprocessing(true)
-      setProgress(0)
-      try {
-        const archive = await preprocessReplayArchive(input, {
-          signal: controller.signal,
-          onProgress: (value) => {
-            if (generationRef.current === generation) setProgress(value)
-          },
-        })
-        if (generationRef.current !== generation || controller.signal.aborted) {
-          return undefined
-        }
-        activate(archive)
-        return archive
-      } finally {
-        if (generationRef.current === generation) {
-          setPreprocessing(false)
-          setProgress(1)
-          abortRef.current = undefined
-        }
+  const prepare = useCallback(async (input: ReplayPreprocessInput) => {
+    const generation = generationRef.current + 1
+    generationRef.current = generation
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    setPreprocessing(true)
+    setProgress(0)
+    try {
+      const archive = await preprocessReplayArchive(input, {
+        signal: controller.signal,
+        onProgress: (value) => {
+          if (generationRef.current === generation) setProgress(value)
+        },
+      })
+      if (generationRef.current !== generation || controller.signal.aborted) {
+        return undefined
       }
-    },
-    [activate]
-  )
+      return archive
+    } finally {
+      if (generationRef.current === generation) {
+        setPreprocessing(false)
+        setProgress(1)
+        abortRef.current = undefined
+      }
+    }
+  }, [])
 
   const seek = useCallback(
     (index: number) => {

@@ -173,9 +173,11 @@ internal static class ArchiveReader
 
             var info = new FileInfo(path);
             var (homeName, awayName, fileMatchDate) = ResolveFileMetadata(header.MatchId, info.Name, metadata);
+            var playerResult = ResolvePlayerResult(metadata, homeGoals, awayGoals);
             result = new ArchiveScanResult(
                 new MatchArchiveSummary(header.MatchId, info.Name, header.StartedUnixMilliseconds, endedAt, ended,
-                    totalFrames, firstTick, lastTick, homeName, awayName, metadata?.MatchDate ?? fileMatchDate, homeGoals, awayGoals, info.Length),
+                    totalFrames, firstTick, lastTick, homeName, awayName, metadata?.MatchDate ?? fileMatchDate, homeGoals, awayGoals,
+                    metadata?.Home.Manager?.IsHumanControlled, metadata?.Away.Manager?.IsHumanControlled, playerResult, info.Length),
                 metadata,
                 metadataTimeline.ToArray(),
                 frames);
@@ -349,6 +351,16 @@ internal static class ArchiveReader
         return separator <= 0 || separator >= matchup.Length - 4
             ? (null, null, null)
             : (matchup[..separator], matchup[(separator + 4)..], null);
+    }
+
+    private static ArchivePlayerResult? ResolvePlayerResult(RealtimeMatchMetadata? metadata, int homeGoals, int awayGoals)
+    {
+        var homeControlled = metadata?.Home.Manager?.IsHumanControlled == true;
+        var awayControlled = metadata?.Away.Manager?.IsHumanControlled == true;
+        if (homeControlled == awayControlled) return null;
+        if (homeGoals == awayGoals) return ArchivePlayerResult.Draw;
+        var controlledTeamWon = (homeGoals > awayGoals) == homeControlled;
+        return controlledTeamWon ? ArchivePlayerResult.Win : ArchivePlayerResult.Loss;
     }
 
     private static void ReadExactly(Stream stream, Span<byte> destination)

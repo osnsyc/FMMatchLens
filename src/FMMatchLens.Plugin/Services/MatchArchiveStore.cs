@@ -11,6 +11,7 @@ internal sealed class MatchArchiveStore : IDisposable
     private readonly object _gate = new();
     private readonly string _directory;
     private readonly ArchiveWriteOptions _options;
+    private readonly Dictionary<string, CachedArchiveSummary> _summaryCache = new(StringComparer.OrdinalIgnoreCase);
     private ArchiveWriter? _archiveWriter;
     private string? _currentMatchId;
     private string? _currentPath;
@@ -114,17 +115,35 @@ internal sealed class MatchArchiveStore : IDisposable
         }
     }
 
-    public IReadOnlyList<MatchArchiveSummary> List()
+    public MatchArchivePage List(int page, int pageSize)
     {
         lock (_gate)
         {
             var result = new List<MatchArchiveSummary>();
+            var existingPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var path in Directory.EnumerateFiles(_directory, "*.fmlens", SearchOption.TopDirectoryOnly))
             {
-                if (ArchiveReader.TryScan(path, 0, null, 1, 0, materialize: false, out var scan))
-                    result.Add(scan.Summary);
+                existingPaths.Add(path);
+                var info = new FileInfo(path);
+                if (_summaryCache.TryGetValue(path, out var cached) &&
+                    cached.Length == info.Length &&
+                    cached.LastWriteTimeUtc == info.LastWriteTimeUtc)
+                {
+                    result.Add(cached.Summary);
+                    continue;
+                }
+                if (!ArchiveReader.TryScan(path, 0, null, 1, 0, materialize: false, out var scan)) continue;
+                result.Add(scan.Summary);
+                _summaryCache[path] = new CachedArchiveSummary(info.Length, info.LastWriteTimeUtc, scan.Summary);
             }
-            return result.OrderByDescending(item => item.StartedUnixMilliseconds).ToArray();
+            foreach (var stalePath in _summaryCache.Keys.Where(path => !existingPaths.Contains(path)).ToArray())
+                _summaryCache.Remove(stalePath);
+            pageSize = Math.Clamp(pageSize, 1, 50);
+            var ordered = result.OrderByDescending(item => item.StartedUnixMilliseconds).ToArray();
+            var pageCount = Math.Max(1, (int)Math.Ceiling(ordered.Length / (double)pageSize));
+            page = Math.Clamp(page, 0, pageCount - 1);
+            var items = ordered.Skip(page * pageSize).Take(pageSize).ToArray();
+            return new MatchArchivePage(items, page, pageSize, ordered.Length, pageCount);
         }
     }
 
@@ -262,7 +281,29 @@ internal sealed record MatchArchiveSummary(
     string? MatchDate,
     int HomeGoals,
     int AwayGoals,
+    bool? HomeManagerIsHumanControlled,
+    bool? AwayManagerIsHumanControlled,
+    ArchivePlayerResult? PlayerResult,
     long FileSizeBytes);
+
+internal enum ArchivePlayerResult
+{
+    Win,
+    Draw,
+    Loss
+}
+
+internal sealed record MatchArchivePage(
+    IReadOnlyList<MatchArchiveSummary> Items,
+    int Page,
+    int PageSize,
+    int TotalCount,
+    int PageCount);
+
+internal readonly record struct CachedArchiveSummary(
+    long Length,
+    DateTime LastWriteTimeUtc,
+    MatchArchiveSummary Summary);
 
 internal sealed record ArchivedFrameSlice(
     MatchArchiveSummary Archive,

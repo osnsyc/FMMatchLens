@@ -6,11 +6,13 @@ import {
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
+import type { ArchivePage, ArchiveSummary } from "@/api/archiveTypes"
 import type { RealtimeFrame, RealtimeMatchMetadata } from "@/api/realtimeMatch"
 import { parseLocalArchive } from "@/api/localArchive"
 import type { ReplayArchive } from "@/api/replay/replayTypes"
 import { useReplaySession } from "@/hooks/useReplaySession"
 import { AssistIcon } from "@/components/AssistIcon"
+import { ArchivePicker } from "@/components/ArchivePicker"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -30,22 +32,6 @@ import type { MatchEventType, MatchSnapshot, TeamSide } from "@/types/match"
 
 const apiBase = `http://127.0.0.1:${__API_PORT__}`
 const pageSize = 2_400
-
-type ArchiveSummary = {
-  matchId: string
-  fileName?: string
-  startedUnixMilliseconds: number
-  ended: boolean
-  frameCount: number
-  firstTick: number
-  lastTick: number
-  homeName?: string
-  awayName?: string
-  matchDate?: string
-  homeGoals: number
-  awayGoals: number
-  fileSizeBytes: number
-}
 
 type ArchiveSlice = {
   archive: ArchiveSummary
@@ -83,6 +69,12 @@ export function MatchTimeline({
 }: MatchTimelineProps) {
   const { t, i18n } = useTranslation()
   const [archives, setArchives] = useState<ArchiveSummary[]>([])
+  const [archivePage, setArchivePage] = useState({
+    page: 0,
+    pageSize: 5,
+    totalCount: 0,
+    pageCount: 1,
+  })
   const [selectedId, setSelectedId] = useState(
     initialLocalArchive ? localArchiveId(initialLocalArchive) : ""
   )
@@ -93,14 +85,18 @@ export function MatchTimeline({
   const [playing, setPlaying] = useState(false)
   const [speed, setSpeed] = useState(1)
   const [loading, setLoading] = useState(false)
-  const [loadFailed, setLoadFailed] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [pendingSourceId, setPendingSourceId] = useState<string>()
+  const [selectedArchive, setSelectedArchive] = useState<ArchiveSummary>()
+  const [selectedArchivePage, setSelectedArchivePage] = useState(0)
   const [localArchive, setLocalArchive] = useState<ReplayArchive | undefined>(
     initialLocalArchive
   )
   const [archiveError, setArchiveError] = useState("")
-  const [draggingArchive, setDraggingArchive] = useState(false)
   const [draftSliderPercent, setDraftSliderPercent] = useState<number>()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const archivePageRequestRef = useRef(0)
+  const localArchiveRequestRef = useRef(0)
   const sliderRafRef = useRef(0)
   const pendingSliderRef = useRef<number | undefined>(undefined)
   const {
@@ -112,44 +108,60 @@ export function MatchTimeline({
     progress: preprocessingProgress,
   } = useReplaySession(onReplayFrame)
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (requestedPage = 0) => {
+    const requestId = ++archivePageRequestRef.current
+    setRefreshing(true)
     try {
-      const response = await fetch(`${apiBase}/api/archives`)
+      const response = await fetch(
+        `${apiBase}/api/archives?page=${requestedPage}&pageSize=5`
+      )
       if (!response.ok) throw new Error("archive list failed")
-      const summaries = (await response.json()) as ArchiveSummary[]
+      const result = (await response.json()) as ArchivePage
+      if (requestId !== archivePageRequestRef.current) return
+      const summaries = result.items
+      setArchivePage({
+        page: result.page,
+        pageSize: result.pageSize,
+        totalCount: result.totalCount,
+        pageCount: result.pageCount,
+      })
+      setArchives(summaries)
 
-      try {
-        const [statusResponse, metadataResponse] = await Promise.all([
-          fetch(`${apiBase}/api/match/status`),
-          fetch(`${apiBase}/api/match/meta`),
-        ])
-        if (!statusResponse.ok || !metadataResponse.ok)
-          throw new Error("active match metadata failed")
-        const status = (await statusResponse.json()) as { matchId?: string }
-        const activeMetadata =
-          (await metadataResponse.json()) as RealtimeMatchMetadata | null
-        setArchives(
-          summaries.map((archive) =>
-            archive.matchId === status.matchId && activeMetadata
-              ? {
-                  ...archive,
-                  homeName: activeMetadata.home.name,
-                  awayName: activeMetadata.away.name,
-                  matchDate: activeMetadata.matchDate,
-                }
-              : archive
+      void Promise.all([
+        fetch(`${apiBase}/api/match/status`),
+        fetch(`${apiBase}/api/match/meta`),
+      ])
+        .then(async ([statusResponse, metadataResponse]) => {
+          if (!statusResponse.ok || !metadataResponse.ok) return
+          const status = (await statusResponse.json()) as { matchId?: string }
+          const activeMetadata =
+            (await metadataResponse.json()) as RealtimeMatchMetadata | null
+          if (requestId !== archivePageRequestRef.current) return
+          setArchives(
+            summaries.map((archive) =>
+              archive.matchId === status.matchId && activeMetadata
+                ? {
+                    ...archive,
+                    homeName: activeMetadata.home.name,
+                    awayName: activeMetadata.away.name,
+                    matchDate: activeMetadata.matchDate,
+                  }
+                : archive
+            )
           )
-        )
-      } catch {
-        setArchives(summaries)
-      }
+        })
+        .catch(() => {
+          // Archive summaries remain usable without active-match enrichment.
+        })
     } catch {
-      setArchives([])
+      // Keep the last successful list and the active replay available.
+    } finally {
+      if (requestId === archivePageRequestRef.current) setRefreshing(false)
     }
   }, [])
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void refresh(), 0)
+    const timer = window.setTimeout(() => void refresh(0), 0)
     return () => window.clearTimeout(timer)
   }, [refresh])
 
@@ -167,9 +179,10 @@ export function MatchTimeline({
   )
 
   useEffect(() => {
-    if (!selectedId || selectedId.startsWith("local:")) return
+    if (!pendingSourceId || pendingSourceId.startsWith("local:")) return
 
     let cancelled = false
+    const targetId = pendingSourceId
 
     const load = async () => {
       const loaded: RealtimeFrame[] = []
@@ -180,7 +193,7 @@ export function MatchTimeline({
 
       try {
         while (!cancelled) {
-          const url = `${apiBase}/api/archives/${encodeURIComponent(selectedId)}/frames?fromTick=${fromTick}&stride=1&limit=${pageSize}`
+          const url = `${apiBase}/api/archives/${encodeURIComponent(targetId)}/frames?fromTick=${fromTick}&stride=1&limit=${pageSize}`
           const response = await fetch(url)
           if (!response.ok) throw new Error("archive read failed")
           const page = (await response.json()) as ArchiveSlice
@@ -217,14 +230,18 @@ export function MatchTimeline({
             frames: loaded,
           })
           if (!cancelled && prepared) {
+            activateReplay(prepared)
             setFrames(prepared.frames)
             setFrameIndex(0)
+            setSelectedArchive(loadedSummary)
+            setSelectedId(targetId)
+            setPendingSourceId(undefined)
+            setArchiveError("")
           }
         }
       } catch {
         if (!cancelled) {
-          setFrames([])
-          setLoadFailed(true)
+          setPendingSourceId(undefined)
           setArchiveError(t("timeline.serverArchiveReadFailed"))
         }
       } finally {
@@ -236,7 +253,7 @@ export function MatchTimeline({
     return () => {
       cancelled = true
     }
-  }, [prepareReplay, selectedId, t])
+  }, [activateReplay, pendingSourceId, prepareReplay, t])
 
   useEffect(() => {
     if (!playing || frames.length === 0) return
@@ -316,35 +333,43 @@ export function MatchTimeline({
   }
 
   const selectSource = (matchId: string) => {
+    localArchiveRequestRef.current += 1
     if (localArchive && matchId === localArchiveId(localArchive)) {
       setFrames(localArchive.frames)
-      disposeReplay()
       activateReplay(localArchive)
       setFrameIndex(0)
       setPlaying(false)
       setLoading(false)
-      setLoadFailed(false)
+      setPendingSourceId(undefined)
       setArchiveError("")
+      setSelectedArchive(undefined)
       setSelectedId(matchId)
       return
     }
 
-    setFrames([])
-    disposeReplay()
-    setFrameIndex(0)
     setPlaying(false)
-    setLoading(matchId !== "")
-    setLoadFailed(false)
     setArchiveError("")
-    setSelectedId(matchId)
-    if (matchId === "") onLive()
+    if (matchId === "") {
+      setPendingSourceId(undefined)
+      setLoading(false)
+      setSelectedId("")
+      setSelectedArchive(undefined)
+      disposeReplay()
+      onLive()
+      return
+    }
+
+    if (matchId === selectedId) return
+    setSelectedArchivePage(archivePage.page)
+    setLoading(true)
+    setPendingSourceId(matchId)
   }
 
   const openLocalArchive = async (file: File) => {
-    setDraggingArchive(false)
+    const requestId = ++localArchiveRequestRef.current
     setPlaying(false)
     setLoading(true)
-    setLoadFailed(false)
+    setPendingSourceId("local:pending")
     setArchiveError("")
 
     try {
@@ -354,94 +379,67 @@ export function MatchTimeline({
         await file.arrayBuffer(),
         file.name
       )
+      if (requestId !== localArchiveRequestRef.current) return
       const prepared = await prepareReplay({
         summary: parsed.archive,
         metadata: parsed.metadata,
         metadataTimeline: parsed.metadataTimeline,
         frames: parsed.frames,
       })
-      if (!prepared) return
+      if (!prepared || requestId !== localArchiveRequestRef.current) return
+      activateReplay(prepared)
       setLocalArchive(prepared)
       setFrames(prepared.frames)
       setFrameIndex(0)
+      setSelectedArchive(undefined)
       setSelectedId(localArchiveId(prepared))
     } catch (error) {
-      setLoadFailed(true)
+      if (requestId !== localArchiveRequestRef.current) return
       setArchiveError(
         error instanceof Error
           ? error.message
           : t("timeline.localArchiveReadFailed")
       )
     } finally {
-      setLoading(false)
+      if (requestId === localArchiveRequestRef.current) {
+        setPendingSourceId(undefined)
+        setLoading(false)
+      }
     }
   }
-
-  const sourceOptions = [
-    { value: "live", label: t("timeline.liveMatch") },
-    ...(localArchive
-      ? [
-          {
-            value: localArchiveId(localArchive),
-            label: `${t("timeline.local")} · ${archiveOptionLabel(localArchive.summary, localArchive.metadata)}`,
-          },
-        ]
-      : []),
-    ...archives.map((archive) => ({
-      value: archive.matchId,
-      label: archiveOptionLabel(archive),
-    })),
-  ]
-  const selectedSourceValue = selectedId || "live"
-  const selectedSourceLabel =
-    sourceOptions.find((option) => option.value === selectedSourceValue)
-      ?.label ?? t("timeline.liveMatch")
 
   return (
     <TooltipProvider>
       <section className="flex h-full min-h-0 items-center gap-2 overflow-hidden px-4 py-1">
         <div className="flex w-64 shrink-0 flex-col gap-1.5">
-          <div className="flex gap-1.5">
-            <Select
-              value={selectedSourceValue}
-              onValueChange={(value) =>
-                selectSource(value === "live" || value == null ? "" : value)
-              }
-            >
-              <SelectTrigger
-                size="default"
-                className="h-8 min-w-0 flex-1"
-                aria-label={t("timeline.sourceLabel")}
-              >
-                <SelectValue className="min-w-0 truncate">
-                  {selectedSourceLabel}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent
-                align="start"
-                alignItemWithTrigger={false}
-                className="w-80 max-w-[calc(100vw-2rem)]"
-              >
-                {sourceOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 px-2 text-xs"
-              onClick={() => void refresh()}
-            >
-              {t("timeline.refresh")}
-            </Button>
-          </div>
+          <ArchivePicker
+            archives={archives}
+            page={archivePage.page}
+            pageCount={archivePage.pageCount}
+            totalCount={archivePage.totalCount}
+            selectedId={selectedId}
+            selectedArchive={selectedArchive}
+            selectedArchivePage={selectedArchivePage}
+            localArchive={localArchive}
+            liveMinute={match.clock.minute}
+            liveSecond={match.clock.second}
+            busy={busy}
+            refreshing={refreshing}
+            archiveError={archiveError}
+            locale={i18n.resolvedLanguage ?? i18n.language}
+            onSelectLive={() => selectSource("")}
+            onSelectArchive={selectSource}
+            onSelectLocalArchive={() => {
+              if (localArchive) selectSource(localArchiveId(localArchive))
+            }}
+            onOpenLocalFile={() => fileInputRef.current?.click()}
+            onDropLocalFile={(file) => void openLocalArchive(file)}
+            onRefresh={() => void refresh(archivePage.page)}
+            onPageChange={(page) => void refresh(page)}
+          />
 
           <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-            {replaying && !busy && !loadFailed ? (
+            {replaying && !busy ? (
               <span
                 className="flex h-8 min-w-0 flex-1 items-center justify-center rounded-md border border-border/70 bg-muted/35 px-2 tabular-nums shadow-xs"
                 aria-label={t("timeline.tickProgress", {
@@ -510,39 +508,6 @@ export function MatchTimeline({
                 ))}
               </SelectContent>
             </Select>
-            <div
-              className={`flex h-8 shrink-0 items-center rounded-md border border-dashed px-1 transition-colors ${draggingArchive ? "border-primary bg-primary/10" : "border-border bg-background/50"}`}
-              onDragEnter={(event) => {
-                event.preventDefault()
-                setDraggingArchive(true)
-              }}
-              onDragOver={(event) => event.preventDefault()}
-              onDragLeave={(event) => {
-                if (
-                  !event.currentTarget.contains(
-                    event.relatedTarget as Node | null
-                  )
-                )
-                  setDraggingArchive(false)
-              }}
-              onDrop={(event) => {
-                event.preventDefault()
-                const file = event.dataTransfer.files[0]
-                if (file) void openLocalArchive(file)
-                else setDraggingArchive(false)
-              }}
-              title={t("timeline.openArchiveHint")}
-            >
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-6 px-1.5 text-[10px]"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {t("timeline.openArchive")}
-              </Button>
-            </div>
           </div>
         </div>
 
@@ -623,53 +588,6 @@ export function MatchTimeline({
       </section>
     </TooltipProvider>
   )
-}
-
-function archiveOptionLabel(
-  archive: Pick<
-    ArchiveSummary,
-    | "matchId"
-    | "fileName"
-    | "matchDate"
-    | "homeGoals"
-    | "awayGoals"
-    | "homeName"
-    | "awayName"
-  >,
-  metadata?: RealtimeMatchMetadata
-) {
-  const fileMetadata = archiveMetadataFromFileName(
-    archive.matchId,
-    archive.fileName
-  )
-  const homeName = archive.homeName ?? metadata?.home.name ?? fileMetadata?.home
-  const awayName = archive.awayName ?? metadata?.away.name ?? fileMetadata?.away
-  const matchDate =
-    archive.matchDate ?? metadata?.matchDate ?? fileMetadata?.matchDate
-  const matchup =
-    homeName && awayName ? `${homeName} vs ${awayName}` : undefined
-  return [matchDate, matchup, `${archive.homeGoals}:${archive.awayGoals}`]
-    .filter(Boolean)
-    .join(" ")
-}
-
-function archiveMetadataFromFileName(matchId: string, fileName?: string) {
-  if (!fileName) return undefined
-  const prefix = `${matchId}-`
-  const suffix = ".fmlens"
-  if (!fileName.toLowerCase().endsWith(suffix)) return undefined
-  const dated = /^(\d{4}-\d{2}-\d{2})-(.+?)-vs-(.+)-\d+-\d+\.fmlens$/i.exec(
-    fileName
-  )
-  if (dated) return { matchDate: dated[1], home: dated[2], away: dated[3] }
-  if (!fileName.startsWith(prefix)) return undefined
-  const matchup = fileName.slice(prefix.length, -suffix.length)
-  const separator = matchup.indexOf("-vs-")
-  if (separator <= 0 || separator >= matchup.length - 4) return undefined
-  return {
-    home: matchup.slice(0, separator),
-    away: matchup.slice(separator + 4),
-  }
 }
 
 function localArchiveId(archive: ReplayArchive) {
