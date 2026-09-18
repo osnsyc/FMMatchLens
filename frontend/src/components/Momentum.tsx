@@ -101,7 +101,9 @@ export const Momentum = memo(function Momentum({ match }: MomentumProps) {
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
       <CardHeader className="flex shrink-0 flex-row items-center gap-3 border-b px-4 py-2">
-        <CardTitle className="shrink-0 text-sm font-semibold">{t("momentum.title")}</CardTitle>
+        <CardTitle className="shrink-0 text-sm font-semibold @max-[200px]/card-header:hidden">
+          {t("momentum.title")}
+        </CardTitle>
         <NativeTabs
           value={mode}
           onValueChange={(value) => setMode(value as MomentumMode)}

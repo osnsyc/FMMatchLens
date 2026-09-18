@@ -778,6 +778,32 @@
     padding-inline: calc(var(--pitch-frame-gap, 4px) * var(--pitch-frame-aspect));
   }
 
+  /* Player labels scale with the rendered pitch instead of the viewport. */
+  .player-pitch {
+    container-type: size;
+  }
+
+  .pitch-player-badge {
+    width: clamp(1.0rem, 10cqmin, 2.5rem) !important;
+    height: clamp(1.0rem, 10cqmin, 2.5rem) !important;
+  }
+
+  .pitch-player-badge-fallback {
+    font-size: clamp(0.6rem, 4.0cqmin, 1.0rem) !important;
+  }
+
+  @container (max-height: 150px) {
+    .pitch-player-name {
+      display: none;
+    }
+  }
+
+  @container (max-width: 140px) {
+    .pitch-player-name {
+      display: none;
+    }
+  }
+
   .tactical-pitch {
     width: 100%;
     max-width: 100%;

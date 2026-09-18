@@ -8,6 +8,7 @@ import {
 } from "@/api/heatmap"
 import { PixiHeatmap } from "@/components/heatmap/PixiHeatmap"
 import { PitchMarkings } from "@/components/pitch/PitchMarkings"
+import { PitchPlayerBadge } from "@/components/pitch/PitchPlayerBadge"
 import { resolvePitchDimensions } from "@/components/pitch/pitchGeometry"
 import {
   CardAction,
@@ -180,7 +181,7 @@ export function ZonePanel({ match }: ZonePanelProps) {
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
       <CardHeader className="shrink-0 grid-cols-[auto_1fr] items-center gap-2 border-b px-3 py-2">
-        <CardTitle className="text-sm font-semibold">
+        <CardTitle className="text-sm font-semibold @max-[230px]/card-header:hidden">
           {t("panels.positionHeatmap")}
         </CardTitle>
         <CardAction className="flex min-w-0 flex-nowrap items-center justify-end gap-1.5">
@@ -265,7 +266,7 @@ export function ZonePanel({ match }: ZonePanelProps) {
               }))
             }}
           >
-            <div className="relative size-full bg-[var(--heatmap-pitch-surface)]">
+            <div className="player-pitch relative size-full bg-[var(--heatmap-pitch-surface)]">
               <div
                 className="pointer-events-none absolute inset-0"
                 aria-hidden="true"
@@ -305,17 +306,17 @@ export function ZonePanel({ match }: ZonePanelProps) {
                     }))
                   }}
                 >
-                  <span
-                    className={`flex size-7 items-center justify-center rounded-full border-2 border-background text-xs font-bold text-[var(--heatmap-player-number)] shadow-sm transition-transform hover:scale-110 ${
+                  <PitchPlayerBadge
+                    number={label.player.shirtNumber}
+                    numberColor="var(--heatmap-player-number)"
+                    className={`border-2 border-background after:hidden transition-transform hover:scale-110 ${
                       selectedPlayer?.id === label.player.id
                         ? "ring-2 ring-ring ring-offset-1 ring-offset-background"
                         : ""
                     }`}
                     style={{ backgroundColor: teamColor }}
-                  >
-                    {label.player.shirtNumber ?? "?"}
-                  </span>
-                  <span className="mt-1 max-w-20 truncate text-[9px] leading-none font-medium whitespace-nowrap text-foreground drop-shadow-sm">
+                  />
+                  <span className="pitch-player-name mt-1 max-w-20 truncate text-[9px] leading-none font-medium whitespace-nowrap text-foreground drop-shadow-sm">
                     {getPlayerSurname(label.player)}
                   </span>
                 </button>

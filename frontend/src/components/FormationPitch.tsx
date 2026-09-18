@@ -4,7 +4,6 @@ import { ArrowDataTransferHorizontalIcon, Pin02Icon } from "@hugeicons/core-free
 import { HugeiconsIcon } from "@hugeicons/react"
 import { AnimatePresence, motion } from "framer-motion"
 
-import { Avatar, AvatarBadge, AvatarFallback } from "@/components/ui/avatar"
 import { CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   HoverCard,
@@ -13,6 +12,7 @@ import {
 } from "@/components/ui/hover-card"
 import { NativeTabs } from "@/components/uitripled/native-tabs-shadcnui"
 import { PitchMarkings } from "@/components/pitch/PitchMarkings"
+import { PitchPlayerBadge } from "@/components/pitch/PitchPlayerBadge"
 import { resolvePitchDimensions } from "@/components/pitch/pitchGeometry"
 import { sameFormationPlayers } from "@/lib/matchRenderEquality"
 import {
@@ -271,7 +271,9 @@ export const FormationPitch = memo(function FormationPitch({ match }: FormationP
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
       <CardHeader className="shrink-0 grid-cols-[1fr_auto] items-center border-b px-4 py-2">
-        <CardTitle className="text-sm font-semibold">{t("panels.formation")}</CardTitle>
+        <CardTitle className="text-sm font-semibold @max-[350px]/card-header:hidden">
+          {t("panels.formation")}
+        </CardTitle>
         <CardAction>
           <NativeTabs
             value={view}
@@ -398,7 +400,7 @@ export const FormationPitch = memo(function FormationPitch({ match }: FormationP
               "--pitch-frame-aspect": pitchDimensions.length / pitchDimensions.width,
             } as CSSProperties}
           >
-            <div className="relative size-full bg-[var(--formation-pitch-surface)]">
+            <div className="player-pitch relative size-full bg-[var(--formation-pitch-surface)]">
               <PitchMarkings
                 dimensions={pitchDimensions}
                 lineClassName="text-border"
@@ -435,17 +437,18 @@ export const FormationPitch = memo(function FormationPitch({ match }: FormationP
                       <HoverCardTrigger
                         render={<div className="flex max-w-36 flex-col items-center text-center" />}
                       >
-                        <Avatar className="size-6 overflow-visible shadow-sm" style={{ backgroundColor: teamColor }}>
-                          <AvatarFallback className="bg-transparent text-[10px] font-bold text-[var(--formation-player-number)]">
-                            {player.shirtNumber ?? "?"}
-                          </AvatarFallback>
-                          {player.status?.subbedOnMinute != null && (
-                            <AvatarBadge aria-hidden="true" className="bg-background text-foreground ring-1 ring-background">
+                        <PitchPlayerBadge
+                          number={player.shirtNumber}
+                          numberColor="var(--formation-player-number)"
+                          style={{ backgroundColor: teamColor }}
+                          badge={
+                            player.status?.subbedOnMinute != null ? (
                               <HugeiconsIcon icon={ArrowDataTransferHorizontalIcon} strokeWidth={2} />
-                            </AvatarBadge>
-                          )}
-                        </Avatar>
-                        <div className="mt-0.5 flex max-w-36 items-center whitespace-nowrap rounded-sm bg-background/90 px-1 py-px text-[9px] font-semibold leading-3 text-foreground shadow-sm">
+                            ) : null
+                          }
+                          badgeClassName="bg-background text-foreground ring-1 ring-background"
+                        />
+                        <div className="pitch-player-name mt-0.5 flex max-w-36 items-center whitespace-nowrap rounded-sm bg-background/90 px-1 py-px text-[9px] font-semibold leading-3 text-foreground shadow-sm">
                           <AnimatePresence mode="wait" initial={false}>
                             <motion.span
                               key={assignment.roleAbbreviation}

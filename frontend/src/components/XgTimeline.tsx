@@ -100,7 +100,7 @@ export const XgTimeline = memo(function XgTimeline({
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
       {/* Header */}
       <CardHeader className="flex shrink-0 flex-row items-center gap-3 border-b px-4 py-2">
-        <CardTitle className="shrink-0 text-sm font-semibold">
+        <CardTitle className="shrink-0 text-sm font-semibold @max-[220px]/card-header:hidden">
           {t("stats.expectedGoals")}
         </CardTitle>
 
@@ -108,7 +108,7 @@ export const XgTimeline = memo(function XgTimeline({
         <div className="ml-auto flex min-w-0 items-center gap-3">
           {/* Home */}
           <div className="flex min-w-0 items-baseline gap-1.5">
-            <span className="max-w-24 truncate text-[10px] font-medium text-muted-foreground">
+            <span className="max-w-24 truncate text-[10px] font-medium text-muted-foreground @max-[180px]/card-header:hidden">
               {match.home.name}
             </span>
 
@@ -138,7 +138,7 @@ export const XgTimeline = memo(function XgTimeline({
               {match.away.stats.xg.toFixed(2)}
             </span>
 
-            <span className="max-w-24 truncate text-[10px] font-medium text-muted-foreground">
+            <span className="max-w-24 truncate text-[10px] font-medium text-muted-foreground @max-[180px]/card-header:hidden">
               {match.away.name}
             </span>
           </div>

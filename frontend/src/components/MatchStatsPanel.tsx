@@ -325,7 +325,7 @@ export const MatchStatsPanel = memo(function MatchStatsPanel({
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
       <CardHeader className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 border-b px-4 py-2">
-        <CardTitle className="whitespace-nowrap text-sm font-semibold">
+        <CardTitle className="whitespace-nowrap text-sm font-semibold @max-[240px]/card-header:hidden">
           {t(
             "panels.matchStats"
           )}
@@ -341,7 +341,7 @@ export const MatchStatsPanel = memo(function MatchStatsPanel({
             )
           }
           renderContent={false}
-          className="min-w-0 max-w-none"
+          className="min-w-0 max-w-none @max-[240px]/card-header:col-start-2 @max-[240px]/card-header:w-auto @max-[240px]/card-header:justify-self-end"
           listClassName="h-6"
           triggerClassName="h-5 px-1 text-[10px]"
           items={groups.map(

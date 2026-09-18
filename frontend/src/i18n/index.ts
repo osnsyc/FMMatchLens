@@ -431,7 +431,7 @@ const resources = {
       dataMap: {
         points: "{{count}} 个点",
         showNumbers: "球员号码",
-        displaySettings: "显示选项",
+        displaySettings: "选项",
         attackFocus: "攻击重心",
         noMetrics: "请选择至少一个指标",
         noData: "暂无数据点",
@@ -919,7 +919,7 @@ const resources = {
       dataMap: {
         points: "{{count}} points",
         showNumbers: "Player numbers",
-        displaySettings: "Display options",
+        displaySettings: "Option",
         attackFocus: "Attacking focus",
         noMetrics: "Select at least one metric",
         noData: "No data points",
