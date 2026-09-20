@@ -137,6 +137,9 @@ internal readonly record struct PlayerTickData(
     int AttackingFreeKicks,
     int Clearances,
     int ShotsFaced,
+    int SavesHeld,
+    int SavesParried,
+    int SavesTipped,
     float DistanceM);
 
 internal sealed record RealtimeMatchMetadata(

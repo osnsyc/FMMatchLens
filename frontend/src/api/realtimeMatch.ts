@@ -67,6 +67,9 @@ export type RealtimePlayer = PlayerStats & {
   penalties: number
   ownGoals: number
   shotsFaced: number
+  savesHeld: number
+  savesParried: number
+  savesTipped: number
 }
 
 export type RealtimeFrame = {
@@ -1491,6 +1494,9 @@ function toPlayer(
       attackingFreeKicks: player.attackingFreeKicks,
       clearances: player.clearances,
       shotsFaced: player.shotsFaced,
+      savesHeld: player.savesHeld,
+      savesParried: player.savesParried,
+      savesTipped: player.savesTipped,
       distanceM: player.distanceM,
       overallPhysicalCondition: player.overallPhysicalCondition,
       matchSharpness: player.matchSharpness,

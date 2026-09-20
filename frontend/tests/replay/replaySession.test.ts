@@ -115,6 +115,21 @@ describe("ReplaySession", () => {
     expect(replayFrameIndexAtPercent(new Int32Array([0, 100, 500]), 50)).toBe(1)
   })
 
+  it("preserves goalkeeper save breakdowns in player statistics", async () => {
+    const fixture = replayFixture()
+    fixture.frames[0].players[0].savesHeld = 2
+    fixture.frames[0].players[0].savesParried = 1
+    fixture.frames[0].players[0].savesTipped = 3
+    const archive = await preprocessReplayArchive(fixture)
+    const snapshot = new ReplaySession(archive).advanceTo(0)
+
+    expect(snapshot.players[0].stats).toMatchObject({
+      savesHeld: 2,
+      savesParried: 1,
+      savesTipped: 3,
+    })
+  })
+
   it("does not expose localhost asset URLs when local access is disabled", async () => {
     const fixture = replayFixture()
     fixture.metadata.home.clubUid = 11

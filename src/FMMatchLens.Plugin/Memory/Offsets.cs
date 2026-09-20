@@ -555,6 +555,9 @@ internal static class Offsets
         public const int BlockedShotsUnconfirmed = 0x92;
         public const int ClearCutChances = 0x94;
         public const int HitWoodwork = 0x96;
+        public const int SavesHeld = 0x99;
+        public const int SavesParried = 0x9A;
+        public const int SavesTipped = 0x9B;
         public const int Assists = 0x9F;
         public const int Dribbles = 0xA1;
         public const int Fouls = 0xA3;

@@ -254,6 +254,9 @@ function player(
     penalties: 0,
     ownGoals,
     shotsFaced: 0,
+    savesHeld: 0,
+    savesParried: 0,
+    savesTipped: 0,
     goals,
     assists,
   }

@@ -827,6 +827,9 @@ internal sealed class GameMatchTickHook : IDisposable
             AttackingFreeKicks: ReadByteDirect(stats + Offsets.PlayerStats.AttackingFreeKicks),
             Clearances: ReadByteDirect(stats + Offsets.PlayerStats.Clearances),
             ShotsFaced: ReadByteDirect(stats + Offsets.PlayerStats.ShotsFaced),
+            SavesHeld: ReadByteDirect(stats + Offsets.PlayerStats.SavesHeld),
+            SavesParried: ReadByteDirect(stats + Offsets.PlayerStats.SavesParried),
+            SavesTipped: ReadByteDirect(stats + Offsets.PlayerStats.SavesTipped),
             DistanceM: ReadFloatDirect(stats + Offsets.PlayerStats.DistanceM));
         return true;
     }

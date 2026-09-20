@@ -166,6 +166,9 @@ export type PlayerStats = {
   attackingFreeKicks?: number
   clearances?: number
   shotsFaced?: number
+  savesHeld?: number
+  savesParried?: number
+  savesTipped?: number
   distanceM?: number
   overallPhysicalCondition?: number
   matchSharpness?: number

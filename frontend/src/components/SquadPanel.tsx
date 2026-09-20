@@ -1166,6 +1166,9 @@ const playerStatGroups: Array<{ id: StatGroupId; fields: PlayerMetric[] }> = [
     id: "goalkeeping",
     fields: [
       { id: "shotsFaced", value: statValue("shotsFaced"), format: integer },
+      { id: "savesHeld", value: statValue("savesHeld"), format: integer },
+      { id: "savesParried", value: statValue("savesParried"), format: integer },
+      { id: "savesTipped", value: statValue("savesTipped"), format: integer },
     ],
   },
   {
@@ -1215,6 +1218,9 @@ const playerMetricTranslationKeys: Record<string, string> = {
   aerialsWon: "stats.aerialsWon",
   aerialAccuracy: "stats.aerialSuccess",
   shotsFaced: "stats.shotsFaced",
+  savesHeld: "stats.savesHeld",
+  savesParried: "stats.savesParried",
+  savesTipped: "stats.savesTipped",
   fouls: "stats.fouls",
   fouled: "stats.fouled",
   corners: "stats.corners",

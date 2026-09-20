@@ -8,7 +8,8 @@ internal static class ArchiveFrameCodec
     private const byte RosterResetFlag = 1;
     private const byte PitchChangedFlag = 2;
     private const ulong AllTeamFields = (1UL << 23) - 1;
-    private const ulong AllPlayerFields = (1UL << 39) - 1;
+    private const ulong LegacyPlayerFields = (1UL << 39) - 1;
+    private const ulong AllPlayerFields = (1UL << 42) - 1;
     private const int MaxFramesPerChunk = 4_096;
     // Must match GameMatchTickHook.MaxStoredMomentumTrajectoryPoints. Lowering
     // this wire limit later requires a new archive minor version or migration.
@@ -102,6 +103,7 @@ internal static class ArchiveFrameCodec
         if (structureMinor == 1 && reader.ReadByte() != ArchiveWireFormat.Legacy21FramePayloadMarker)
             throw new ArchiveFormatException("unsupported_payload_structure", "The legacy 2.1 frame payload marker is invalid.");
         var frames = new RealtimeTickFrame[expectedFrameCount];
+        var supportedPlayerFields = structureMinor >= 6 ? AllPlayerFields : LegacyPlayerFields;
         RealtimeTickFrame? previous = null;
         for (var frameIndex = 0; frameIndex < frames.Length; frameIndex++)
         {
@@ -136,7 +138,7 @@ internal static class ArchiveFrameCodec
                 var slots = new HashSet<int>();
                 for (var index = 0; index < count; index++)
                 {
-                    players[index] = ReadFullPlayer(reader, halfWidth, halfLength);
+                    players[index] = ReadFullPlayer(reader, halfWidth, halfLength, supportedPlayerFields);
                     if (!slots.Add(players[index].Slot)) throw new ArchiveFormatException("duplicate_slot", "Chunk keyframe has duplicate player slots.");
                 }
             }
@@ -150,7 +152,7 @@ internal static class ArchiveFrameCodec
                     var qy = checked((int)ArchiveBinary.Quantize(prior.Y, halfLength) + (int)ArchiveBinary.ReadVarInt64(reader));
                     if (qx is < 0 or > ushort.MaxValue || qy is < 0 or > ushort.MaxValue) throw new ArchiveFormatException("invalid_coordinate", "Position delta exceeds the quantized pitch range.");
                     var mask = ArchiveBinary.ReadVarUInt64(reader);
-                    if ((mask & ~AllPlayerFields) != 0) throw new ArchiveFormatException("unknown_player_field", "Player delta contains unknown fields.");
+                    if ((mask & ~supportedPlayerFields) != 0) throw new ArchiveFormatException("unknown_player_field", "Player delta contains unknown fields.");
                     players[index] = ReadPlayerFields(reader, prior with
                     {
                         X = ArchiveBinary.Dequantize((ushort)qx, halfWidth),
@@ -253,7 +255,7 @@ internal static class ArchiveFrameCodec
         WritePlayerFields(writer, player, default, AllPlayerFields);
     }
 
-    private static PlayerTickData ReadFullPlayer(BinaryReader reader, float halfWidth, float halfLength)
+    private static PlayerTickData ReadFullPlayer(BinaryReader reader, float halfWidth, float halfLength, ulong playerFields)
     {
         var slot = checked((int)ArchiveBinary.ReadVarUInt64(reader, 5));
         var playerId = ArchiveBinary.ReadVarInt64(reader);
@@ -267,7 +269,7 @@ internal static class ArchiveFrameCodec
             X = ArchiveBinary.Dequantize(reader.ReadUInt16(), halfWidth),
             Y = ArchiveBinary.Dequantize(reader.ReadUInt16(), halfLength)
         };
-        return ReadPlayerFields(reader, seed, AllPlayerFields);
+        return ReadPlayerFields(reader, seed, playerFields);
     }
 
     private static ulong PlayerMask(PlayerTickData left, PlayerTickData right)
@@ -286,6 +288,7 @@ internal static class ArchiveFrameCodec
         Mark(33, left.AttackingFreeKicks != right.AttackingFreeKicks); Mark(34, left.Clearances != right.Clearances); Mark(35, left.ShotsFaced != right.ShotsFaced);
         Mark(36, left.DistanceM != right.DistanceM);
         Mark(37, left.OverallPhysicalCondition != right.OverallPhysicalCondition); Mark(38, left.MatchSharpness != right.MatchSharpness);
+        Mark(39, left.SavesHeld != right.SavesHeld); Mark(40, left.SavesParried != right.SavesParried); Mark(41, left.SavesTipped != right.SavesTipped);
         return mask;
         void Mark(int bit, bool changed) { if (changed) mask |= 1UL << bit; }
     }
@@ -301,6 +304,7 @@ internal static class ArchiveFrameCodec
         Int(31, value.Corners); Int(32, value.DefensiveFreeKicks); Int(33, value.AttackingFreeKicks); Int(34, value.Clearances); Int(35, value.ShotsFaced);
         Float(36, value.DistanceM);
         Int(37, value.OverallPhysicalCondition); Int(38, value.MatchSharpness);
+        Int(39, value.SavesHeld); Int(40, value.SavesParried); Int(41, value.SavesTipped);
         void Int(int bit, int item) { if ((mask & (1UL << bit)) != 0) ArchiveBinary.WriteVarInt64(writer, item); }
         void Float(int bit, float item)
         {
@@ -330,7 +334,8 @@ internal static class ArchiveFrameCodec
             ThrowIns = Int(30, prior.ThrowIns), Corners = Int(31, prior.Corners), DefensiveFreeKicks = Int(32, prior.DefensiveFreeKicks),
             AttackingFreeKicks = Int(33, prior.AttackingFreeKicks), Clearances = Int(34, prior.Clearances), ShotsFaced = Int(35, prior.ShotsFaced),
             DistanceM = Float(36, prior.DistanceM), OverallPhysicalCondition = Int(37, prior.OverallPhysicalCondition),
-            MatchSharpness = Int(38, prior.MatchSharpness)
+            MatchSharpness = Int(38, prior.MatchSharpness), SavesHeld = Int(39, prior.SavesHeld),
+            SavesParried = Int(40, prior.SavesParried), SavesTipped = Int(41, prior.SavesTipped)
         };
     }
 

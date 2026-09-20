@@ -29,11 +29,12 @@ internal static class ArchiveWireFormat
     // Momentum-event sequence/completion fields and trajectories define 2.2.
     // Team-manager metadata defines 2.3. Player birth date, nation UID, body
     // type, and guide value define 2.4. Pitch dimensions in metadata define 2.5.
+    // Goalkeeper save breakdown fields define 2.6.
     // The file-header version is the sole authority for payload decoding; do not
     // add an independent version byte inside ArchiveFrameCodec payloads.
     internal const ushort StructureMajor = 2;
     internal const ushort FirstSupportedStructureMinor = 1;
-    internal const ushort StructureMinor = 5;
+    internal const ushort StructureMinor = 6;
     internal const byte Legacy21BlockStructure = 1;
     internal const byte Legacy21FramePayloadMarker = 1;
 }

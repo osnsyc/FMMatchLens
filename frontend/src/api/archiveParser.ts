@@ -15,7 +15,7 @@ import { playerPositionLabels } from "@/types/match"
 const magic = "FMLENS2\0"
 const archiveStructureMajor = 2
 const firstSupportedStructureMinor = 1
-const archiveStructureMinor = 5
+const archiveStructureMinor = 6
 const legacy21FramePayloadMarker = 1
 const legacy21BlockStructure = 1
 const metadataRecord = 1
@@ -27,7 +27,8 @@ const blockMagic = 0x324b4c42
 const maxRecordBytes = 4 * 1024 * 1024
 const maxChunkBytes = 16 * 1024 * 1024
 const allTeamFields = (1n << 23n) - 1n
-const allPlayerFields = (1n << 39n) - 1n
+const legacyPlayerFields = (1n << 39n) - 1n
+const allPlayerFields = (1n << 42n) - 1n
 
 type ArchiveHeader = {
   structureMajor: number
@@ -238,6 +239,7 @@ function readFrames(
   structureMinor: number,
 ) {
   const reader = new ArchiveBufferReader(payload)
+  const supportedPlayerFields = structureMinor >= 6 ? allPlayerFields : legacyPlayerFields
   if (structureMinor === 1 && reader.readByte() !== legacy21FramePayloadMarker) {
     throw new ArchiveError("2.1 帧载荷标记无效")
   }
@@ -270,7 +272,7 @@ function readFrames(
     if (rosterReset) {
       const count = reader.readVarUint()
       if (count > 255) throw new ArchiveError("球员数量过大")
-      players = Array.from({ length: count }, () => readFullPlayer(reader, halfPitchWidth, halfPitchLength))
+      players = Array.from({ length: count }, () => readFullPlayer(reader, halfPitchWidth, halfPitchLength, supportedPlayerFields))
       if (new Set(players.map((player) => player.slot)).size !== players.length) throw new ArchiveError("关键帧包含重复 Slot")
     } else {
       players = previous!.players.map((prior) => {
@@ -278,7 +280,7 @@ function readFrames(
         const qy = quantize(prior.y, halfPitchLength) + reader.readVarInt()
         if (qx < 0 || qx > 65535 || qy < 0 || qy > 65535) throw new ArchiveError("坐标差分越界")
         const mask = reader.readVarUintBig()
-        if ((mask & ~allPlayerFields) !== 0n) throw new ArchiveError("球员状态包含未知字段")
+        if ((mask & ~supportedPlayerFields) !== 0n) throw new ArchiveError("球员状态包含未知字段")
         return readPlayerFields(reader, { ...prior, x: dequantize(qx, halfPitchWidth), y: dequantize(qy, halfPitchLength) }, mask)
       })
     }
@@ -325,7 +327,7 @@ function readTeamDelta(reader: ArchiveBufferReader, previous?: RealtimeTeam): Re
   }
 }
 
-function readFullPlayer(reader: ArchiveBufferReader, halfWidth: number, halfLength: number): RealtimePlayer {
+function readFullPlayer(reader: ArchiveBufferReader, halfWidth: number, halfLength: number, playerFields: bigint): RealtimePlayer {
   const slot = reader.readVarUint()
   const playerId = reader.readVarInt()
   const teamRaw = reader.readByte()
@@ -334,9 +336,9 @@ function readFullPlayer(reader: ArchiveBufferReader, halfWidth: number, halfLeng
     slot, playerId, team: teamRaw === 1 ? "away" : "home", isBallHolder: false,
     x: dequantize(reader.readUint16(), halfWidth), y: dequantize(reader.readUint16(), halfLength), rating: 0,
     isSubstitute: false, isOnPitch: false, subbedOnMinute: 0, subbedOffMinute: 0, penalties: 0, ownGoals: 0,
-    goals: 0, assists: 0, shotsFaced: 0,
+    goals: 0, assists: 0, shotsFaced: 0, savesHeld: 0, savesParried: 0, savesTipped: 0,
   } satisfies RealtimePlayer
-  return readPlayerFields(reader, seed, allPlayerFields)
+  return readPlayerFields(reader, seed, playerFields)
 }
 
 function readPlayerFields(reader: ArchiveBufferReader, prior: RealtimePlayer, mask: bigint): RealtimePlayer {
@@ -358,6 +360,7 @@ function readPlayerFields(reader: ArchiveBufferReader, prior: RealtimePlayer, ma
     [27, "aerials"], [28, "aerialsWon"], [29, "interceptions"], [30, "throwIns"], [31, "corners"],
     [32, "defensiveFreeKicks"], [33, "attackingFreeKicks"], [34, "clearances"], [35, "shotsFaced"],
     [37, "overallPhysicalCondition"], [38, "matchSharpness"],
+    [39, "savesHeld"], [40, "savesParried"], [41, "savesTipped"],
   ]
   for (const [bit, field] of statFields) if (has(bit)) Object.assign(result, { [field]: reader.readVarInt() })
   if (has(36)) result.distanceM = reader.readFloatXor(result.distanceM ?? 0)
