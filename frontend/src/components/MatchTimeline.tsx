@@ -43,6 +43,7 @@ type ArchiveSlice = {
 type MatchTimelineProps = {
   match: MatchSnapshot
   initialLocalArchive?: ReplayArchive
+  localConnectionEnabled: boolean
   onReplayFrame: (snapshot: MatchSnapshot) => void
   onLive: () => void
 }
@@ -64,6 +65,7 @@ type TimelineEvent = {
 export function MatchTimeline({
   match,
   initialLocalArchive,
+  localConnectionEnabled,
   onReplayFrame,
   onLive,
 }: MatchTimelineProps) {
@@ -106,64 +108,69 @@ export function MatchTimeline({
     dispose: disposeReplay,
     preprocessing,
     progress: preprocessingProgress,
-  } = useReplaySession(onReplayFrame)
+  } = useReplaySession(onReplayFrame, localConnectionEnabled)
 
-  const refresh = useCallback(async (requestedPage = 0) => {
-    const requestId = ++archivePageRequestRef.current
-    setRefreshing(true)
-    try {
-      const response = await fetch(
-        `${apiBase}/api/archives?page=${requestedPage}&pageSize=5`
-      )
-      if (!response.ok) throw new Error("archive list failed")
-      const result = (await response.json()) as ArchivePage
-      if (requestId !== archivePageRequestRef.current) return
-      const summaries = result.items
-      setArchivePage({
-        page: result.page,
-        pageSize: result.pageSize,
-        totalCount: result.totalCount,
-        pageCount: result.pageCount,
-      })
-      setArchives(summaries)
+  const refresh = useCallback(
+    async (requestedPage = 0) => {
+      if (!localConnectionEnabled) return
+      const requestId = ++archivePageRequestRef.current
+      setRefreshing(true)
+      try {
+        const response = await fetch(
+          `${apiBase}/api/archives?page=${requestedPage}&pageSize=5`
+        )
+        if (!response.ok) throw new Error("archive list failed")
+        const result = (await response.json()) as ArchivePage
+        if (requestId !== archivePageRequestRef.current) return
+        const summaries = result.items
+        setArchivePage({
+          page: result.page,
+          pageSize: result.pageSize,
+          totalCount: result.totalCount,
+          pageCount: result.pageCount,
+        })
+        setArchives(summaries)
 
-      void Promise.all([
-        fetch(`${apiBase}/api/match/status`),
-        fetch(`${apiBase}/api/match/meta`),
-      ])
-        .then(async ([statusResponse, metadataResponse]) => {
-          if (!statusResponse.ok || !metadataResponse.ok) return
-          const status = (await statusResponse.json()) as { matchId?: string }
-          const activeMetadata =
-            (await metadataResponse.json()) as RealtimeMatchMetadata | null
-          if (requestId !== archivePageRequestRef.current) return
-          setArchives(
-            summaries.map((archive) =>
-              archive.matchId === status.matchId && activeMetadata
-                ? {
-                    ...archive,
-                    homeName: activeMetadata.home.name,
-                    awayName: activeMetadata.away.name,
-                    matchDate: activeMetadata.matchDate,
-                  }
-                : archive
+        void Promise.all([
+          fetch(`${apiBase}/api/match/status`),
+          fetch(`${apiBase}/api/match/meta`),
+        ])
+          .then(async ([statusResponse, metadataResponse]) => {
+            if (!statusResponse.ok || !metadataResponse.ok) return
+            const status = (await statusResponse.json()) as { matchId?: string }
+            const activeMetadata =
+              (await metadataResponse.json()) as RealtimeMatchMetadata | null
+            if (requestId !== archivePageRequestRef.current) return
+            setArchives(
+              summaries.map((archive) =>
+                archive.matchId === status.matchId && activeMetadata
+                  ? {
+                      ...archive,
+                      homeName: activeMetadata.home.name,
+                      awayName: activeMetadata.away.name,
+                      matchDate: activeMetadata.matchDate,
+                    }
+                  : archive
+              )
             )
-          )
-        })
-        .catch(() => {
-          // Archive summaries remain usable without active-match enrichment.
-        })
-    } catch {
-      // Keep the last successful list and the active replay available.
-    } finally {
-      if (requestId === archivePageRequestRef.current) setRefreshing(false)
-    }
-  }, [])
+          })
+          .catch(() => {
+            // Archive summaries remain usable without active-match enrichment.
+          })
+      } catch {
+        // Keep the last successful list and the active replay available.
+      } finally {
+        if (requestId === archivePageRequestRef.current) setRefreshing(false)
+      }
+    },
+    [localConnectionEnabled]
+  )
 
   useEffect(() => {
+    if (!localConnectionEnabled) return
     const timer = window.setTimeout(() => void refresh(0), 0)
     return () => window.clearTimeout(timer)
-  }, [refresh])
+  }, [localConnectionEnabled, refresh])
 
   useEffect(() => {
     if (!initialLocalArchive) return
@@ -179,7 +186,12 @@ export function MatchTimeline({
   )
 
   useEffect(() => {
-    if (!pendingSourceId || pendingSourceId.startsWith("local:")) return
+    if (
+      !localConnectionEnabled ||
+      !pendingSourceId ||
+      pendingSourceId.startsWith("local:")
+    )
+      return
 
     let cancelled = false
     const targetId = pendingSourceId
@@ -253,7 +265,13 @@ export function MatchTimeline({
     return () => {
       cancelled = true
     }
-  }, [activateReplay, pendingSourceId, prepareReplay, t])
+  }, [
+    activateReplay,
+    localConnectionEnabled,
+    pendingSourceId,
+    prepareReplay,
+    t,
+  ])
 
   useEffect(() => {
     if (!playing || frames.length === 0) return

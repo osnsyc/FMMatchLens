@@ -115,6 +115,26 @@ describe("ReplaySession", () => {
     expect(replayFrameIndexAtPercent(new Int32Array([0, 100, 500]), 50)).toBe(1)
   })
 
+  it("does not expose localhost asset URLs when local access is disabled", async () => {
+    const fixture = replayFixture()
+    fixture.metadata.home.clubUid = 11
+    fixture.metadata.away.clubUid = 22
+    fixture.metadata.players[0].uid = 101
+    const archive = await preprocessReplayArchive(fixture)
+
+    const blocked = new ReplaySession(archive, { allowLocalAssets: false })
+    const blockedSnapshot = blocked.advanceTo(0)
+    expect(blockedSnapshot.home.logoUrl).toBeUndefined()
+    expect(blockedSnapshot.away.logoUrl).toBeUndefined()
+    expect(blockedSnapshot.players[0].portraitUrl).toBeUndefined()
+
+    const allowed = new ReplaySession(archive)
+    const allowedSnapshot = allowed.advanceTo(0)
+    expect(allowedSnapshot.home.logoUrl).toContain("127.0.0.1")
+    expect(allowedSnapshot.away.logoUrl).toContain("127.0.0.1")
+    expect(allowedSnapshot.players[0].portraitUrl).toContain("127.0.0.1")
+  })
+
   it("preserves render-facing references until their values change", async () => {
     const fixture = replayFixture()
     fixture.frames = [frame(0), frame(1), frame(2, { homeXg: 0.1 })]

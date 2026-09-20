@@ -15,6 +15,7 @@ type ReplayCheckpoint = {
 export type ReplaySessionOptions = {
   checkpointInterval?: number
   maxCheckpoints?: number
+  allowLocalAssets?: boolean
 }
 
 export class ReplaySession {
@@ -27,10 +28,12 @@ export class ReplaySession {
   private cachedSnapshot?: MatchSnapshot
   private disposed = false
   private readonly archive: ReplayArchive
+  private readonly allowLocalAssets: boolean
   private processedFrames = 0
 
   constructor(archive: ReplayArchive, options: ReplaySessionOptions = {}) {
     this.archive = archive
+    this.allowLocalAssets = options.allowLocalAssets ?? true
     this.frameCount = archive.frameCount
     this.checkpointInterval = Math.max(1, options.checkpointInterval ?? 2_400)
     this.maxCheckpoints = Math.max(1, options.maxCheckpoints ?? 4)
@@ -122,7 +125,8 @@ export class ReplaySession {
       this.archive,
       this.index,
       this.derivations,
-      this.cachedSnapshot
+      this.cachedSnapshot,
+      this.allowLocalAssets
     )
     return this.cachedSnapshot
   }
@@ -179,18 +183,28 @@ export class ReplaySession {
 }
 
 /** Builds the bootstrap screen without creating a second persistent session. */
-export function buildInitialReplaySnapshot(archive: ReplayArchive) {
+export function buildInitialReplaySnapshot(
+  archive: ReplayArchive,
+  options: Pick<ReplaySessionOptions, "allowLocalAssets"> = {}
+) {
   if (archive.frameCount === 0) throw new Error("Replay archive has no frames")
   const derivations = new HistoricalDerivations()
   derivations.appendFrame(archive.frames[0], archive.streamRevisions[0])
-  return replaySnapshot(archive, 0, derivations)
+  return replaySnapshot(
+    archive,
+    0,
+    derivations,
+    undefined,
+    options.allowLocalAssets ?? true
+  )
 }
 
 function replaySnapshot(
   archive: ReplayArchive,
   index: number,
   derivations: HistoricalDerivations,
-  previous?: MatchSnapshot
+  previous?: MatchSnapshot,
+  allowLocalAssets = true
 ) {
   const frame = archive.frames[index]
   const historical = derivations.snapshot(frame.tick)
@@ -208,7 +222,8 @@ function replaySnapshot(
     historical.momentum,
     historical.rollingMomentum,
     undefined,
-    previous
+    previous,
+    allowLocalAssets
   )
 }
 

@@ -115,10 +115,17 @@ export function App() {
     },
     [t]
   )
-  const showStartupArchive = useCallback((archive: ReplayArchive) => {
-    setStartupArchive(archive)
-    setReplayMatch(buildInitialReplaySnapshot(archive))
-  }, [])
+  const showStartupArchive = useCallback(
+    (archive: ReplayArchive) => {
+      setStartupArchive(archive)
+      setReplayMatch(
+        buildInitialReplaySnapshot(archive, {
+          allowLocalAssets: liveConnectionEnabled,
+        })
+      )
+    },
+    [liveConnectionEnabled]
+  )
   const openStartupArchive = useCallback(
     async (file: File) => {
       demoAbortRef.current?.abort()
@@ -556,6 +563,7 @@ export function App() {
             <MatchTimeline
               match={match}
               initialLocalArchive={startupArchive}
+              localConnectionEnabled={liveConnectionEnabled}
               onReplayFrame={showReplayFrame}
               onLive={returnToLive}
             />

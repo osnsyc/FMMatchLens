@@ -759,7 +759,8 @@ export function toMatchSnapshot(
   momentum: MatchMomentumPoint[] = [],
   rollingMomentum: MatchMomentumPoint[] = [],
   formationSnapshots?: FormationSnapshot[],
-  previous?: MatchSnapshot
+  previous?: MatchSnapshot,
+  allowLocalAssets = true
 ): MatchSnapshot {
   const clockTick = Number.isFinite(frame.displayTick)
     ? frame.displayTick
@@ -792,7 +793,7 @@ export function toMatchSnapshot(
       logoPath: metadata?.home.logoPath,
       manager: metadata?.home.manager,
       logoUrl:
-        homeClubUid != null
+        allowLocalAssets && homeClubUid != null
           ? graphicsAssetUrl("club", homeClubUid, "logo")
           : archivedAssetUrl(metadata?.home.logoPath),
       stats: toTeamStats(frame.home),
@@ -805,7 +806,7 @@ export function toMatchSnapshot(
       logoPath: metadata?.away.logoPath,
       manager: metadata?.away.manager,
       logoUrl:
-        awayClubUid != null
+        allowLocalAssets && awayClubUid != null
           ? graphicsAssetUrl("club", awayClubUid, "logo")
           : archivedAssetUrl(metadata?.away.logoPath),
       stats: toTeamStats(frame.away),
@@ -814,7 +815,8 @@ export function toMatchSnapshot(
       toPlayer(
         player,
         playerMetadataBySlot.get(player.slot),
-        metadata?.matchDate
+        metadata?.matchDate,
+        allowLocalAssets
       )
     ),
     events,
@@ -1414,7 +1416,8 @@ function mergeFormationEntryIntoMetadata(
 function toPlayer(
   player: RealtimePlayer,
   metadata?: RealtimePlayerMetadata,
-  matchDate?: string
+  matchDate?: string,
+  allowLocalAssets = true
 ): MatchPlayer {
   const uid = metadata?.uid
   return {
@@ -1429,7 +1432,7 @@ function toPlayer(
       metadata?.displayName,
     portraitPath: metadata?.portraitPath,
     portraitUrl:
-      uid != null
+      allowLocalAssets && uid != null
         ? graphicsAssetUrl("person", uid, "portrait")
         : archivedAssetUrl(metadata?.portraitPath),
     team: player.team,

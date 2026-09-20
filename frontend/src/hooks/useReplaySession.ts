@@ -9,7 +9,8 @@ import type { ReplayArchive } from "@/api/replay/replayTypes"
 import type { MatchSnapshot } from "@/types/match"
 
 export function useReplaySession(
-  onSnapshot: (snapshot: MatchSnapshot) => void
+  onSnapshot: (snapshot: MatchSnapshot) => void,
+  allowLocalAssets = true
 ) {
   const sessionRef = useRef<ReplaySession | undefined>(undefined)
   const abortRef = useRef<AbortController | undefined>(undefined)
@@ -35,12 +36,12 @@ export function useReplaySession(
       setPreprocessing(false)
       setProgress(0)
       sessionRef.current?.dispose()
-      const session = new ReplaySession(archive)
+      const session = new ReplaySession(archive, { allowLocalAssets })
       sessionRef.current = session
       if (archive.frameCount > 0) onSnapshot(session.advanceTo(0))
       return archive
     },
-    [onSnapshot]
+    [allowLocalAssets, onSnapshot]
   )
 
   const prepare = useCallback(async (input: ReplayPreprocessInput) => {
