@@ -284,7 +284,13 @@ internal sealed record MatchArchiveSummary(
     bool? HomeManagerIsHumanControlled,
     bool? AwayManagerIsHumanControlled,
     ArchivePlayerResult? PlayerResult,
-    long FileSizeBytes);
+    long FileSizeBytes,
+    uint? CompetitionUid,
+    string? CompetitionName,
+    string? CompetitionLogoPath,
+    uint? CompetitionPrimaryColour,
+    uint? CompetitionSecondaryColour,
+    uint? CompetitionTertiaryColour);
 
 internal enum ArchivePlayerResult
 {

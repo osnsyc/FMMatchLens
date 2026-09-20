@@ -26,7 +26,11 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import type { ArchiveSummary } from "@/api/archiveTypes"
-import type { RealtimeMatchMetadata } from "@/api/realtimeMatch"
+import {
+  archivedAssetUrl,
+  graphicsAssetUrl,
+  type RealtimeMatchMetadata,
+} from "@/api/realtimeMatch"
 import type { ReplayArchive } from "@/api/replay/replayTypes"
 import { Button } from "@/components/ui/button"
 import {
@@ -38,6 +42,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card"
 import { cn } from "@/lib/utils"
 
 type ArchivePickerProps = {
@@ -427,12 +436,34 @@ function ArchiveButton({
         : item.playerResult === "loss"
           ? t("timeline.playerLoss")
           : t("timeline.resultUnknown")
+  const competitionLogoUrl = metadata
+    ? archivedAssetUrl(item.competitionLogoPath)
+    : item.competitionUid != null
+      ? graphicsAssetUrl("comp", item.competitionUid, "logo")
+      : archivedAssetUrl(item.competitionLogoPath)
+  const competitionPrimary = argbToCssColor(item.competitionPrimaryColour)
+  const competitionLogoContent = (
+    <>
+      <span aria-hidden="true">{item.competitionName?.charAt(0) ?? ""}</span>
+      {competitionLogoUrl ? (
+        <img
+          src={competitionLogoUrl}
+          alt=""
+          className="absolute inset-0 size-full object-contain"
+          loading="lazy"
+          onError={(event) => {
+            event.currentTarget.hidden = true
+          }}
+        />
+      ) : null}
+    </>
+  )
 
   return (
     <button
       type="button"
       className={cn(
-        "group grid w-full grid-cols-[1.15rem_5.15rem_minmax(0,1fr)_1.25rem_1.5rem] items-center gap-1.5 rounded-md border border-transparent px-2 py-1.5 text-left transition-colors outline-none hover:border-primary/35 hover:bg-accent focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30",
+        "group grid w-full grid-cols-[1.15rem_4.45rem_1.75rem_minmax(0,1fr)_1.25rem_1.5rem] items-center gap-1.5 rounded-md border border-transparent px-2 py-1.5 text-left transition-colors outline-none hover:border-primary/35 hover:bg-accent focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30",
         selected && "border-primary/60 bg-accent"
       )}
       aria-current={selected ? "true" : undefined}
@@ -463,6 +494,33 @@ function ArchiveButton({
           </span>
         </span>
       </span>
+
+      {item.competitionName ? (
+        <HoverCard>
+          <HoverCardTrigger
+            render={(
+              <span
+                className="relative flex size-7 items-center justify-center justify-self-center overflow-hidden text-[10px] font-bold"
+                style={{ color: competitionPrimary ?? "var(--foreground)" }}
+                aria-label={item.competitionName}
+              />
+            )}
+          >
+            {competitionLogoContent}
+          </HoverCardTrigger>
+          <HoverCardContent
+            side="top"
+            sideOffset={6}
+            className="w-auto whitespace-nowrap px-2.5 py-1.5 font-medium"
+          >
+            {item.competitionName}
+          </HoverCardContent>
+        </HoverCard>
+      ) : (
+        <span className="relative flex size-7 items-center justify-center justify-self-center overflow-hidden text-[10px] font-bold">
+          {competitionLogoContent}
+        </span>
+      )}
 
       <span className="min-w-0 space-y-0.5">
         <span
@@ -534,4 +592,9 @@ function ArchiveButton({
       </span>
     </button>
   )
+}
+
+function argbToCssColor(value?: number) {
+  if (value == null || !Number.isFinite(value) || value === 0) return undefined
+  return `#${((value >>> 0) & 0x00ffffff).toString(16).padStart(6, "0")}`
 }

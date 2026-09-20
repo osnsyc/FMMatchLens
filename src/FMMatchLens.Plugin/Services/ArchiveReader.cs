@@ -177,7 +177,9 @@ internal static class ArchiveReader
             result = new ArchiveScanResult(
                 new MatchArchiveSummary(header.MatchId, info.Name, header.StartedUnixMilliseconds, endedAt, ended,
                     totalFrames, firstTick, lastTick, homeName, awayName, metadata?.MatchDate ?? fileMatchDate, homeGoals, awayGoals,
-                    metadata?.Home.Manager?.IsHumanControlled, metadata?.Away.Manager?.IsHumanControlled, playerResult, info.Length),
+                    metadata?.Home.Manager?.IsHumanControlled, metadata?.Away.Manager?.IsHumanControlled, playerResult, info.Length,
+                    metadata?.Competition?.Uid, metadata?.Competition?.Name, metadata?.Competition?.LogoPath,
+                    metadata?.Competition?.PrimaryColour, metadata?.Competition?.SecondaryColour, metadata?.Competition?.TertiaryColour),
                 metadata,
                 metadataTimeline.ToArray(),
                 frames);

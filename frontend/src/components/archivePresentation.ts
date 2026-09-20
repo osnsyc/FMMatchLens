@@ -14,6 +14,12 @@ export type ArchivePresentation = {
   awayGoals: number
   result: ArchiveResult
   playerResult: PlayerResult
+  competitionUid?: number
+  competitionName?: string
+  competitionLogoPath?: string
+  competitionPrimaryColour?: number
+  competitionSecondaryColour?: number
+  competitionTertiaryColour?: number
 }
 
 export function presentArchive(
@@ -27,6 +33,12 @@ export function presentArchive(
     | "homeName"
     | "awayName"
     | "playerResult"
+    | "competitionUid"
+    | "competitionName"
+    | "competitionLogoPath"
+    | "competitionPrimaryColour"
+    | "competitionSecondaryColour"
+    | "competitionTertiaryColour"
   >,
   metadata: RealtimeMatchMetadata | undefined,
   locale: string,
@@ -75,6 +87,16 @@ export function presentArchive(
     awayGoals: archive.awayGoals,
     result,
     playerResult,
+    competitionUid: archive.competitionUid ?? metadata?.competition?.uid,
+    competitionName: archive.competitionName ?? metadata?.competition?.name,
+    competitionLogoPath:
+      archive.competitionLogoPath ?? metadata?.competition?.logoPath,
+    competitionPrimaryColour:
+      archive.competitionPrimaryColour ?? metadata?.competition?.primaryColour,
+    competitionSecondaryColour:
+      archive.competitionSecondaryColour ?? metadata?.competition?.secondaryColour,
+    competitionTertiaryColour:
+      archive.competitionTertiaryColour ?? metadata?.competition?.tertiaryColour,
   }
 }
 

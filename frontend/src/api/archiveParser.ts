@@ -434,9 +434,10 @@ function readMetadata(payload: Uint8Array, header: ArchiveHeader) {
   let matchDate: string | undefined
   let halfPitchWidth: number | undefined
   let halfPitchLength: number | undefined
+  let competition: RealtimeMatchMetadata["competition"]
   if (!reader.atEnd) {
     const extensionFlags = reader.readByte()
-    const allowedExtensionFlags = header.structureMinor >= 5 ? 0x07 : 0x03
+    const allowedExtensionFlags = header.structureMinor >= 6 ? 0x0f : header.structureMinor >= 5 ? 0x07 : 0x03
     if (extensionFlags === 0 || (extensionFlags & ~allowedExtensionFlags) !== 0) throw new ArchiveError("元数据包含未知扩展字段")
     if ((extensionFlags & 0x01) !== 0) matchDate = reader.readString()
     if ((extensionFlags & 0x02) !== 0) {
@@ -447,6 +448,7 @@ function readMetadata(payload: Uint8Array, header: ArchiveHeader) {
       halfPitchWidth = readPitchHalf(reader)
       halfPitchLength = readPitchHalf(reader)
     }
+    if ((extensionFlags & 0x08) !== 0) competition = readCompetitionMetadata(reader, strings)
   }
   if (!reader.atEnd) throw new ArchiveError("元数据包含多余字节")
   const metadata: RealtimeMatchMetadata = {
@@ -456,6 +458,7 @@ function readMetadata(payload: Uint8Array, header: ArchiveHeader) {
     matchDate,
     halfPitchWidth,
     halfPitchLength,
+    competition,
     home,
     away,
     players,
@@ -512,13 +515,16 @@ function readMetadataDelta(payload: Uint8Array, header: ArchiveHeader, previous:
   if (new Set(players.map((player) => player.slot)).size !== players.length) throw new ArchiveError("Metadata 增量产生了重复 Slot")
   let halfPitchWidth = previous.halfPitchWidth
   let halfPitchLength = previous.halfPitchLength
+  let competition = previous.competition
   if (header.structureMinor >= 5) {
     const extensionFlags = reader.readByte()
-    if ((extensionFlags & ~0x01) !== 0) throw new ArchiveError("Metadata 增量包含未知扩展字段")
+    const allowedExtensionFlags = header.structureMinor >= 6 ? 0x03 : 0x01
+    if ((extensionFlags & ~allowedExtensionFlags) !== 0) throw new ArchiveError("Metadata 增量包含未知扩展字段")
     if ((extensionFlags & 0x01) !== 0) {
       halfPitchWidth = readPitchHalf(reader)
       halfPitchLength = readPitchHalf(reader)
     }
+    if ((extensionFlags & 0x02) !== 0) competition = readCompetitionMetadata(reader, strings)
   }
   if (!reader.atEnd) throw new ArchiveError("Metadata 增量包含多余字节")
   const metadata: RealtimeMatchMetadata = {
@@ -528,6 +534,7 @@ function readMetadataDelta(payload: Uint8Array, header: ArchiveHeader, previous:
     matchDate: previous.matchDate,
     halfPitchWidth,
     halfPitchLength,
+    competition,
     home,
     away,
     players,
@@ -546,6 +553,17 @@ function readTeamMetadata(reader: ArchiveBufferReader, strings: Array<string | u
     uid: readNullableUint(reader), clubUid: readNullableUint(reader), name: readStringId(reader, strings) ?? "",
     backgroundColour: readNullableUint(reader), foregroundColour: readNullableUint(reader), outlineColour: readNullableUint(reader),
     logoPath: readStringId(reader, strings),
+  }
+}
+
+function readCompetitionMetadata(reader: ArchiveBufferReader, strings: Array<string | undefined>) {
+  return {
+    uid: readNullableUint(reader),
+    name: readStringId(reader, strings),
+    logoPath: readStringId(reader, strings),
+    primaryColour: readNullableUint(reader),
+    secondaryColour: readNullableUint(reader),
+    tertiaryColour: readNullableUint(reader),
   }
 }
 

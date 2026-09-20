@@ -15,6 +15,12 @@ export type ArchiveSummary = {
   awayManagerIsHumanControlled?: boolean
   playerResult?: "win" | "draw" | "loss"
   fileSizeBytes: number
+  competitionUid?: number
+  competitionName?: string
+  competitionLogoPath?: string
+  competitionPrimaryColour?: number
+  competitionSecondaryColour?: number
+  competitionTertiaryColour?: number
 }
 
 export type ArchivePage = {

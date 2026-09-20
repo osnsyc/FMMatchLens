@@ -978,8 +978,26 @@ internal sealed class GameMatchTickHook : IDisposable
                 ReadTeamMetadata(homeTeam, "Home"),
                 ReadTeamMetadata(awayTeam, "Away"),
                 metadata,
-                state.MatchDate);
+                state.MatchDate,
+                ReadCompetitionMetadata(match));
         }
+    }
+
+    private RealtimeCompetitionMetadata? ReadCompetitionMetadata(nint match)
+    {
+        _memoryReader.TryReadPointer(match + Offsets.GameMatch.Competition, out var competition);
+        var uid = competition == default
+            ? ReadUid(match + Offsets.GameMatch.CompetitionId)
+            : ReadUid(competition + Offsets.Competition.Uid) ?? ReadUid(match + Offsets.GameMatch.CompetitionId);
+        var name = competition == default
+            ? null
+            : ReadInlineNameInstance(competition, Offsets.Competition.Name);
+        var primaryColour = ReadOptionalUInt32(match + Offsets.GameMatch.CompetitionPrimaryColour);
+        var secondaryColour = ReadOptionalUInt32(match + Offsets.GameMatch.CompetitionSecondaryColour);
+        var tertiaryColour = ReadOptionalUInt32(match + Offsets.GameMatch.CompetitionTertiaryColour);
+        return uid.HasValue || name is not null || primaryColour.HasValue || secondaryColour.HasValue || tertiaryColour.HasValue
+            ? new RealtimeCompetitionMetadata(uid, name, null, primaryColour, secondaryColour, tertiaryColour)
+            : null;
     }
 
     private bool TryReadPlayerUid(nint matchPlayer, out uint uid)

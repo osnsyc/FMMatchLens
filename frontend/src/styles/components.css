@@ -917,12 +917,40 @@
     animation: squad-position-pan 6s ease-in-out infinite;
   }
 
+  @keyframes tick-progress-pan {
+    0%, 18%, 100% {
+      transform: translateX(0);
+    }
+
+    48%, 70% {
+      transform: translateX(calc(-1 * var(--tick-progress-overflow)));
+    }
+  }
+
+  .tick-progress-ticker[data-overflow="false"] .tick-progress-ticker-track {
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .tick-progress-ticker[data-overflow="true"] .tick-progress-ticker-track {
+    animation: tick-progress-pan 7s ease-in-out infinite;
+  }
+
+  .tick-progress-ticker:hover .tick-progress-ticker-track,
+  .tick-progress-ticker:focus-within .tick-progress-ticker-track {
+    animation-play-state: paused;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .squad-status-strip[data-overflow="true"] .squad-status-strip-track {
       animation: none;
     }
 
     .squad-position-ticker[data-overflow="true"] .squad-position-ticker-track {
+      animation: none;
+    }
+
+    .tick-progress-ticker[data-overflow="true"] .tick-progress-ticker-track {
       animation: none;
     }
   }

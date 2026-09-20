@@ -1,4 +1,12 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react"
 import { useTranslation } from "react-i18next"
 import {
   ArrowDataTransferHorizontalIcon,
@@ -428,8 +436,8 @@ export function MatchTimeline({
 
   return (
     <TooltipProvider>
-      <section className="flex h-full min-h-0 items-center gap-2 overflow-hidden px-4 py-1">
-        <div className="flex w-64 shrink-0 flex-col gap-1.5">
+      <section className="flex h-full min-h-0 items-center gap-2 overflow-hidden py-1 md:grid md:grid-cols-[minmax(260px,1fr)_minmax(0,6fr)_minmax(260px,1fr)]">
+        <div className="flex w-64 shrink-0 flex-col gap-1.5 px-2 md:w-auto">
           <ArchivePicker
             archives={archives}
             page={archivePage.page}
@@ -458,22 +466,14 @@ export function MatchTimeline({
 
           <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
             {replaying && !busy ? (
-              <span
-                className="flex h-8 min-w-0 flex-1 items-center justify-center rounded-md border border-border/70 bg-muted/35 px-2 tabular-nums shadow-xs"
-                aria-label={t("timeline.tickProgress", {
+              <TickProgressTicker
+                current={frameIndex + 1}
+                total={frames.length}
+                ariaLabel={t("timeline.tickProgress", {
                   current: frameIndex + 1,
                   total: frames.length,
                 })}
-              >
-                <span className="font-semibold text-foreground">
-                  {frameIndex + 1}
-                </span>
-                <span className="mx-1 text-muted-foreground/55">/</span>
-                <span>{frames.length}</span>
-                <span className="ml-1.5 text-[9px] font-semibold tracking-wider text-primary uppercase">
-                  Tick
-                </span>
-              </span>
+              />
             ) : (
               <span
                 className={`flex h-8 min-w-0 flex-1 items-center truncate px-1 tabular-nums ${archiveError && !replaying ? "text-destructive" : ""}`}
@@ -529,82 +529,134 @@ export function MatchTimeline({
           </div>
         </div>
 
-        <div className="flex w-14 shrink-0 items-center justify-center">
-          <Button
-            type="button"
-            variant={replaying ? "default" : "outline"}
-            size="icon"
-            className="size-11 shrink-0 rounded-full shadow-md shadow-primary/25 transition-transform hover:scale-105"
-            disabled={!replaying || busy || frames.length === 0}
-            aria-label={playing ? t("timeline.pause") : t("timeline.play")}
-            onClick={() => setPlaying((current) => !current)}
-          >
-            {playing ? <PauseIcon /> : <PlayIcon />}
-          </Button>
-        </div>
-
-        <div className="relative flex min-w-0 flex-1 flex-col gap-1">
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 left-1/2 z-0 w-px -translate-x-1/2 bg-primary/60"
-          />
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 left-1/2 z-0 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary ring-2 ring-card"
-          />
-          <EventRail
-            events={homeEvents}
-            side="home"
-            color={match.home.color ?? "var(--team-home-fallback)"}
-            match={match}
-            frames={frames}
-            replaying={replaying}
-          />
-
-          <div className="relative z-1">
-            <span
-              className="pointer-events-none absolute top-1/2 z-10 -ml-2.5 w-5 -translate-y-1/2 bg-transparent p-0 text-center text-[8px] leading-none font-bold text-foreground tabular-nums"
-              style={{
-                left: `${Math.max(0, Math.min(100, sliderPercent))}%`,
-                marginLeft: `${sliderLabelOffset - 10}px`,
-              }}
-            >
-              {draftSliderPercent == null
-                ? formatTimelineClock(match)
-                : formatReplayClock(draftSliderPercent, frames)}
-            </span>
-            <Slider
-              min={0}
-              max={sliderMax}
-              step={1}
-              value={[sliderValue]}
+        <div className="flex min-w-0 flex-1 items-center gap-2 md:col-span-2">
+          <div className="flex w-14 shrink-0 items-center justify-center">
+            <Button
+              type="button"
+              variant={replaying ? "default" : "outline"}
+              size="icon"
+              className="size-11 shrink-0 rounded-full shadow-md shadow-primary/25 transition-transform hover:scale-105"
               disabled={!replaying || busy || frames.length === 0}
-              onValueChange={(value) => {
-                const next = Array.isArray(value) ? value[0] : value
-                if (typeof next === "number" && replaying) {
-                  queueSliderSeek(next)
-                }
-              }}
-              onValueCommitted={(value) => {
-                const next = Array.isArray(value) ? value[0] : value
-                if (typeof next === "number" && replaying)
-                  commitSliderSeek(next)
-              }}
-              className="[&_[data-slot=slider-range]]:bg-primary/80 [&_[data-slot=slider-thumb]]:size-5 [&_[data-slot=slider-thumb]]:rounded-full [&_[data-slot=slider-thumb]]:border-2 [&_[data-slot=slider-thumb]]:bg-background [&_[data-slot=slider-track]]:h-2 [&_[data-slot=slider-track]]:rounded-full"
-            />
+              aria-label={playing ? t("timeline.pause") : t("timeline.play")}
+              onClick={() => setPlaying((current) => !current)}
+            >
+              {playing ? <PauseIcon /> : <PlayIcon />}
+            </Button>
           </div>
 
-          <EventRail
-            events={awayEvents}
-            side="away"
-            color={match.away.color ?? "var(--team-away-fallback)"}
-            match={match}
-            frames={frames}
-            replaying={replaying}
-          />
+          <div className="relative flex min-w-0 flex-1 flex-col gap-1">
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 left-1/2 z-0 w-px -translate-x-1/2 bg-primary/60"
+            />
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 left-1/2 z-0 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary ring-2 ring-card"
+            />
+            <EventRail
+              events={homeEvents}
+              side="home"
+              color={match.home.color ?? "var(--team-home-fallback)"}
+              match={match}
+              frames={frames}
+              replaying={replaying}
+            />
+
+            <div className="relative z-1">
+              <span
+                className="pointer-events-none absolute top-1/2 z-10 -ml-2.5 w-5 -translate-y-1/2 bg-transparent p-0 text-center text-[8px] leading-none font-bold text-foreground tabular-nums"
+                style={{
+                  left: `${Math.max(0, Math.min(100, sliderPercent))}%`,
+                  marginLeft: `${sliderLabelOffset - 10}px`,
+                }}
+              >
+                {draftSliderPercent == null
+                  ? formatTimelineClock(match)
+                  : formatReplayClock(draftSliderPercent, frames)}
+              </span>
+              <Slider
+                min={0}
+                max={sliderMax}
+                step={1}
+                value={[sliderValue]}
+                disabled={!replaying || busy || frames.length === 0}
+                onValueChange={(value) => {
+                  const next = Array.isArray(value) ? value[0] : value
+                  if (typeof next === "number" && replaying) {
+                    queueSliderSeek(next)
+                  }
+                }}
+                onValueCommitted={(value) => {
+                  const next = Array.isArray(value) ? value[0] : value
+                  if (typeof next === "number" && replaying)
+                    commitSliderSeek(next)
+                }}
+                className="[&_[data-slot=slider-range]]:bg-primary/80 [&_[data-slot=slider-thumb]]:size-5 [&_[data-slot=slider-thumb]]:rounded-full [&_[data-slot=slider-thumb]]:border-2 [&_[data-slot=slider-thumb]]:bg-background [&_[data-slot=slider-track]]:h-2 [&_[data-slot=slider-track]]:rounded-full"
+              />
+            </div>
+
+            <EventRail
+              events={awayEvents}
+              side="away"
+              color={match.away.color ?? "var(--team-away-fallback)"}
+              match={match}
+              frames={frames}
+              replaying={replaying}
+            />
+          </div>
         </div>
       </section>
     </TooltipProvider>
+  )
+}
+
+function TickProgressTicker({
+  current,
+  total,
+  ariaLabel,
+}: {
+  current: number
+  total: number
+  ariaLabel: string
+}) {
+  const viewportRef = useRef<HTMLSpanElement | null>(null)
+  const trackRef = useRef<HTMLSpanElement | null>(null)
+  const [overflow, setOverflow] = useState(0)
+
+  useEffect(() => {
+    const viewport = viewportRef.current
+    const track = trackRef.current
+    if (!viewport || !track) return
+
+    const measure = () =>
+      setOverflow(Math.max(0, track.scrollWidth - viewport.clientWidth))
+    const observer = new ResizeObserver(measure)
+    observer.observe(viewport)
+    observer.observe(track)
+    measure()
+    return () => observer.disconnect()
+  }, [])
+
+  return (
+    <span
+      ref={viewportRef}
+      className="tick-progress-ticker relative block h-8 min-w-0 flex-1 overflow-hidden rounded-md border border-border/70 bg-muted/35 tabular-nums shadow-xs"
+      data-overflow={overflow > 0 ? "true" : "false"}
+      style={{ "--tick-progress-overflow": `${overflow}px` } as CSSProperties}
+      aria-label={ariaLabel}
+    >
+      <span
+        ref={trackRef}
+        className="tick-progress-ticker-track absolute top-0 left-0 flex h-full w-max items-center px-2 whitespace-nowrap"
+      >
+        <span className="font-semibold text-foreground">{current}</span>
+        <span className="mx-1 text-muted-foreground/55">/</span>
+        <span>{total}</span>
+        <span className="ml-1.5 text-[9px] font-semibold tracking-wider text-primary uppercase">
+          Tick
+        </span>
+      </span>
+    </span>
   )
 }
 

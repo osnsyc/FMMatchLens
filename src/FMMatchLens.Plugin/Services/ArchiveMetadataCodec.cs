@@ -21,9 +21,11 @@ internal static class ArchiveMetadataCodec
     private const byte MatchDateExtensionFlag = 1 << 0;
     private const byte TeamManagersExtensionFlag = 1 << 1;
     private const byte PitchDimensionsExtensionFlag = 1 << 2;
-    private const byte AllMetadataExtensionFlags = MatchDateExtensionFlag | TeamManagersExtensionFlag | PitchDimensionsExtensionFlag;
+    private const byte CompetitionExtensionFlag = 1 << 3;
+    private const byte AllMetadataExtensionFlags = MatchDateExtensionFlag | TeamManagersExtensionFlag | PitchDimensionsExtensionFlag | CompetitionExtensionFlag;
     private const byte PitchDimensionsDeltaFlag = 1 << 0;
-    private const byte AllMetadataDeltaExtensionFlags = PitchDimensionsDeltaFlag;
+    private const byte CompetitionDeltaFlag = 1 << 1;
+    private const byte AllMetadataDeltaExtensionFlags = PitchDimensionsDeltaFlag | CompetitionDeltaFlag;
 
     private readonly record struct PlayerDelta(
         RealtimePlayerMetadata Player,
@@ -70,7 +72,8 @@ internal static class ArchiveMetadataCodec
         var extensionFlags = (byte)(
             (!string.IsNullOrWhiteSpace(metadata.MatchDate) ? MatchDateExtensionFlag : 0) |
             (metadata.Home.Manager.HasValue || metadata.Away.Manager.HasValue ? TeamManagersExtensionFlag : 0) |
-            (structureMinor >= 5 && HasPitchDimensions(metadata) ? PitchDimensionsExtensionFlag : 0));
+            (structureMinor >= 5 && HasPitchDimensions(metadata) ? PitchDimensionsExtensionFlag : 0) |
+            (structureMinor >= 6 && metadata.Competition.HasValue ? CompetitionExtensionFlag : 0));
         if (extensionFlags != 0)
         {
             writer.Write(extensionFlags);
@@ -85,6 +88,8 @@ internal static class ArchiveMetadataCodec
                 writer.Write(metadata.HalfPitchWidth!.Value);
                 writer.Write(metadata.HalfPitchLength!.Value);
             }
+            if ((extensionFlags & CompetitionExtensionFlag) != 0)
+                WriteCompetition(writer, metadata.Competition!.Value, ids);
         }
         return stream.ToArray();
     }
@@ -115,11 +120,14 @@ internal static class ArchiveMetadataCodec
         string? matchDate = null;
         float? halfPitchWidth = null;
         float? halfPitchLength = null;
+        RealtimeCompetitionMetadata? competition = null;
         if (stream.Position < stream.Length)
         {
             var extensionFlags = reader.ReadByte();
-            var allowedExtensionFlags = structureMinor >= 5
+            var allowedExtensionFlags = structureMinor >= 6
                 ? AllMetadataExtensionFlags
+                : structureMinor >= 5
+                    ? MatchDateExtensionFlag | TeamManagersExtensionFlag | PitchDimensionsExtensionFlag
                 : MatchDateExtensionFlag | TeamManagersExtensionFlag;
             if (extensionFlags == 0 || (extensionFlags & ~allowedExtensionFlags) != 0)
                 throw new ArchiveFormatException("unknown_metadata_extension", "Metadata contains unknown extension fields.");
@@ -135,11 +143,13 @@ internal static class ArchiveMetadataCodec
                 halfPitchWidth = ReadPitchHalf(reader);
                 halfPitchLength = ReadPitchHalf(reader);
             }
+            if ((extensionFlags & CompetitionExtensionFlag) != 0)
+                competition = ReadCompetition(reader, strings);
         }
         if (stream.Position != stream.Length) throw new ArchiveFormatException("trailing_data", "Metadata record contains trailing bytes.");
         return (revision, new RealtimeMatchMetadata(
             matchId, startedUnixMilliseconds, capturedTick, home, away, players,
-            matchDate, halfPitchWidth, halfPitchLength));
+            matchDate, halfPitchWidth, halfPitchLength, competition));
     }
 
     public static bool TryEncodeDelta(
@@ -184,7 +194,9 @@ internal static class ArchiveMetadataCodec
         var pitchDimensionsChanged =
             previous.HalfPitchWidth != effectiveHalfPitchWidth ||
             previous.HalfPitchLength != effectiveHalfPitchLength;
-        if (!homeChanged && !awayChanged && deltas.Count == 0 && !pitchDimensionsChanged)
+        var effectiveCompetition = incoming.Competition ?? previous.Competition;
+        var competitionChanged = previous.Competition != effectiveCompetition;
+        if (!homeChanged && !awayChanged && deltas.Count == 0 && !pitchDimensionsChanged && !competitionChanged)
         {
             encoding = default!;
             return false;
@@ -203,8 +215,9 @@ internal static class ArchiveMetadataCodec
             players,
             incoming.MatchDate ?? previous.MatchDate,
             effectiveHalfPitchWidth,
-            effectiveHalfPitchLength);
-        var strings = BuildDeltaStringTable(effective, deltas, homeChanged, awayChanged);
+            effectiveHalfPitchLength,
+            effectiveCompetition);
+        var strings = BuildDeltaStringTable(effective, deltas, homeChanged, awayChanged, competitionChanged);
         var ids = BuildStringIds(strings);
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
@@ -230,15 +243,17 @@ internal static class ArchiveMetadataCodec
             if (delta.InPossessionChanged) WriteAssignment(writer, delta.Player.InPossession, ids);
             if (delta.OutOfPossessionChanged) WriteAssignment(writer, delta.Player.OutOfPossession, ids);
         }
-        var deltaExtensionFlags = (byte)(pitchDimensionsChanged && HasPitchDimensions(effective)
-            ? PitchDimensionsDeltaFlag
-            : 0);
+        var deltaExtensionFlags = (byte)(
+            (pitchDimensionsChanged && HasPitchDimensions(effective) ? PitchDimensionsDeltaFlag : 0) |
+            (competitionChanged && effective.Competition.HasValue ? CompetitionDeltaFlag : 0));
         writer.Write(deltaExtensionFlags);
         if ((deltaExtensionFlags & PitchDimensionsDeltaFlag) != 0)
         {
             writer.Write(effective.HalfPitchWidth!.Value);
             writer.Write(effective.HalfPitchLength!.Value);
         }
+        if ((deltaExtensionFlags & CompetitionDeltaFlag) != 0)
+            WriteCompetition(writer, effective.Competition!.Value, ids);
 
         encoding = new ArchiveMetadataDeltaEncoding(stream.ToArray(), effective, deltas.Count, newPlayerCount);
         return true;
@@ -299,16 +314,22 @@ internal static class ArchiveMetadataCodec
             throw new ArchiveFormatException("duplicate_slot", "Metadata delta produces a duplicate player slot.");
         var halfPitchWidth = previous.HalfPitchWidth;
         var halfPitchLength = previous.HalfPitchLength;
+        var competition = previous.Competition;
         if (structureMinor >= 5)
         {
             var extensionFlags = reader.ReadByte();
-            if ((extensionFlags & ~AllMetadataDeltaExtensionFlags) != 0)
+            var allowedExtensionFlags = structureMinor >= 6
+                ? AllMetadataDeltaExtensionFlags
+                : PitchDimensionsDeltaFlag;
+            if ((extensionFlags & ~allowedExtensionFlags) != 0)
                 throw new ArchiveFormatException("unknown_metadata_delta_field", "Metadata delta contains unknown extension fields.");
             if ((extensionFlags & PitchDimensionsDeltaFlag) != 0)
             {
                 halfPitchWidth = ReadPitchHalf(reader);
                 halfPitchLength = ReadPitchHalf(reader);
             }
+            if ((extensionFlags & CompetitionDeltaFlag) != 0)
+                competition = ReadCompetition(reader, strings);
         }
         if (stream.Position != stream.Length) throw new ArchiveFormatException("trailing_data", "Metadata delta contains trailing bytes.");
         return (revision, new RealtimeMatchMetadata(
@@ -320,7 +341,8 @@ internal static class ArchiveMetadataCodec
             orderedPlayers,
             previous.MatchDate,
             halfPitchWidth,
-            halfPitchLength));
+            halfPitchLength,
+            competition));
     }
 
     private static List<string> BuildStringTable(RealtimeMatchMetadata metadata)
@@ -328,6 +350,7 @@ internal static class ArchiveMetadataCodec
         var values = new SortedSet<string>(StringComparer.Ordinal);
         AddTeam(metadata.Home, values);
         AddTeam(metadata.Away, values);
+        if (metadata.Competition is { } competition) Add(values, competition.Name, competition.LogoPath);
         foreach (var player in metadata.Players)
         {
             AddPlayer(player, values);
@@ -339,13 +362,15 @@ internal static class ArchiveMetadataCodec
         RealtimeMatchMetadata metadata,
         IReadOnlyList<PlayerDelta> deltas,
         bool homeChanged,
-        bool awayChanged)
+        bool awayChanged,
+        bool competitionChanged)
     {
         var values = new SortedSet<string>(StringComparer.Ordinal);
         // Delta team records intentionally exclude the one-time manager snapshot,
         // including its names in the delta string table.
         if (homeChanged) Add(values, metadata.Home.Name, metadata.Home.LogoPath);
         if (awayChanged) Add(values, metadata.Away.Name, metadata.Away.LogoPath);
+        if (competitionChanged && metadata.Competition is { } competition) Add(values, competition.Name, competition.LogoPath);
         foreach (var delta in deltas)
         {
             if (delta.IsFull)
@@ -440,6 +465,29 @@ internal static class ArchiveMetadataCodec
         ReadNullableUInt(reader),
         ReadNullableUInt(reader),
         ReadStringId(reader, strings));
+
+    private static void WriteCompetition(
+        BinaryWriter writer,
+        RealtimeCompetitionMetadata competition,
+        IReadOnlyDictionary<string, int> ids)
+    {
+        WriteNullableUInt(writer, competition.Uid);
+        WriteStringId(writer, competition.Name, ids);
+        WriteStringId(writer, competition.LogoPath, ids);
+        WriteNullableUInt(writer, competition.PrimaryColour);
+        WriteNullableUInt(writer, competition.SecondaryColour);
+        WriteNullableUInt(writer, competition.TertiaryColour);
+    }
+
+    private static RealtimeCompetitionMetadata ReadCompetition(
+        BinaryReader reader,
+        IReadOnlyList<string> strings) => new(
+        ReadNullableUInt(reader),
+        ReadStringId(reader, strings),
+        ReadStringId(reader, strings),
+        ReadNullableUInt(reader),
+        ReadNullableUInt(reader),
+        ReadNullableUInt(reader));
 
     private static void WriteManager(
         BinaryWriter writer,

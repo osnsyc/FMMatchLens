@@ -151,7 +151,16 @@ internal sealed record RealtimeMatchMetadata(
     IReadOnlyList<RealtimePlayerMetadata> Players,
     string? MatchDate = null,
     float? HalfPitchWidth = null,
-    float? HalfPitchLength = null);
+    float? HalfPitchLength = null,
+    RealtimeCompetitionMetadata? Competition = null);
+
+internal readonly record struct RealtimeCompetitionMetadata(
+    uint? Uid,
+    string? Name,
+    string? LogoPath,
+    uint? PrimaryColour,
+    uint? SecondaryColour,
+    uint? TertiaryColour);
 
 internal readonly record struct RealtimeTeamMetadata(
     uint? Uid,

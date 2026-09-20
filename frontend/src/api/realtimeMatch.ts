@@ -159,6 +159,15 @@ export type RealtimeManagerMetadata = {
   isHumanControlled: boolean
 }
 
+export type RealtimeCompetitionMetadata = {
+  uid?: number
+  name?: string
+  logoPath?: string
+  primaryColour?: number
+  secondaryColour?: number
+  tertiaryColour?: number
+}
+
 export type RealtimeMatchMetadata = {
   matchId: string
   startedUnixMilliseconds: number
@@ -166,6 +175,7 @@ export type RealtimeMatchMetadata = {
   matchDate?: string
   halfPitchWidth?: number
   halfPitchLength?: number
+  competition?: RealtimeCompetitionMetadata
   home: RealtimeTeamMetadata
   away: RealtimeTeamMetadata
   players: RealtimePlayerMetadata[]
@@ -1528,7 +1538,7 @@ function parseIsoDate(value?: string): Date | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date
 }
 
-function graphicsAssetUrl(
+export function graphicsAssetUrl(
   entityType: string,
   uid: number,
   imageType: string
@@ -1536,7 +1546,7 @@ function graphicsAssetUrl(
   return `${apiBase}/api/assets/${encodeURIComponent(entityType)}/${uid}/${encodeURIComponent(imageType)}`
 }
 
-function archivedAssetUrl(path: string | undefined) {
+export function archivedAssetUrl(path: string | undefined) {
   if (!path) return undefined
   try {
     const url = new URL(path)

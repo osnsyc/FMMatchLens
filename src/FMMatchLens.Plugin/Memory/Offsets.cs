@@ -4,6 +4,7 @@ internal static class Offsets
 {
     public static class GameMatch
     {
+        public const int Competition = 0x678;
         public const int CompetitionId = 0x684;
         public const int CompetitionPrimaryColour = 0x68C;
         public const int CompetitionSecondaryColour = 0x690;
@@ -30,6 +31,14 @@ internal static class Offsets
         public const int LifecycleStateB = 0x142F9;
         public const int LifecycleStateC = 0x142FA;
         public const int LifecycleStateD = 0x142FB;
+    }
+
+    public static class Competition
+    {
+        public const int Uid = 0x0C;
+        // [Competition + Name] -> string instance; +0x0 is the 4-byte length,
+        // and UTF-8 text begins inline at +0x04.
+        public const int Name = 0x40;
     }
 
     public static class MomentumEventSource

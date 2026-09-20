@@ -201,7 +201,8 @@ internal sealed class RealtimeMatchTimeline
         RealtimeTeamMetadata home,
         RealtimeTeamMetadata away,
         IReadOnlyList<RealtimePlayerMetadata> players,
-        string? matchDate)
+        string? matchDate,
+        RealtimeCompetitionMetadata? competition)
     {
         lock (_gate)
         {
@@ -220,7 +221,8 @@ internal sealed class RealtimeMatchTimeline
                 players.ToArray(),
                 matchDate,
                 ValidPitchHalf(_current?.HalfPitchWidth),
-                ValidPitchHalf(_current?.HalfPitchLength)));
+                ValidPitchHalf(_current?.HalfPitchLength),
+                competition));
             var candidate = _metadata is null ? incoming : MergeMetadata(_metadata, incoming);
             if (_metadata is not null && MetadataContentEquals(_metadata, candidate))
             {
@@ -480,7 +482,23 @@ internal sealed class RealtimeMatchTimeline
             players.Values.OrderBy(player => player.Slot).ToArray(),
             incoming.MatchDate ?? current.MatchDate,
             incoming.HalfPitchWidth ?? current.HalfPitchWidth,
-            incoming.HalfPitchLength ?? current.HalfPitchLength);
+            incoming.HalfPitchLength ?? current.HalfPitchLength,
+            MergeCompetitionMetadata(current.Competition, incoming.Competition));
+    }
+
+    private static RealtimeCompetitionMetadata? MergeCompetitionMetadata(
+        RealtimeCompetitionMetadata? current,
+        RealtimeCompetitionMetadata? incoming)
+    {
+        if (!incoming.HasValue) return current;
+        if (!current.HasValue) return incoming;
+        return new RealtimeCompetitionMetadata(
+            incoming.Value.Uid ?? current.Value.Uid,
+            !string.IsNullOrWhiteSpace(incoming.Value.Name) ? incoming.Value.Name : current.Value.Name,
+            incoming.Value.LogoPath ?? current.Value.LogoPath,
+            incoming.Value.PrimaryColour ?? current.Value.PrimaryColour,
+            incoming.Value.SecondaryColour ?? current.Value.SecondaryColour,
+            incoming.Value.TertiaryColour ?? current.Value.TertiaryColour);
     }
 
     private static RealtimeTeamMetadata MergeTeamMetadata(
@@ -538,7 +556,13 @@ internal sealed class RealtimeMatchTimeline
         {
             Home = AddTeamAssetPath(metadata.Home),
             Away = AddTeamAssetPath(metadata.Away),
-            Players = players
+            Players = players,
+            Competition = metadata.Competition is { } competition
+                ? competition with
+                {
+                    LogoPath = competition.LogoPath ?? ResolveAssetPath("comp", competition.Uid, "logo")
+                }
+                : null
         };
     }
 
@@ -600,6 +624,7 @@ internal sealed class RealtimeMatchTimeline
         if (left.MatchDate != right.MatchDate ||
             left.HalfPitchWidth != right.HalfPitchWidth ||
             left.HalfPitchLength != right.HalfPitchLength ||
+            left.Competition != right.Competition ||
             left.Home != right.Home || left.Away != right.Away || left.Players.Count != right.Players.Count)
         {
             return false;
