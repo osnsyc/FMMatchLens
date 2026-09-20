@@ -1227,6 +1227,8 @@ internal sealed class GameMatchTickHook : IDisposable
                 ["Penalty Taking"] = ReadAttribute(player, Offsets.ActualPlayer.PenaltyTaking),
                 ["Tackling"] = ReadAttribute(player, Offsets.ActualPlayer.Tackling),
                 ["Technique"] = ReadAttribute(player, Offsets.ActualPlayer.Technique),
+                ["Left Foot"] = ReadAttribute(player, Offsets.ActualPlayer.LeftFoot),
+                ["Right Foot"] = ReadAttribute(player, Offsets.ActualPlayer.RightFoot),
                 ["Corners"] = ReadAttribute(player, Offsets.ActualPlayer.Corners),
                 ["Free Kicks"] = ReadAttribute(player, Offsets.ActualPlayer.FreeKicks),
                 ["Long Throws"] = ReadAttribute(player, Offsets.ActualPlayer.LongThrows),

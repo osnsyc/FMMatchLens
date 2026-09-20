@@ -817,6 +817,9 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
                         </div>
                       ))}
                 </div>
+                {columnIndex === 0 && player.attributes && (
+                  <PlayerFootAbility attributes={player.attributes} />
+                )}
                 {columnIndex === 2 && player.attributes && (
                   <PlayerAttributeRadar
                     attributes={player.attributes}
@@ -917,6 +920,62 @@ function attributeValueClass(value: number) {
 function displayAttributeValue(rawValue: number) {
   if (!Number.isFinite(rawValue) || rawValue <= 0) return 0
   return Math.min(20, Math.max(1, Math.round(rawValue / 5)))
+}
+
+function footAbilityTier(value: number) {
+  if (value >= 18) return { description: "veryStrong", className: "text-status-positive" }
+  if (value >= 15) return { description: "strong", className: "text-status-positive/75" }
+  if (value >= 12) return { description: "fairlyStrong", className: "text-status-warning" }
+  if (value >= 9) return { description: "reasonable", className: "text-foreground" }
+  if (value >= 5) return { description: "weak", className: "text-status-negative/75" }
+  return { description: "veryWeak", className: "text-status-negative" }
+}
+
+function PlayerFootAbility({
+  attributes,
+}: {
+  attributes: NonNullable<MatchPlayer["attributes"]>
+}) {
+  const { t } = useTranslation()
+  const rawLeftFoot = attributes.technical["Left Foot"]
+  const rawRightFoot = attributes.technical["Right Foot"]
+  if (rawLeftFoot == null && rawRightFoot == null) return null
+
+  const leftFoot = footAbilityTier(displayAttributeValue(rawLeftFoot ?? 0))
+  const rightFoot = footAbilityTier(displayAttributeValue(rawRightFoot ?? 0))
+
+  return (
+    <div className="mt-auto grid w-full grid-cols-[minmax(0,1fr)_1.75rem_1.75rem_minmax(0,1fr)] items-center gap-0 border-t pt-3">
+      <span className="min-w-0 text-right text-[10px] leading-tight">
+        <span className="block truncate font-medium text-muted-foreground">{t("playerProfile.leftFoot")}</span>
+        <span className={`block truncate font-semibold ${leftFoot.className}`}>
+          {t(`playerProfile.footStrength.${leftFoot.description}`)}
+        </span>
+      </span>
+      <FootAbilityIcon mirrored className={leftFoot.className} />
+      <FootAbilityIcon className={rightFoot.className} />
+      <span className="min-w-0 text-left text-[10px] leading-tight">
+        <span className="block truncate font-medium text-muted-foreground">{t("playerProfile.rightFoot")}</span>
+        <span className={`block truncate font-semibold ${rightFoot.className}`}>
+          {t(`playerProfile.footStrength.${rightFoot.description}`)}
+        </span>
+      </span>
+    </div>
+  )
+}
+
+function FootAbilityIcon({ mirrored = false, className }: { mirrored?: boolean; className: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`h-7 w-7 shrink-0 bg-current ${className}`}
+      style={{
+        WebkitMask: "url('/foot.svg') center / contain no-repeat",
+        mask: "url('/foot.svg') center / contain no-repeat",
+        transform: mirrored ? "scaleX(-1)" : undefined,
+      }}
+    />
+  )
 }
 
 type AttributeColumn = {

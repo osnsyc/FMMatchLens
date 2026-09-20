@@ -276,6 +276,16 @@ const resources = {
         noAttributes: "暂无可用的球员能力数据",
         attributeAnalysis: "属性分析",
         radarLabel: "球员属性八角图",
+        leftFoot: "左脚",
+        rightFoot: "右脚",
+        footStrength: {
+          veryStrong: "精准",
+          strong: "强势",
+          fairlyStrong: "不错",
+          reasonable: "还行",
+          weak: "欠佳",
+          veryWeak: "笨拙",
+        },
         bodyTypes: {
           1: "外胚型",
           2: "外胚-中胚型",
@@ -767,6 +777,16 @@ const resources = {
         noAttributes: "Player attributes are not available",
         attributeAnalysis: "Attribute Analysis",
         radarLabel: "Player attribute radar",
+        leftFoot: "Left Foot",
+        rightFoot: "Right Foot",
+        footStrength: {
+          veryStrong: "Very Strong",
+          strong: "Strong",
+          fairlyStrong: "Fairly Strong",
+          reasonable: "Reasonable",
+          weak: "Weak",
+          veryWeak: "Very Weak",
+        },
         bodyTypes: {
           1: "Ectomorph",
           2: "Ecto-Mesomorph",
