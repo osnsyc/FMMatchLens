@@ -1274,7 +1274,10 @@ internal sealed class GameMatchTickHook : IDisposable
                 ["Reflexes"] = ReadAttribute(player, Offsets.ActualPlayer.Reflexes),
                 ["Rushing Out"] = ReadAttribute(player, Offsets.ActualPlayer.RushingOut),
                 ["Throwing"] = ReadAttribute(player, Offsets.ActualPlayer.Throwing),
-            });
+            },
+            _memoryReader.TryReadUInt64(person + Offsets.Person.Traits, out var traits)
+                ? traits.ToString("X16", CultureInfo.InvariantCulture)
+                : null);
         return attributes.Technical.Values.Any(value => value > 0) ||
                attributes.Mental.Values.Any(value => value > 0) ||
                attributes.Physical.Values.Any(value => value > 0) ||

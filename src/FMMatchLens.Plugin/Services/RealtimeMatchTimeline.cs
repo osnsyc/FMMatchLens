@@ -604,7 +604,8 @@ internal sealed class RealtimeMatchTimeline
             MergeAttributeGroup(current.Technical, incoming.Technical),
             MergeAttributeGroup(current.Mental, incoming.Mental),
             MergeAttributeGroup(current.Physical, incoming.Physical),
-            MergeAttributeGroup(current.Goalkeeping, incoming.Goalkeeping));
+            MergeAttributeGroup(current.Goalkeeping, incoming.Goalkeeping),
+            incoming.Traits ?? current.Traits);
     }
 
     private static IReadOnlyDictionary<string, int> MergeAttributeGroup(
@@ -675,6 +676,7 @@ internal sealed class RealtimeMatchTimeline
     private static bool AttributesEqual(PlayerAttributes? left, PlayerAttributes? right) =>
         ReferenceEquals(left, right) ||
         left is not null && right is not null &&
+        left.Traits == right.Traits &&
         AttributeGroupEqual(left.Technical, right.Technical) &&
         AttributeGroupEqual(left.Mental, right.Mental) &&
         AttributeGroupEqual(left.Physical, right.Physical) &&

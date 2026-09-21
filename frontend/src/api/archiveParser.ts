@@ -598,7 +598,7 @@ function readPlayerMetadata(
   const displayName = readStringId(reader, strings) ?? `Player ${playerId}`
   const portraitPath = readStringId(reader, strings)
   const profile = readProfile(reader, structureMinor)
-  const attributes = readAttributes(reader, strings)
+  const attributes = readAttributes(reader, strings, structureMinor)
   return { slot, playerId, uid, team: teamRaw === 1 ? "away" : "home", shirtNumber, position, positionFamiliarities, inPossession, outOfPossession,
     firstName, secondName, commonName, displayName, portraitPath, profile, attributes }
 }
@@ -633,10 +633,18 @@ function readProfile(reader: ArchiveBufferReader, structureMinor: number): Playe
   return profile
 }
 
-function readAttributes(reader: ArchiveBufferReader, strings: Array<string | undefined>): PlayerAttributes | undefined {
+function readAttributes(
+  reader: ArchiveBufferReader,
+  strings: Array<string | undefined>,
+  structureMinor: number,
+): PlayerAttributes | undefined {
   if (!reader.readBoolean()) return undefined
-  return { technical: readAttributeGroup(reader, strings), mental: readAttributeGroup(reader, strings),
-    physical: readAttributeGroup(reader, strings), goalkeeping: readAttributeGroup(reader, strings) }
+  const technical = readAttributeGroup(reader, strings)
+  const mental = readAttributeGroup(reader, strings)
+  const physical = readAttributeGroup(reader, strings)
+  const goalkeeping = readAttributeGroup(reader, strings)
+  const traits = structureMinor >= 6 ? reader.readUint64Hex() : undefined
+  return { technical, mental, physical, goalkeeping, traits }
 }
 
 function readAttributeGroup(reader: ArchiveBufferReader, strings: Array<string | undefined>) {
@@ -750,6 +758,7 @@ class ArchiveBufferReader {
   }
   readInt64() { this.ensure(8); const value = Number(this.view.getBigInt64(this.offset, true)); this.offset += 8; if (!Number.isSafeInteger(value)) throw new ArchiveError("64 位整数超出浏览器安全范围"); return value }
   readUint64() { this.ensure(8); const value = Number(this.view.getBigUint64(this.offset, true)); this.offset += 8; if (!Number.isSafeInteger(value)) throw new ArchiveError("64 位整数超出浏览器安全范围"); return value }
+  readUint64Hex() { this.ensure(8); const value = this.view.getBigUint64(this.offset, true); this.offset += 8; return value.toString(16).toUpperCase().padStart(16, "0") }
   readBytes(length: number) { this.ensure(length); const value = this.bytes.subarray(this.offset, this.offset + length); this.offset += length; return value }
   readAscii(length: number) { return String.fromCharCode(...this.readBytes(length)) }
   readString() {

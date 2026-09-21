@@ -39,6 +39,7 @@ import type {
 import { playerPositionLabels } from "@/types/match"
 import { nationDisplay } from "@/lib/nations"
 import { shortPlayerName } from "@/lib/player-name"
+import { decodePlayerTraits } from "@/lib/playerTraits"
 import { sameSquadPlayers } from "@/lib/matchRenderEquality"
 
 type SquadPanelProps = {
@@ -800,35 +801,38 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
 
           <CardContent className="grid grid-cols-3 gap-x-6 p-3">
             {attributeColumns.length > 0 ? attributeColumns.map((column, columnIndex) => (
-              <section key={column.title} className="flex min-w-0 flex-col">
-                <h3 className="mb-1.5 border-b pb-1 text-xs font-bold uppercase tracking-wide" style={{ color: teamColor }}>
-                  {t(`playerProfile.attributeGroups.${column.title}`)}
-                </h3>
-                <div className="space-y-0.5">
-                  {column.names
-                    .map((name) => ({ name, value: displayAttributeValue(findAttributeValue(player.attributes!, name)) }))
-                    .filter(({ value }) => value > 0)
-                    .map(({ name, value }) => (
-                        <div key={name} className="flex items-center justify-between gap-2 leading-5">
-                          <span className="truncate text-[11px] text-muted-foreground">
-                            {t(`playerProfile.attributes.${name}`, { defaultValue: name })}
-                          </span>
-                          <span className={`w-5 text-right text-xs font-bold tabular-nums ${attributeValueClass(value)}`}>{value}</span>
-                        </div>
-                      ))}
-                </div>
-                {columnIndex === 0 && player.attributes && (
-                  <PlayerFootAbility attributes={player.attributes} />
-                )}
-                {columnIndex === 2 && player.attributes && (
-                  <PlayerAttributeRadar
-                    attributes={player.attributes}
-                    isGoalkeeper={isGoalkeeper}
-                    color={teamColor}
-                  />
-                )}
-              </section>
-            )) : (
+                <section key={column.title} className="flex min-w-0 flex-col">
+                  <h3 className="mb-1.5 border-b pb-1 text-xs font-bold uppercase tracking-wide" style={{ color: teamColor }}>
+                    {t(`playerProfile.attributeGroups.${column.title}`)}
+                  </h3>
+                  <div className="space-y-0.5">
+                    {column.names
+                      .map((name) => ({ name, value: displayAttributeValue(findAttributeValue(player.attributes!, name)) }))
+                      .filter(({ value }) => value > 0)
+                      .map(({ name, value }) => (
+                          <div key={name} className="flex items-center justify-between gap-2 leading-5">
+                            <span className="truncate text-[11px] text-muted-foreground">
+                              {t(`playerProfile.attributes.${name}`, { defaultValue: name })}
+                            </span>
+                            <span className={`w-5 text-right text-xs font-bold tabular-nums ${attributeValueClass(value)}`}>{value}</span>
+                          </div>
+                        ))}
+                  </div>
+                  {columnIndex === 0 && player.attributes && (
+                    <PlayerFootAbility attributes={player.attributes} />
+                  )}
+                  {columnIndex === 1 && player.attributes && (
+                    <PlayerTraitList traits={player.attributes.traits} />
+                  )}
+                  {columnIndex === 2 && player.attributes && (
+                    <PlayerAttributeRadar
+                      attributes={player.attributes}
+                      isGoalkeeper={isGoalkeeper}
+                      color={teamColor}
+                    />
+                  )}
+                </section>
+              )) : (
               <div className="col-span-3 py-8 text-center text-muted-foreground">
                 {t("playerProfile.noAttributes")}
               </div>
@@ -945,7 +949,7 @@ function PlayerFootAbility({
   const rightFoot = footAbilityTier(displayAttributeValue(rawRightFoot ?? 0))
 
   return (
-    <div className="mt-auto grid w-full grid-cols-[minmax(0,1fr)_1.75rem_1.75rem_minmax(0,1fr)] items-center gap-0 border-t pt-3">
+    <div className="mt-auto grid h-16 w-full grid-cols-[minmax(0,1fr)_1.75rem_1.75rem_minmax(0,1fr)] items-center gap-0 border-t pt-2">
       <span className="min-w-0 text-right text-[10px] leading-tight">
         <span className="block truncate font-medium text-muted-foreground">{t("playerProfile.leftFoot")}</span>
         <span className={`block truncate font-semibold ${leftFoot.className}`}>
@@ -975,6 +979,27 @@ function FootAbilityIcon({ mirrored = false, className }: { mirrored?: boolean; 
         transform: mirrored ? "scaleX(-1)" : undefined,
       }}
     />
+  )
+}
+
+function PlayerTraitList({ traits: rawTraits }: { traits?: string }) {
+  const { t } = useTranslation()
+  const traits = decodePlayerTraits(rawTraits)
+
+  return (
+    <div className="mt-auto h-16 border-t pt-2" aria-label={t("playerProfile.playerTraits")}>
+      <div className="scrollbar-hidden h-full overflow-y-auto overscroll-contain pr-1 text-[10px] leading-4 text-muted-foreground">
+        {traits.length > 0 ? (
+          <ul>
+            {traits.map((key) => (
+              <li key={key} className="break-words">• {t(`playerProfile.traits.${key}`)}</li>
+            ))}
+          </ul>
+        ) : (
+          <span>{t("playerProfile.noPlayerTraits")}</span>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -1052,9 +1077,6 @@ function PlayerAttributeRadar({
 
   return (
     <div className="mt-auto border-t pt-2">
-      <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {t("playerProfile.attributeAnalysis")}
-      </div>
       <svg
         viewBox="0 0 210 182"
         className="mx-auto block w-full max-w-[13rem] overflow-visible"

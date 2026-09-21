@@ -197,6 +197,7 @@ export type PlayerAttributes = {
   mental: Record<string, number>
   physical: Record<string, number>
   goalkeeping: Record<string, number>
+  traits?: string
 }
 
 export type TeamStats = {

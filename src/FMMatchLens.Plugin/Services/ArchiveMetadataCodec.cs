@@ -1,4 +1,5 @@
 using FMMatchLens.Plugin.Domain;
+using System.Globalization;
 using System.Text;
 
 namespace FMMatchLens.Plugin.Services;
@@ -533,7 +534,7 @@ internal static class ArchiveMetadataCodec
         WriteStringId(writer, player.DisplayName, ids);
         WriteStringId(writer, player.PortraitPath, ids);
         WriteProfile(writer, player.Profile, structureMinor);
-        WriteAttributes(writer, player.Attributes, ids);
+        WriteAttributes(writer, player.Attributes, ids, structureMinor);
     }
 
     private static RealtimePlayerMetadata ReadPlayer(
@@ -556,7 +557,7 @@ internal static class ArchiveMetadataCodec
         var display = ReadStringId(reader, strings) ?? $"Player {playerId}";
         var portrait = ReadStringId(reader, strings);
         var profile = ReadProfile(reader, structureMinor);
-        var attributes = ReadAttributes(reader, strings);
+        var attributes = ReadAttributes(reader, strings, structureMinor);
         return new RealtimePlayerMetadata(slot, playerId, uid, team, shirt, position, first, second, common, display, portrait, profile, attributes, inPossession, outOfPossession, positionFamiliarities);
     }
 
@@ -655,7 +656,11 @@ internal static class ArchiveMetadataCodec
 
     private static string? NullIfEmpty(string value) => string.IsNullOrEmpty(value) ? null : value;
 
-    private static void WriteAttributes(BinaryWriter writer, PlayerAttributes? attributes, IReadOnlyDictionary<string, int> ids)
+    private static void WriteAttributes(
+        BinaryWriter writer,
+        PlayerAttributes? attributes,
+        IReadOnlyDictionary<string, int> ids,
+        ushort structureMinor)
     {
         writer.Write(attributes is not null);
         if (attributes is null) return;
@@ -663,13 +668,37 @@ internal static class ArchiveMetadataCodec
         WriteAttributeGroup(writer, attributes.Mental, ids);
         WriteAttributeGroup(writer, attributes.Physical, ids);
         WriteAttributeGroup(writer, attributes.Goalkeeping, ids);
+        if (structureMinor >= 6) writer.Write(ParseTraits(attributes.Traits));
     }
 
-    private static PlayerAttributes? ReadAttributes(BinaryReader reader, IReadOnlyList<string> strings) => !reader.ReadBoolean()
-        ? null
-        : new PlayerAttributes(
-            ReadAttributeGroup(reader, strings), ReadAttributeGroup(reader, strings),
-            ReadAttributeGroup(reader, strings), ReadAttributeGroup(reader, strings));
+    private static PlayerAttributes? ReadAttributes(
+        BinaryReader reader,
+        IReadOnlyList<string> strings,
+        ushort structureMinor)
+    {
+        if (!reader.ReadBoolean()) return null;
+        var technical = ReadAttributeGroup(reader, strings);
+        var mental = ReadAttributeGroup(reader, strings);
+        var physical = ReadAttributeGroup(reader, strings);
+        var goalkeeping = ReadAttributeGroup(reader, strings);
+        var traits = structureMinor >= 6
+            ? reader.ReadUInt64().ToString("X16", CultureInfo.InvariantCulture)
+            : null;
+        return new PlayerAttributes(
+            technical,
+            mental,
+            physical,
+            goalkeeping,
+            traits);
+    }
+
+    private static ulong ParseTraits(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return 0;
+        if (value.Length != 16 || !ulong.TryParse(value, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var traits))
+            throw new InvalidDataException("Player traits must be a 16-digit hexadecimal UInt64 value.");
+        return traits;
+    }
 
     private static void WriteAttributeGroup(BinaryWriter writer, IReadOnlyDictionary<string, int> attributes, IReadOnlyDictionary<string, int> ids)
     {

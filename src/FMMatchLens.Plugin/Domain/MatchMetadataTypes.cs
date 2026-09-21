@@ -27,4 +27,5 @@ internal sealed record PlayerAttributes(
     IReadOnlyDictionary<string, int> Technical,
     IReadOnlyDictionary<string, int> Mental,
     IReadOnlyDictionary<string, int> Physical,
-    IReadOnlyDictionary<string, int> Goalkeeping);
+    IReadOnlyDictionary<string, int> Goalkeeping,
+    string? Traits);
