@@ -775,7 +775,6 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
                   <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                     <span className="font-semibold" style={{ color: teamColor }}>#{player.shirtNumber ?? "-"}</span>
                     <span>{familiarPosition(player)}</span>
-                    {player.uid != null && <span>UID {player.uid}</span>}
                   </div>
                 </div>
                 <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] gap-x-2 border-l border-border/70 pl-3 text-[10px]">
@@ -1104,10 +1103,10 @@ function PlayerAttributeRadar({
                 y={label.y}
                 textAnchor={horizontal > 0.25 ? "start" : horizontal < -0.25 ? "end" : "middle"}
                 dominantBaseline="middle"
-                className="fill-muted-foreground text-[8px] font-medium"
+                className="fill-muted-foreground text-[11px] font-medium"
               >
-                <tspan x={label.x} dy="-3">{t(`playerProfile.radarAxes.${axis.label}`)}</tspan>
-                <tspan x={label.x} dy="9" className="font-bold" style={{ fill: color }}>{Math.round(axis.value)}</tspan>
+                <tspan x={label.x} dy="-5">{t(`playerProfile.radarAxes.${axis.label}`)}</tspan>
+                <tspan x={label.x} dy="12" className="font-bold" style={{ fill: color }}>{Math.round(axis.value)}</tspan>
               </text>
             </g>
           )
