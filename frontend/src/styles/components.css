@@ -970,6 +970,10 @@
     display: none;
   }
 
+  .cursor-pin {
+    cursor: pointer;
+  }
+
   .font-fm-universe {
     font-family: "FMUniverse", var(--font-sans);
     font-weight: 400;

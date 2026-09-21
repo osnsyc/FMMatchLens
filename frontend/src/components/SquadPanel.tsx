@@ -1,10 +1,11 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowDataTransferHorizontalIcon, FootballIcon, SidebarLeft01Icon } from "@hugeicons/core-free-icons"
+import { ArrowDataTransferHorizontalIcon, FootballIcon, Pin02Icon, SidebarLeft01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { AssistIcon } from "@/components/AssistIcon"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { FootIcon } from "@/components/FootIcon"
+import { Avatar, AvatarBadge, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -39,6 +40,7 @@ import type {
 import { playerPositionLabels } from "@/types/match"
 import { nationDisplay } from "@/lib/nations"
 import { shortPlayerName } from "@/lib/player-name"
+import { findNearestPositionPlayerIds } from "@/lib/playerPositionMatch"
 import { decodePlayerTraits } from "@/lib/playerTraits"
 import { sameSquadPlayers } from "@/lib/matchRenderEquality"
 
@@ -50,6 +52,10 @@ type SquadPanelProps = {
   allPlayers?: MatchPlayer[]
   events: MatchEvent[]
   teamColor?: string
+  pinnedPlayerId?: number
+  attackingOpponent?: MatchPlayer
+  profilePopupSuppressed?: boolean
+  onPinnedPlayerChange: (playerId?: number) => void
 }
 
 type StatusIcon =
@@ -218,6 +224,10 @@ export const SquadPanel = memo(function SquadPanel({
   allPlayers = players,
   events,
   teamColor,
+  pinnedPlayerId,
+  attackingOpponent,
+  profilePopupSuppressed = false,
+  onPinnedPlayerChange,
 }: SquadPanelProps) {
   const { t } = useTranslation()
   const panelRef = useRef<HTMLElement | null>(null)
@@ -277,6 +287,15 @@ export const SquadPanel = memo(function SquadPanel({
     (side === "home"
       ? "var(--team-home-fallback)"
       : "var(--team-away-fallback)")
+
+  const positionHighlights = useMemo(() => ({
+    formation: attackingOpponent
+      ? findNearestPositionPlayerIds(attackingOpponent, players, "formation")
+      : new Set<number>(),
+    matchup: attackingOpponent
+      ? findNearestPositionPlayerIds(attackingOpponent, players, "matchup")
+      : new Set<number>(),
+  }), [attackingOpponent, players])
 
   const minutesFor = (
     player: MatchPlayer,
@@ -412,10 +431,23 @@ export const SquadPanel = memo(function SquadPanel({
             defaultValue: player.inPossession.role,
           })
         : positionLabel
+    const isFormationNearest = positionHighlights.formation.has(player.id)
+    const isMatchupNearest = positionHighlights.matchup.has(player.id)
+    const positionHighlightStyle: React.CSSProperties | undefined = isFormationNearest || isMatchupNearest
+      ? {
+          background: isFormationNearest && isMatchupNearest
+            ? "linear-gradient(90deg,color-mix(in srgb,var(--viz-series-2) 22%,transparent),transparent 48%,color-mix(in srgb,var(--viz-series-3) 22%,transparent))"
+            : isFormationNearest
+              ? "linear-gradient(90deg,color-mix(in srgb,var(--viz-series-2) 22%,transparent),transparent 72%)"
+              : "linear-gradient(270deg,color-mix(in srgb,var(--viz-series-3) 22%,transparent),transparent 72%)",
+        }
+      : undefined
 
     return (
       <li
         key={player.id}
+        data-formation-nearest={isFormationNearest || undefined}
+        data-matchup-nearest={isMatchupNearest || undefined}
         className={`
           group relative grid min-w-0
           grid-cols-[1.75rem_1.5rem_minmax(3.5rem,1fr)_minmax(0,3.25rem)_2.25rem]
@@ -432,6 +464,9 @@ export const SquadPanel = memo(function SquadPanel({
           }
         `}
       >
+        {positionHighlightStyle && (
+          <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-md" style={positionHighlightStyle} />
+        )}
         {/* subtle team-color hover marker */}
         <span
           aria-hidden="true"
@@ -451,7 +486,16 @@ export const SquadPanel = memo(function SquadPanel({
         />
 
         {/* Avatar */}
-        <PlayerProfileHover player={player} side={side} teamColor={resolvedTeamColor} panelRef={panelRef}>
+        <PlayerProfileHover
+          player={player}
+          side={side}
+          teamColor={resolvedTeamColor}
+          panelRef={panelRef}
+          pinned={pinnedPlayerId === player.id}
+          hoverEnabled={!profilePopupSuppressed && (pinnedPlayerId == null || pinnedPlayerId === player.id)}
+          popupSuppressed={profilePopupSuppressed}
+          onPinnedPlayerChange={onPinnedPlayerChange}
+        >
         <div className="flex size-7 shrink-0 items-center justify-center sm:size-8">
           <Avatar
             className="
@@ -487,6 +531,11 @@ export const SquadPanel = memo(function SquadPanel({
                 player.name
               )}
             </AvatarFallback>
+            {pinnedPlayerId === player.id && (
+              <AvatarBadge aria-hidden="true" className="size-3! [&>svg]:size-2.5!">
+                <HugeiconsIcon icon={Pin02Icon} strokeWidth={2.2} />
+              </AvatarBadge>
+            )}
           </Avatar>
         </div>
         </PlayerProfileHover>
@@ -703,6 +752,10 @@ function sameSquadPanelProps(previous: SquadPanelProps, next: SquadPanelProps) {
     && previous.teamUid === next.teamUid
     && previous.side === next.side
     && previous.teamColor === next.teamColor
+    && previous.pinnedPlayerId === next.pinnedPlayerId
+    && previous.attackingOpponent === next.attackingOpponent
+    && previous.profilePopupSuppressed === next.profilePopupSuppressed
+    && previous.onPinnedPlayerChange === next.onPinnedPlayerChange
     && previous.events === next.events
     && sameSquadPlayers(previous.players, next.players)
     && sameSquadPlayers(
@@ -716,28 +769,50 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   side,
   teamColor,
   panelRef,
+  pinned,
+  hoverEnabled,
+  popupSuppressed,
+  onPinnedPlayerChange,
   children,
 }: {
   player: MatchPlayer
   side: TeamSide
   teamColor: string
   panelRef: React.RefObject<HTMLElement | null>
+  pinned: boolean
+  hoverEnabled: boolean
+  popupSuppressed: boolean
+  onPinnedPlayerChange: (playerId?: number) => void
   children: React.ReactNode
 }) {
   const { t, i18n } = useTranslation()
   const [sideOffset, setSideOffset] = useState(8)
-  const [open, setOpen] = useState(false)
+  const [hoverOpen, setHoverOpen] = useState(false)
+  const pinRequestedRef = useRef(false)
+  const open = !popupSuppressed && (pinned || (hoverEnabled && hoverOpen))
   const isGoalkeeper = (player.positionFamiliarities?.GK ?? 0) >= 15 || player.position === "GK"
   const attributeColumns = player.attributes
     ? buildAttributeColumns(isGoalkeeper)
     : []
   const nation = nationDisplay(player.profile?.nationUid, i18n.resolvedLanguage ?? i18n.language)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return
     setPlayerProfileBackdrop(true)
     return () => setPlayerProfileBackdrop(false)
   }, [open])
+
+  useLayoutEffect(() => {
+    if (pinned) pinRequestedRef.current = false
+  }, [pinned])
+
+  const togglePinned = () => {
+    if (!pinned) {
+      pinRequestedRef.current = true
+      setHoverOpen(true)
+    }
+    onPinnedPlayerChange(pinned ? undefined : player.id)
+  }
 
   const updateOffset = (trigger: HTMLElement) => {
     const panel = panelRef.current?.getBoundingClientRect()
@@ -747,9 +822,30 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   }
 
   return (
-    <Tooltip onOpenChange={setOpen}>
+    <Tooltip
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && (pinned || pinRequestedRef.current)) return
+        setHoverOpen(nextOpen)
+      }}
+    >
       <TooltipTrigger
-        render={<div onPointerEnter={(event) => updateOffset(event.currentTarget)} />}
+        render={
+          <div
+            role="button"
+            tabIndex={0}
+            aria-pressed={pinned}
+            data-player-profile-pin
+            className="cursor-pin"
+            onPointerEnter={(event) => updateOffset(event.currentTarget)}
+            onClick={togglePinned}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return
+              event.preventDefault()
+              togglePinned()
+            }}
+          />
+        }
       >
         {children}
       </TooltipTrigger>
@@ -760,7 +856,7 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
         alignOffset={-8}
         showArrow={false}
         data-player-profile-popup
-        className="max-w-none bg-transparent p-0 text-card-foreground shadow-none"
+        className="max-w-none bg-transparent p-0 text-card-foreground shadow-none [animation:none]"
       >
         <Card className="w-[38rem] max-w-[min(38rem,calc(100vw-2rem))] gap-0 border border-border/80 py-0 shadow-2xl">
           <CardHeader className="grid h-28 grid-cols-[7rem_minmax(0,1fr)] gap-0 overflow-hidden border-b bg-muted/35 p-0">
@@ -845,6 +941,10 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   previous.side === next.side &&
   previous.teamColor === next.teamColor &&
   previous.panelRef === next.panelRef &&
+  previous.pinned === next.pinned &&
+  previous.hoverEnabled === next.hoverEnabled &&
+  previous.popupSuppressed === next.popupSuppressed &&
+  previous.onPinnedPlayerChange === next.onPinnedPlayerChange &&
   previous.player.uid === next.player.uid &&
   previous.player.name === next.player.name &&
   previous.player.shirtNumber === next.player.shirtNumber &&
@@ -857,12 +957,268 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   previous.player.stats.matchSharpness === next.player.stats.matchSharpness
 )
 
+export function PlayerComparisonPopup({
+  leftPlayer,
+  rightPlayer,
+  leftColor,
+  rightColor,
+}: {
+  leftPlayer: MatchPlayer
+  rightPlayer: MatchPlayer
+  leftColor: string
+  rightColor: string
+}) {
+  const { t } = useTranslation()
+  const isGoalkeeper = playerIsGoalkeeper(leftPlayer)
+  const attributeColumns = leftPlayer.attributes || rightPlayer.attributes
+    ? buildAttributeColumns(isGoalkeeper)
+    : []
+
+  useLayoutEffect(() => {
+    setPlayerProfileBackdrop(true)
+    return () => setPlayerProfileBackdrop(false)
+  }, [])
+
+  return (
+    <div
+      data-player-comparison-popup
+      className="pointer-events-auto absolute left-1/2 top-1/2 z-50 w-[57rem] max-w-[calc(100%-1rem)] -translate-x-1/2 -translate-y-1/2"
+    >
+      <Card className="w-full gap-0 border border-border/80 py-0 shadow-2xl">
+        <CardHeader className="relative grid h-28 grid-cols-2 gap-0 overflow-hidden border-b bg-muted/35 p-0">
+          <ComparisonPlayerHeader player={leftPlayer} color={leftColor} side="left" />
+          <ComparisonPlayerHeader player={rightPlayer} color={rightColor} side="right" />
+          <ComparisonProfileFacts
+            leftPlayer={leftPlayer}
+            rightPlayer={rightPlayer}
+            leftColor={leftColor}
+            rightColor={rightColor}
+          />
+        </CardHeader>
+        <CardContent className="grid grid-cols-3 gap-x-6 p-3">
+          {attributeColumns.length > 0 ? attributeColumns.map((column, columnIndex) => (
+            <section key={column.title} className="flex min-w-0 flex-col">
+              <h3 className="mb-1.5 border-b pb-1 text-center text-xs font-bold uppercase tracking-wide">
+                {t(`playerProfile.attributeGroups.${column.title}`)}
+              </h3>
+              <div className="space-y-0.5">
+                {column.names
+                  .map((name) => ({
+                    name,
+                    left: displayAttributeValue(findAttributeValue(leftPlayer.attributes, name)),
+                    right: displayAttributeValue(findAttributeValue(rightPlayer.attributes, name)),
+                  }))
+                  .filter(({ left, right }) => left > 0 || right > 0)
+                  .map(({ name, left, right }) => (
+                    <ComparisonAttributeRow
+                      key={name}
+                      name={t(`playerProfile.attributes.${name}`, { defaultValue: name })}
+                      left={left}
+                      right={right}
+                      leftColor={leftColor}
+                      rightColor={rightColor}
+                    />
+                  ))}
+              </div>
+              {columnIndex === 0 && (
+                <ComparisonFootAbility
+                  leftAttributes={leftPlayer.attributes}
+                  rightAttributes={rightPlayer.attributes}
+                  leftColor={leftColor}
+                  rightColor={rightColor}
+                />
+              )}
+              {columnIndex === 1 && (
+                <ComparisonTraitList
+                  leftTraits={leftPlayer.attributes?.traits}
+                  rightTraits={rightPlayer.attributes?.traits}
+                  leftColor={leftColor}
+                  rightColor={rightColor}
+                />
+              )}
+              {columnIndex === 2 && (
+                <PlayerComparisonRadar
+                  leftAttributes={leftPlayer.attributes}
+                  rightAttributes={rightPlayer.attributes}
+                  isGoalkeeper={isGoalkeeper}
+                  leftColor={leftColor}
+                  rightColor={rightColor}
+                />
+              )}
+            </section>
+          )) : (
+            <div className="col-span-3 py-8 text-center text-muted-foreground">
+              {t("playerProfile.noAttributes")}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+function ComparisonPlayerHeader({
+  player,
+  color,
+  side,
+}: {
+  player: MatchPlayer
+  color: string
+  side: "left" | "right"
+}) {
+  const { t, i18n } = useTranslation()
+  const nation = nationDisplay(player.profile?.nationUid, i18n.resolvedLanguage ?? i18n.language)
+  const avatar = (
+    <Avatar className={`${side === "right" ? "order-2" : ""} h-28 w-28 rounded-none after:hidden`}>
+      {player.portraitUrl && <AvatarImage src={player.portraitUrl} alt={player.name} className="rounded-none object-cover" />}
+      <AvatarFallback className="rounded-none bg-transparent text-lg font-bold" style={{ color }}>{initials(player.name)}</AvatarFallback>
+    </Avatar>
+  )
+  const details = (
+    <div className={`grid min-w-0 pb-9 ${side === "right" ? "order-1 border-r text-right" : "order-2 border-l"} border-border/70`}>
+      <div className={`grid min-w-0 items-center gap-2 px-3 pb-2 pt-3 ${side === "right" ? "grid-cols-[7rem_minmax(0,1fr)]" : "grid-cols-[minmax(0,1fr)_7rem]"}`}>
+        <div
+          className={`min-w-0 ${
+            side === "right"
+              ? "order-2 pr-2 text-right"
+              : "pl-2 text-left"
+          }`}
+        >
+          <CardTitle
+            className={`flex w-full min-w-0 text-lg font-bold ${
+              side === "right" ? "justify-end" : "justify-start"
+            }`}
+          >
+            <span className="min-w-0 truncate">{player.name}</span>
+          </CardTitle>
+          <div className={`mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground ${side === "right" ? "flex-row-reverse" : ""}`}>
+            <span className="font-semibold" style={{ color }}>#{player.shirtNumber ?? "-"}</span>
+            <span>{familiarPosition(player)}</span>
+            {nation && <span>{side === "right" ? <>{nation.name} <span aria-hidden="true">{nation.flag}</span></> : <><span aria-hidden="true">{nation.flag}</span> {nation.name}</>}</span>}
+          </div>
+        </div>
+        <div className={`min-w-0 space-y-1 text-[10px] ${side === "right" ? "order-1" : ""}`}>
+          <CompactProfileFact mirrored={side === "right"} label={t("playerProfile.guideValue")} value={formatGuideValue(player.profile?.guideValueGbp)} />
+          <CompactProfileFact mirrored={side === "right"} label={t("playerProfile.weeklyWage")} value={formatWage(player.profile?.weeklyWage)} />
+          <ProfileValue value={formatInternationalRecord(player.profile, t)} />
+        </div>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className={`grid min-w-0 ${side === "right" ? "grid-cols-[minmax(0,1fr)_7rem]" : "grid-cols-[7rem_minmax(0,1fr)]"}`}>
+      {avatar}
+      {details}
+    </div>
+  )
+}
+
+function ComparisonProfileFacts({
+  leftPlayer,
+  rightPlayer,
+  leftColor,
+  rightColor,
+}: {
+  leftPlayer: MatchPlayer
+  rightPlayer: MatchPlayer
+  leftColor: string
+  rightColor: string
+}) {
+  const { t } = useTranslation()
+  const facts = [
+    {
+      label: t("playerProfile.age"),
+      left: formatAgeAndBirthDate(leftPlayer.age, leftPlayer.profile?.dateOfBirth),
+      right: formatAgeAndBirthDate(rightPlayer.age, rightPlayer.profile?.dateOfBirth),
+    },
+    {
+      label: t("playerProfile.bodyType"),
+      left: formatBodyType(leftPlayer.profile?.bodyType, t),
+      right: formatBodyType(rightPlayer.profile?.bodyType, t),
+    },
+    {
+      label: t("playerProfile.height"),
+      left: leftPlayer.profile?.heightCm ? `${leftPlayer.profile.heightCm} cm` : "-",
+      right: rightPlayer.profile?.heightCm ? `${rightPlayer.profile.heightCm} cm` : "-",
+    },
+    {
+      label: t("playerProfile.overallPhysicalCondition"),
+      left: formatProfileLevel(leftPlayer.stats.overallPhysicalCondition),
+      right: formatProfileLevel(rightPlayer.stats.overallPhysicalCondition),
+    },
+    {
+      label: t("playerProfile.matchSharpness"),
+      left: formatProfileLevel(leftPlayer.stats.matchSharpness),
+      right: formatProfileLevel(rightPlayer.stats.matchSharpness),
+    },
+  ]
+
+  return (
+    <div className="absolute inset-x-28 bottom-0 grid grid-cols-5 gap-x-2 border-t border-border/60 bg-muted/35 px-3 py-1.5 text-[10px]">
+      {facts.map((fact) => (
+        <div key={fact.label} className="min-w-0 text-center leading-tight">
+          <div className="truncate text-muted-foreground">{fact.label}</div>
+          <div className="mt-0.5 grid grid-cols-2 gap-1 font-semibold tabular-nums">
+            <span className="truncate text-right" style={{ color: leftColor }}>{fact.left}</span>
+            <span className="truncate text-left" style={{ color: rightColor }}>{fact.right}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ComparisonAttributeRow({
+  name,
+  left,
+  right,
+  leftColor,
+  rightColor,
+}: {
+  name: string
+  left: number
+  right: number
+  leftColor: string
+  rightColor: string
+}) {
+  const difference = Math.max(-20, Math.min(20, left - right))
+  const width = `${Math.abs(difference) / 20 * 50}%`
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_1.5rem_minmax(3.5rem,0.85fr)_1.5rem] items-center gap-1 leading-5">
+      <div className="truncate text-[11px] text-muted-foreground">{name}</div>
+      <span className="text-right text-xs font-bold tabular-nums" style={{ color: leftColor }}>{left || "-"}</span>
+      <div className="relative h-1.5 overflow-hidden rounded-full bg-muted">
+        <span className="absolute left-1/2 top-0 h-full w-px bg-border" />
+        {difference !== 0 && (
+          <span
+            className="absolute top-0 h-full rounded-full"
+            style={difference > 0
+              ? { right: "50%", width, backgroundColor: leftColor }
+              : { left: "50%", width, backgroundColor: rightColor }}
+          />
+        )}
+      </div>
+      <span className="text-left text-xs font-bold tabular-nums" style={{ color: rightColor }}>{right || "-"}</span>
+    </div>
+  )
+}
+
+function findAttributeValue(attributes: MatchPlayer["attributes"], name: string) {
+  return attributes?.technical[name] ?? attributes?.mental[name] ?? attributes?.physical[name] ?? attributes?.goalkeeping[name] ?? 0
+}
+
+function playerIsGoalkeeper(player: MatchPlayer) {
+  return player.inPossession?.position === "GK" || player.outOfPossession?.position === "GK" ||
+    (player.positionFamiliarities?.GK ?? 0) >= 15 || player.position === "GK"
+}
+
 function ProfileFact({ label, value }: { label: string; value: React.ReactNode }) {
   return <div className="flex min-w-0 flex-col leading-tight"><span className="truncate text-muted-foreground">{label}</span><span className="mt-0.5 truncate font-medium tabular-nums">{value}</span></div>
 }
 
-function CompactProfileFact({ label, value }: { label: string; value: React.ReactNode }) {
-  return <div className="flex min-w-0 items-center gap-1 leading-tight"><span className="shrink-0 text-muted-foreground">{label}</span><span className="truncate font-medium tabular-nums">{value}</span></div>
+function CompactProfileFact({ label, value, mirrored = false }: { label: string; value: React.ReactNode; mirrored?: boolean }) {
+  return <div className={`flex min-w-0 items-center gap-1 leading-tight ${mirrored ? "flex-row-reverse" : ""}`}><span className="shrink-0 text-muted-foreground">{label}</span><span className="truncate font-medium tabular-nums">{value}</span></div>
 }
 
 function ProfileValue({ value }: { value: React.ReactNode }) {
@@ -969,14 +1325,11 @@ function PlayerFootAbility({
 
 function FootAbilityIcon({ mirrored = false, className }: { mirrored?: boolean; className: string }) {
   return (
-    <span
+    <FootIcon
       aria-hidden="true"
-      className={`h-7 w-7 shrink-0 bg-current ${className}`}
-      style={{
-        WebkitMask: "url('/foot.svg') center / contain no-repeat",
-        mask: "url('/foot.svg') center / contain no-repeat",
-        transform: mirrored ? "scaleX(-1)" : undefined,
-      }}
+      focusable="false"
+      className={`h-7 w-7 shrink-0 ${className}`}
+      style={{ transform: mirrored ? "scaleX(-1)" : undefined }}
     />
   )
 }
@@ -998,6 +1351,158 @@ function PlayerTraitList({ traits: rawTraits }: { traits?: string }) {
           <span>{t("playerProfile.noPlayerTraits")}</span>
         )}
       </div>
+    </div>
+  )
+}
+
+function ComparisonFootAbility({
+  leftAttributes,
+  rightAttributes,
+  leftColor,
+  rightColor,
+}: {
+  leftAttributes?: NonNullable<MatchPlayer["attributes"]>
+  rightAttributes?: NonNullable<MatchPlayer["attributes"]>
+  leftColor: string
+  rightColor: string
+}) {
+  return (
+    <div className="mt-auto grid h-16 grid-cols-2 border-t pt-2">
+      <ComparisonPlayerFeet attributes={leftAttributes} color={leftColor} />
+      <ComparisonPlayerFeet attributes={rightAttributes} color={rightColor} mirrored />
+    </div>
+  )
+}
+
+function ComparisonPlayerFeet({
+  attributes,
+  color,
+  mirrored = false,
+}: {
+  attributes?: NonNullable<MatchPlayer["attributes"]>
+  color: string
+  mirrored?: boolean
+}) {
+  const { t } = useTranslation()
+  const feet = [
+    { label: t("playerProfile.leftFoot"), mirrored: true, raw: attributes?.technical["Left Foot"] ?? 0 },
+    { label: t("playerProfile.rightFoot"), mirrored: false, raw: attributes?.technical["Right Foot"] ?? 0 },
+  ]
+  return (
+    <div className={`grid grid-cols-2 gap-1 px-1 ${mirrored ? "border-l" : ""} border-border/70`} style={{ color }}>
+      {feet.map((foot) => {
+        const tier = footAbilityTier(displayAttributeValue(foot.raw))
+        return (
+          <div key={foot.label} className="flex min-w-0 flex-col items-center justify-center">
+            <FootAbilityIcon mirrored={foot.mirrored} className={tier.className} />
+            <span className="mt-0.5 truncate text-[9px] font-semibold leading-none">
+              {t(`playerProfile.footStrength.${tier.description}`)}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function ComparisonTraitList({
+  leftTraits,
+  rightTraits,
+  leftColor,
+  rightColor,
+}: {
+  leftTraits?: string
+  rightTraits?: string
+  leftColor: string
+  rightColor: string
+}) {
+  const { t } = useTranslation()
+  const sides = [
+    { color: leftColor, traits: decodePlayerTraits(leftTraits) },
+    { color: rightColor, traits: decodePlayerTraits(rightTraits) },
+  ]
+  return (
+    <div className="mt-auto grid h-16 grid-cols-2 border-t pt-2" aria-label={t("playerProfile.playerTraits")}>
+      {sides.map((side, index) => (
+        <div
+          key={index}
+          className={`scrollbar-hidden overflow-y-auto overscroll-contain px-1 text-[10px] leading-4 ${index === 1 ? "border-l" : ""} border-border/70`}
+          style={{ color: side.color }}
+        >
+          {side.traits.length > 0 ? (
+            <ul>
+              {side.traits.map((key) => <li key={key} className="break-words">• {t(`playerProfile.traits.${key}`)}</li>)}
+            </ul>
+          ) : t("playerProfile.noPlayerTraits")}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function PlayerComparisonRadar({
+  leftAttributes,
+  rightAttributes,
+  isGoalkeeper,
+  leftColor,
+  rightColor,
+}: {
+  leftAttributes?: NonNullable<MatchPlayer["attributes"]>
+  rightAttributes?: NonNullable<MatchPlayer["attributes"]>
+  isGoalkeeper: boolean
+  leftColor: string
+  rightColor: string
+}) {
+  const { t } = useTranslation()
+  const emptyAttributes = { technical: {}, mental: {}, physical: {}, goalkeeping: {} }
+  const leftAxes = buildRadarAxes(leftAttributes ?? emptyAttributes, isGoalkeeper)
+  const rightAxes = buildRadarAxes(rightAttributes ?? emptyAttributes, isGoalkeeper)
+  const centerX = 105
+  const centerY = 91
+  const radius = 55
+  const labelRadius = 76
+  const point = (index: number, distance: number) => {
+    const angle = -Math.PI / 2 + index * Math.PI / 4
+    return { x: centerX + Math.cos(angle) * distance, y: centerY + Math.sin(angle) * distance }
+  }
+  const polygon = (distance: number) => leftAxes
+    .map((_, index) => point(index, distance))
+    .map(({ x, y }) => `${x.toFixed(1)},${y.toFixed(1)}`)
+    .join(" ")
+  const valuePolygon = (axes: RadarAxis[]) => axes
+    .map((axis, index) => point(index, radius * Math.min(20, Math.max(0, axis.value)) / 20))
+    .map(({ x, y }) => `${x.toFixed(1)},${y.toFixed(1)}`)
+    .join(" ")
+
+  return (
+    <div className="mt-auto border-t pt-2">
+      <svg viewBox="0 0 210 182" className="mx-auto block w-full max-w-[13rem] overflow-visible" role="img" aria-label={t("playerProfile.radarLabel")}>
+        {[0.25, 0.5, 0.75, 1].map((level) => (
+          <polygon key={level} points={polygon(radius * level)} fill="none" className="stroke-border" strokeWidth={level === 1 ? 1.1 : 0.65} />
+        ))}
+        {leftAxes.map((axis, index) => {
+          const edge = point(index, radius)
+          const label = point(index, labelRadius)
+          const horizontal = Math.cos(-Math.PI / 2 + index * Math.PI / 4)
+          const anchor = horizontal > 0.25 ? "start" : horizontal < -0.25 ? "end" : "middle"
+          return (
+            <g key={axis.label}>
+              <line x1={centerX} y1={centerY} x2={edge.x} y2={edge.y} className="stroke-border" strokeWidth="0.65" />
+              <text x={label.x} y={label.y - 5} textAnchor={anchor} dominantBaseline="middle" className="fill-muted-foreground text-[10px] font-medium">
+                {t(`playerProfile.radarAxes.${axis.label}`)}
+              </text>
+              <text x={label.x - 2} y={label.y + 7} textAnchor="end" dominantBaseline="middle" className="text-[10px] font-bold" style={{ fill: leftColor }}>
+                {Math.round(axis.value)}
+              </text>
+              <text x={label.x + 2} y={label.y + 7} textAnchor="start" dominantBaseline="middle" className="text-[10px] font-bold" style={{ fill: rightColor }}>
+                {Math.round(rightAxes[index]?.value ?? 0)}
+              </text>
+            </g>
+          )
+        })}
+        <polygon points={valuePolygon(leftAxes)} fill={leftColor} fillOpacity="0.12" stroke={leftColor} strokeWidth="2" strokeLinejoin="round" />
+        <polygon points={valuePolygon(rightAxes)} fill={rightColor} fillOpacity="0.12" stroke={rightColor} strokeWidth="2" strokeLinejoin="round" />
+      </svg>
     </div>
   )
 }
@@ -1035,10 +1540,6 @@ function buildAttributeColumns(isGoalkeeper: boolean): AttributeColumn[] {
     { title: "mental", names: mentalOrder },
     { title: "physical", names: physicalOrder },
   ]
-}
-
-function findAttributeValue(attributes: NonNullable<MatchPlayer["attributes"]>, name: string) {
-  return attributes.technical[name] ?? attributes.mental[name] ?? attributes.physical[name] ?? attributes.goalkeeping[name] ?? 0
 }
 
 type RadarAxis = { label: string; value: number }

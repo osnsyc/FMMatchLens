@@ -3,6 +3,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -27,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ScoreHeader } from "@/components/ScoreHeader"
+import { PlayerComparisonPopup, SquadPanel } from "@/components/SquadPanel"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useTheme } from "@/components/theme-provider"
 import { useRealtimeMatch } from "@/api/realtimeMatch"
@@ -35,8 +37,13 @@ import { preprocessReplayArchive } from "@/api/replay/replayPreprocessor"
 import { buildInitialReplaySnapshot } from "@/api/replay/replaySession"
 import type { ReplayArchive } from "@/api/replay/replayTypes"
 import { changeLanguage, type SupportedLanguage } from "@/i18n"
-import type { MatchSnapshot } from "@/types/match"
+import type { MatchSnapshot, TeamSide } from "@/types/match"
 import { selectTeamDisplayColors } from "@/lib/teamColors"
+import {
+  pinnedPlayerMatchScopeKey,
+  updatePinnedPlayer,
+  type PinnedPlayersState,
+} from "@/lib/pinnedPlayerSelection"
 
 const FormationPitch = lazy(() =>
   import("@/components/FormationPitch").then((module) => ({
@@ -56,11 +63,6 @@ const MatchTimeline = lazy(() =>
 const Momentum = lazy(() =>
   import("@/components/Momentum").then((module) => ({
     default: module.Momentum,
-  }))
-)
-const SquadPanel = lazy(() =>
-  import("@/components/SquadPanel").then((module) => ({
-    default: module.SquadPanel,
   }))
 )
 const TacticalBoard = lazy(() =>
@@ -94,6 +96,7 @@ export function App() {
   const [draggingArchive, setDraggingArchive] = useState(false)
   const [isDemoLoading, setIsDemoLoading] = useState(false)
   const [isTacticalFocusMode, setIsTacticalFocusMode] = useState(false)
+  const [pinnedPlayers, setPinnedPlayers] = useState<PinnedPlayersState>({ ids: {} })
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const demoAbortRef = useRef<AbortController | null>(null)
   const showReplayFrame = useCallback((snapshot: MatchSnapshot) => {
@@ -186,6 +189,15 @@ export function App() {
     }
   }
   const sourceMatch = replayMatch ?? realtimeMatch
+  const pinnedPlayerMatchScope = pinnedPlayerMatchScopeKey(sourceMatch)
+  const pinnedPlayerMatchScopeRef = useRef(pinnedPlayerMatchScope)
+
+  useLayoutEffect(() => {
+    if (pinnedPlayerMatchScopeRef.current === pinnedPlayerMatchScope) return
+    pinnedPlayerMatchScopeRef.current = pinnedPlayerMatchScope
+    setPinnedPlayers({ ids: {} })
+  }, [pinnedPlayerMatchScope])
+
   const match = useMemo(() => {
     if (!sourceMatch) return null
     const displayColors = selectTeamDisplayColors(
@@ -227,6 +239,29 @@ export function App() {
     preset,
   ])
   const hasMatch = match !== null
+
+  const setPinnedPlayer = useCallback((side: TeamSide, playerId?: number) => {
+    setPinnedPlayers((current) => updatePinnedPlayer(current, side, playerId))
+  }, [])
+  const setPinnedHomePlayer = useCallback(
+    (playerId?: number) => setPinnedPlayer("home", playerId),
+    [setPinnedPlayer],
+  )
+  const setPinnedAwayPlayer = useCallback(
+    (playerId?: number) => setPinnedPlayer("away", playerId),
+    [setPinnedPlayer],
+  )
+
+  useEffect(() => {
+    if (pinnedPlayers.ids.home == null && pinnedPlayers.ids.away == null) return
+    const closePinnedProfiles = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Element && target.closest("[data-player-profile-popup], [data-player-comparison-popup], [data-player-profile-pin]")) return
+      setPinnedPlayers({ ids: {} })
+    }
+    document.addEventListener("pointerdown", closePinnedProfiles, true)
+    return () => document.removeEventListener("pointerdown", closePinnedProfiles, true)
+  }, [pinnedPlayers.ids.away, pinnedPlayers.ids.home])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -440,6 +475,9 @@ export function App() {
   const homePlayers = match.players.filter((player) => player.team === "home")
 
   const awayPlayers = match.players.filter((player) => player.team === "away")
+  const pinnedHomePlayer = homePlayers.find((player) => player.id === pinnedPlayers.ids.home)
+  const pinnedAwayPlayer = awayPlayers.find((player) => player.id === pinnedPlayers.ids.away)
+  const comparisonOpen = pinnedHomePlayer != null && pinnedAwayPlayer != null
 
   return (
     <main className="scrollbar-hidden h-svh w-full overflow-auto bg-background p-4 sm:p-6">
@@ -477,14 +515,17 @@ export function App() {
                 allPlayers={match.players}
                 events={match.events}
                 teamColor={match.home.color}
+                pinnedPlayerId={pinnedHomePlayer?.id}
+                attackingOpponent={pinnedPlayers.attackingSide === "away" ? pinnedAwayPlayer : undefined}
+                profilePopupSuppressed={comparisonOpen}
+                onPinnedPlayerChange={setPinnedHomePlayer}
               />
             </Card>
 
             {/* Central dashboard */}
             <div
-              data-player-profile-blur-target
               data-tactical-focus-mode={isTacticalFocusMode ? "true" : "false"}
-              className={`grid min-h-0 min-w-0 gap-2 ${
+              className={`relative grid min-h-0 min-w-0 gap-2 ${
                 isTacticalFocusMode
                   ? "grid-rows-1"
                   : "grid-rows-2 md:grid-rows-[minmax(0,0.8fr)_minmax(0,1.25fr)]"
@@ -492,6 +533,7 @@ export function App() {
             >
               {/* Top row: momentum | xG | formation */}
               <div
+                data-player-profile-blur-target
                 className={`${
                   isTacticalFocusMode ? "hidden" : "grid"
                 } min-h-0 min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,3fr)]`}
@@ -511,6 +553,7 @@ export function App() {
 
               {/* Bottom row: stats | tactical board | zone */}
               <div
+                data-player-profile-blur-target
                 className={`grid min-h-0 min-w-0 grid-cols-1 gap-2 ${
                   isTacticalFocusMode
                     ? ""
@@ -536,6 +579,14 @@ export function App() {
                   <ZonePanel match={match} />
                 </Card>
               </div>
+              {comparisonOpen && (
+                <PlayerComparisonPopup
+                  leftPlayer={pinnedHomePlayer}
+                  rightPlayer={pinnedAwayPlayer}
+                  leftColor={match.home.color ?? "var(--team-home-fallback)"}
+                  rightColor={match.away.color ?? "var(--team-away-fallback)"}
+                />
+              )}
             </div>
 
             {/* Away squad */}
@@ -551,6 +602,10 @@ export function App() {
                 allPlayers={match.players}
                 events={match.events}
                 teamColor={match.away.color}
+                pinnedPlayerId={pinnedAwayPlayer?.id}
+                attackingOpponent={pinnedPlayers.attackingSide === "home" ? pinnedHomePlayer : undefined}
+                profilePopupSuppressed={comparisonOpen}
+                onPinnedPlayerChange={setPinnedAwayPlayer}
               />
             </Card>
           </div>
