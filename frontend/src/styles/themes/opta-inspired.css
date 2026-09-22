@@ -58,11 +58,11 @@
   --event-selected: #dc3a44;
   --event-historical: #8c7e94;
 
-  --heatmap-stop-0: #eee8f2;
-  --heatmap-stop-1: #d8c9e7;
-  --heatmap-stop-2: #b595d3;
-  --heatmap-stop-3: #8a5abb;
-  --heatmap-stop-4: #dc3a44;
+  --heatmap-stop-0: var(--surface-panel);
+  --heatmap-stop-1: #6d28d9;
+  --heatmap-stop-2: #9b3fd1;
+  --heatmap-stop-3: #c33783;
+  --heatmap-stop-4: #ef476f;
   --heatmap-stop-5: #fd9d5b;
 
   --effect-highlight: rgb(253 72 144 / 13%);
@@ -134,11 +134,11 @@
   --event-selected: #fd4890;
   --event-historical: #9f90a8;
 
-  --heatmap-stop-0: #24113a;
-  --heatmap-stop-1: #4d1d6f;
-  --heatmap-stop-2: #7b2f9d;
-  --heatmap-stop-3: #c33783;
-  --heatmap-stop-4: #fd4890;
+  --heatmap-stop-0: var(--surface-panel);
+  --heatmap-stop-1: #8b5cf6;
+  --heatmap-stop-2: #b84ac4;
+  --heatmap-stop-3: #e43f8c;
+  --heatmap-stop-4: #fd5c9a;
   --heatmap-stop-5: #ffd166;
 
   --effect-highlight: rgb(253 72 144 / 18%);

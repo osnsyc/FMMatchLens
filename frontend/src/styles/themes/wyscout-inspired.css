@@ -48,12 +48,12 @@
   --event-trajectory: #3b4b57;
   --event-selected: #e05a35;
   --event-historical: #73818b;
-  --heatmap-stop-0: #e7f0f5;
-  --heatmap-stop-1: #b8d5e4;
-  --heatmap-stop-2: #72afcb;
-  --heatmap-stop-3: #2c789e;
+  --heatmap-stop-0: var(--surface-panel);
+  --heatmap-stop-1: #2f83aa;
+  --heatmap-stop-2: #4da9c4;
+  --heatmap-stop-3: #79c7c2;
   --heatmap-stop-4: #ed8a59;
-  --heatmap-stop-5: #e05a35;
+  --heatmap-stop-5: #d94a2b;
   --effect-highlight: rgb(255 255 255 / 72%);
   --effect-shadow: rgb(18 32 43 / 18%);
   --effect-panel-glow: transparent;

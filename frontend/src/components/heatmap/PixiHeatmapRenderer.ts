@@ -10,13 +10,19 @@ import {
   createDensityTexture,
   createHeatmapLutFilter,
   type DensityTexture,
+  type HeatmapToneMapping,
 } from "@/components/heatmap/heatmapTexture"
+import {
+  HEATMAP_BLUR_STEP_RATIO,
+  HEATMAP_GRID_HEIGHT,
+  HEATMAP_GRID_WIDTH,
+} from "@/api/heatmap"
 import type { HeatmapGrid } from "@/types/match"
 
-const GRID_WIDTH = 20
-const GRID_HEIGHT = 30
+const GRID_WIDTH = HEATMAP_GRID_WIDTH
+const GRID_HEIGHT = HEATMAP_GRID_HEIGHT
 const CELL_COUNT = GRID_WIDTH * GRID_HEIGHT
-const FILTER_RESOLUTION = 0.5
+const FILTER_RESOLUTION = 1
 
 export type HeatmapColorScale = {
   maxCellShare: number
@@ -114,6 +120,11 @@ export class PixiHeatmapRenderer {
     this.renderOnce()
   }
 
+  updateToneMapping(toneMapping: Partial<HeatmapToneMapping>) {
+    this.lutFilter.setToneMapping(toneMapping)
+    this.renderOnce()
+  }
+
   resize(width: number, height: number) {
     const nextWidth = Math.max(1, Math.round(width))
     const nextHeight = Math.max(1, Math.round(height))
@@ -155,7 +166,10 @@ export class PixiHeatmapRenderer {
   }
 
   private blurStrength() {
-    return Math.max(8, Math.min(this.width, this.height) * 0.055)
+    return Math.max(
+      6,
+      Math.min(this.width, this.height) * HEATMAP_BLUR_STEP_RATIO
+    )
   }
 
   private renderOnce() {

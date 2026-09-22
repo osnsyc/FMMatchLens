@@ -59,7 +59,7 @@
   --event-trajectory: var(--text-secondary);
   --event-selected: var(--ref-fm-pink);
   --event-historical: var(--text-muted);
-  --heatmap-stop-0: #2457ff;
+  --heatmap-stop-0: var(--surface-panel);
   --heatmap-stop-1: #16c8ff;
   --heatmap-stop-2: #35e66f;
   --heatmap-stop-3: #ffe14a;
@@ -122,7 +122,7 @@
   --event-trajectory: var(--text-secondary);
   --event-selected: var(--ref-fm-pink);
   --event-historical: var(--text-muted);
-  --heatmap-stop-0: #2457ff;
+  --heatmap-stop-0: var(--surface-panel);
   --heatmap-stop-1: #16c8ff;
   --heatmap-stop-2: #35e66f;
   --heatmap-stop-3: #ffe14a;

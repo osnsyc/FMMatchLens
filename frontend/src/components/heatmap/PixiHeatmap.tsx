@@ -4,6 +4,10 @@ import {
   PixiHeatmapRenderer,
   type HeatmapColorScale,
 } from "@/components/heatmap/PixiHeatmapRenderer"
+import {
+  DEFAULT_HEATMAP_TONE_MAPPING,
+  type HeatmapToneMapping,
+} from "@/components/heatmap/heatmapTexture"
 import type { HeatmapGrid } from "@/types/match"
 import { useTheme } from "@/components/theme-provider"
 
@@ -12,6 +16,7 @@ type PixiHeatmapProps = {
   width: number
   height: number
   colorScale?: HeatmapColorScale
+  toneMapping?: Partial<HeatmapToneMapping>
 }
 
 export function PixiHeatmap({
@@ -19,19 +24,22 @@ export function PixiHeatmap({
   width,
   height,
   colorScale,
+  toneMapping,
 }: PixiHeatmapProps) {
   const { settings, resolvedScheme } = useTheme()
   const hostRef = useRef<HTMLDivElement | null>(null)
   const rendererRef = useRef<PixiHeatmapRenderer | null>(null)
   const gridRef = useRef(grid)
   const colorScaleRef = useRef(colorScale)
+  const toneMappingRef = useRef(toneMapping)
   const sizeRef = useRef({ width, height })
 
   useEffect(() => {
     gridRef.current = grid
     colorScaleRef.current = colorScale
+    toneMappingRef.current = toneMapping
     sizeRef.current = { width, height }
-  }, [colorScale, grid, height, width])
+  }, [colorScale, grid, height, toneMapping, width])
 
   useEffect(() => {
     const host = hostRef.current
@@ -52,6 +60,9 @@ export function PixiHeatmap({
         }
         rendererRef.current = renderer
         renderer.updateLut(readHeatmapStops())
+        renderer.updateToneMapping(
+          toneMappingRef.current ?? DEFAULT_HEATMAP_TONE_MAPPING
+        )
         renderer.update(gridRef.current, colorScaleRef.current)
       } catch (error) {
         renderer?.destroy()
@@ -78,6 +89,12 @@ export function PixiHeatmap({
   }, [resolvedScheme, settings.colorVision, settings.presetId])
 
   useEffect(() => {
+    rendererRef.current?.updateToneMapping(
+      toneMapping ?? DEFAULT_HEATMAP_TONE_MAPPING
+    )
+  }, [toneMapping])
+
+  useEffect(() => {
     if (width > 0 && height > 0) rendererRef.current?.resize(width, height)
   }, [height, width])
 
@@ -87,8 +104,23 @@ export function PixiHeatmap({
 function readHeatmapStops() {
   const style = getComputedStyle(document.documentElement)
   return Array.from({ length: 6 }, (_, index) =>
-    cssColorToRgb(style.getPropertyValue(`--heatmap-stop-${index}`))
+    cssColorToRgb(
+      resolveCssVariables(
+        style.getPropertyValue(`--heatmap-stop-${index}`),
+        style
+      )
+    )
   )
+}
+
+function resolveCssVariables(color: string, style: CSSStyleDeclaration) {
+  let resolved = color.trim()
+  for (let depth = 0; depth < 4; depth += 1) {
+    const variable = resolved.match(/^var\(\s*(--[\w-]+)\s*\)$/)
+    if (!variable) return resolved
+    resolved = style.getPropertyValue(variable[1]).trim()
+  }
+  return resolved
 }
 
 function cssColorToRgb(color: string): number[] {

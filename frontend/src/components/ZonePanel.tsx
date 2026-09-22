@@ -68,24 +68,30 @@ export function ZonePanel({ match }: ZonePanelProps) {
   const selectedPlayer = teamPlayers.find(
     (player) => player.id === selectedPlayerByTeam[selectedTeam]
   )
+  const isPlayerHeatmap = selectedPlayer != null
+  const outfieldPlayerIdKeys = getOutfieldPlayerIdKeys(match.players)
   const outfieldHeatmaps = useMemo(() => {
-    const forTeam = (team: TeamSide) =>
+    const forPlayerIds = (playerIdKey: string) =>
       combineHeatmapGrids(
-        match.players
-          .filter((player) => player.team === team && !isGoalkeeper(player))
-          .map((player) =>
-            getHeatmap(match.heatmaps, {
-              scope: { type: "player", playerId: player.id },
-              phase: selectedPhase,
-              range: selectedRange,
-            })
-          )
+        parsePlayerIdKey(playerIdKey).map((playerId) =>
+          getHeatmap(match.heatmaps, {
+            scope: { type: "player", playerId },
+            phase: selectedPhase,
+            range: selectedRange,
+          })
+        )
       )
     return {
-      home: forTeam("home"),
-      away: forTeam("away"),
+      home: forPlayerIds(outfieldPlayerIdKeys.home),
+      away: forPlayerIds(outfieldPlayerIdKeys.away),
     }
-  }, [match.heatmaps, match.players, selectedPhase, selectedRange])
+  }, [
+    match.heatmaps,
+    outfieldPlayerIdKeys.away,
+    outfieldPlayerIdKeys.home,
+    selectedPhase,
+    selectedRange,
+  ])
   const heatmapGrid = selectedPlayer
     ? getHeatmap(match.heatmaps, {
         scope: { type: "player", playerId: selectedPlayer.id },
@@ -95,7 +101,7 @@ export function ZonePanel({ match }: ZonePanelProps) {
     : outfieldHeatmaps[selectedTeam]
   const heatmapColorScale = useMemo(() => {
     const bounds = getHeatmapColorScaleBounds(
-      selectedPlayer
+      isPlayerHeatmap
         ? [heatmapGrid]
         : [outfieldHeatmaps.home, outfieldHeatmaps.away]
     )
@@ -103,15 +109,15 @@ export function ZonePanel({ match }: ZonePanelProps) {
       maxCellShare: bounds.rawMaxCellShare,
       sampleDivisor: heatmapGrid.sampleCount,
       lutScale:
-        bounds.blurredMaxCellShare > 0
-          ? bounds.rawMaxCellShare / bounds.blurredMaxCellShare
+        bounds.blurredP99CellShare > 0
+          ? bounds.rawMaxCellShare / bounds.blurredP99CellShare
           : 1,
     }
   }, [
     heatmapGrid,
+    isPlayerHeatmap,
     outfieldHeatmaps.away,
     outfieldHeatmaps.home,
-    selectedPlayer,
   ])
 
   const heatLabels = useMemo<HeatLabel[]>(
@@ -354,4 +360,19 @@ function getPlayerSurname(player: MatchPlayer) {
   const displayName = (player.fullName ?? player.name).trim()
   const parts = displayName.split(/\s+/)
   return parts.at(-1) ?? displayName
+}
+
+function getOutfieldPlayerIdKeys(players: readonly MatchPlayer[]) {
+  const ids: Record<TeamSide, number[]> = { home: [], away: [] }
+  for (const player of players) {
+    if (!isGoalkeeper(player)) ids[player.team].push(player.id)
+  }
+  return {
+    home: ids.home.join(","),
+    away: ids.away.join(","),
+  }
+}
+
+function parsePlayerIdKey(key: string) {
+  return key === "" ? [] : key.split(",").map(Number)
 }

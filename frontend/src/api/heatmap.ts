@@ -9,8 +9,12 @@ import type {
   TeamSide,
 } from "@/types/match"
 
-const GRID_WIDTH = 20 as const
-const GRID_HEIGHT = 30 as const
+export const HEATMAP_GRID_WIDTH = 40 as const
+export const HEATMAP_GRID_HEIGHT = 60 as const
+export const HEATMAP_BLUR_STEP_RATIO = 0.02
+
+const GRID_WIDTH = HEATMAP_GRID_WIDTH
+const GRID_HEIGHT = HEATMAP_GRID_HEIGHT
 const CELL_COUNT = GRID_WIDTH * GRID_HEIGHT
 const EMPTY_DENSITY = new Float32Array(CELL_COUNT)
 
@@ -29,7 +33,6 @@ type Sample = {
   phase: Exclude<HeatmapPhase, "all">
   x: number
   y: number
-  cell: number
 }
 
 type RecentFrame = {
@@ -192,14 +195,6 @@ export class HeatmapDerivations {
           -halfLength,
           halfLength
         )
-        const column = Math.min(
-          GRID_WIDTH - 1,
-          Math.floor(x / (100 / GRID_WIDTH))
-        )
-        const row = Math.min(
-          GRID_HEIGHT - 1,
-          Math.floor(y / (100 / GRID_HEIGHT))
-        )
         const sample: Sample = {
           playerId: player.playerId,
           team: player.team,
@@ -209,7 +204,6 @@ export class HeatmapDerivations {
               : "outOfPossession",
           x,
           y,
-          cell: row * GRID_WIDTH + column,
         }
         samples.push(sample)
         this.applySample(this.stores.full, sample, 1)
@@ -240,6 +234,28 @@ export class HeatmapDerivations {
     sample: Sample,
     direction: 1 | -1
   ) {
+    const gridX = Math.min(
+      GRID_WIDTH - 1,
+      Math.max(0, (sample.x / 100) * GRID_WIDTH - 0.5)
+    )
+    const gridY = Math.min(
+      GRID_HEIGHT - 1,
+      Math.max(0, (sample.y / 100) * GRID_HEIGHT - 0.5)
+    )
+    const x0 = Math.floor(gridX)
+    const y0 = Math.floor(gridY)
+    const x1 = Math.min(GRID_WIDTH - 1, x0 + 1)
+    const y1 = Math.min(GRID_HEIGHT - 1, y0 + 1)
+    const fractionX = gridX - x0
+    const fractionY = gridY - y0
+    const cell00 = y0 * GRID_WIDTH + x0
+    const cell10 = y0 * GRID_WIDTH + x1
+    const cell01 = y1 * GRID_WIDTH + x0
+    const cell11 = y1 * GRID_WIDTH + x1
+    const weight00 = (1 - fractionX) * (1 - fractionY) * direction
+    const weight10 = fractionX * (1 - fractionY) * direction
+    const weight01 = (1 - fractionX) * fractionY * direction
+    const weight11 = fractionX * fractionY * direction
     const scopes: HeatmapScope[] = [
       { type: "player", playerId: sample.playerId },
       { type: "team", team: sample.team },
@@ -264,7 +280,10 @@ export class HeatmapDerivations {
         accumulator.sampleCount += direction
         accumulator.sumX += sample.x * direction
         accumulator.sumY += sample.y * direction
-        accumulator.density[sample.cell] += direction
+        accumulator.density[cell00] += weight00
+        accumulator.density[cell10] += weight10
+        accumulator.density[cell01] += weight01
+        accumulator.density[cell11] += weight11
         accumulator.dirty = true
         if (accumulator.sampleCount <= 0) {
           store.delete(key)
@@ -315,61 +334,55 @@ export function combineHeatmapGrids(
   }
 }
 
-const COLOR_SCALE_GAUSSIAN_KERNEL = [
-  0.071303, 0.131514, 0.189879, 0.214607, 0.189879, 0.131514, 0.071303,
-] as const
+const PIXI_BLUR_KERNEL_STANDARD_DEVIATION = 1.648
+const COLOR_SCALE_SIGMA_CELLS =
+  HEATMAP_BLUR_STEP_RATIO * GRID_WIDTH * PIXI_BLUR_KERNEL_STANDARD_DEVIATION
+const COLOR_SCALE_KERNEL = gaussianKernel(COLOR_SCALE_SIGMA_CELLS)
+const COLOR_SCALE_PERCENTILE = 0.99
 
 /**
- * Shared post-blur cell-share ceiling for a set of comparable grids.
+ * Shared post-blur cell-share P99 ceiling for a set of comparable grids.
  *
- * This mirrors the renderer's seven-tap separable Gaussian kernel. Computing
- * the ceiling after smoothing keeps sparse ranges (especially recent 15m)
- * from looking artificially cold while still giving both teams the same scale.
+ * The CPU kernel approximates the renderer's seven-tap blur at its configured
+ * screen-space step. P99 keeps an isolated peak from flattening the rest of the
+ * map while still giving comparable grids (for example both teams) one scale.
  */
 export function getHeatmapColorScaleBounds(grids: readonly HeatmapGrid[]) {
   let rawMaxCellShare = 0
-  let blurredMaxCellShare = 0
+  const blurredCellShares: number[] = []
   for (const grid of grids) {
     if (grid.sampleCount <= 0) continue
     for (const density of grid.density) {
       rawMaxCellShare = Math.max(rawMaxCellShare, density / grid.sampleCount)
     }
+    const horizontal = blurDensity(
+      grid.density,
+      GRID_WIDTH,
+      GRID_HEIGHT,
+      COLOR_SCALE_KERNEL,
+      true
+    )
+    const blurred = blurDensity(
+      horizontal,
+      GRID_WIDTH,
+      GRID_HEIGHT,
+      COLOR_SCALE_KERNEL,
+      false
+    )
     for (let y = 0; y < GRID_HEIGHT; y += 1) {
       for (let x = 0; x < GRID_WIDTH; x += 1) {
-        let blurredDensity = 0
-        for (
-          let kernelY = 0;
-          kernelY < COLOR_SCALE_GAUSSIAN_KERNEL.length;
-          kernelY += 1
-        ) {
-          const sampleY = Math.min(
-            GRID_HEIGHT - 1,
-            Math.max(0, y + kernelY - 3)
-          )
-          const weightY = COLOR_SCALE_GAUSSIAN_KERNEL[kernelY]
-          for (
-            let kernelX = 0;
-            kernelX < COLOR_SCALE_GAUSSIAN_KERNEL.length;
-            kernelX += 1
-          ) {
-            const sampleX = Math.min(
-              GRID_WIDTH - 1,
-              Math.max(0, x + kernelX - 3)
-            )
-            blurredDensity +=
-              (grid.density[sampleY * GRID_WIDTH + sampleX] ?? 0) *
-              weightY *
-              COLOR_SCALE_GAUSSIAN_KERNEL[kernelX]
-          }
-        }
-        blurredMaxCellShare = Math.max(
-          blurredMaxCellShare,
-          blurredDensity / grid.sampleCount
-        )
+        const cellShare = blurred[y * GRID_WIDTH + x] / grid.sampleCount
+        if (cellShare > 0) blurredCellShares.push(cellShare)
       }
     }
   }
-  return { rawMaxCellShare, blurredMaxCellShare }
+  blurredCellShares.sort((a, b) => a - b)
+  const percentileIndex = Math.max(
+    0,
+    Math.ceil(blurredCellShares.length * COLOR_SCALE_PERCENTILE) - 1
+  )
+  const blurredP99CellShare = blurredCellShares[percentileIndex] ?? 0
+  return { rawMaxCellShare, blurredP99CellShare }
 }
 
 export function buildHeatmapSnapshot(
@@ -438,4 +451,47 @@ function validPitchHalf(value: number) {
 function normalize(value: number, min: number, max: number) {
   if (!Number.isFinite(value)) return 50
   return Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100))
+}
+
+function gaussianKernel(sigma: number) {
+  const radius = Math.ceil(sigma * 3)
+  const kernel = new Float64Array(radius * 2 + 1)
+  let total = 0
+  for (let offset = -radius; offset <= radius; offset += 1) {
+    const weight = Math.exp(-(offset * offset) / (2 * sigma * sigma))
+    kernel[offset + radius] = weight
+    total += weight
+  }
+  for (let index = 0; index < kernel.length; index += 1) {
+    kernel[index] /= total
+  }
+  return kernel
+}
+
+function blurDensity(
+  density: ArrayLike<number>,
+  width: number,
+  height: number,
+  kernel: Float64Array,
+  horizontal: boolean
+) {
+  const output = new Float64Array(width * height)
+  const radius = (kernel.length - 1) / 2
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      let value = 0
+      for (let index = 0; index < kernel.length; index += 1) {
+        const offset = index - radius
+        const sampleX = horizontal
+          ? Math.min(width - 1, Math.max(0, x + offset))
+          : x
+        const sampleY = horizontal
+          ? y
+          : Math.min(height - 1, Math.max(0, y + offset))
+        value += density[sampleY * width + sampleX] * kernel[index]
+      }
+      output[y * width + x] = value
+    }
+  }
+  return output
 }

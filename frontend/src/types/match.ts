@@ -65,8 +65,8 @@ export type HeatmapQuery = {
   range: HeatmapRange
 }
 export type HeatmapGrid = {
-  width: 20
-  height: 30
+  width: 40
+  height: 60
   density: Float32Array
   sampleCount: number
   averageX: number

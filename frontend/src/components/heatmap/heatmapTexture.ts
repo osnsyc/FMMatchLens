@@ -6,6 +6,18 @@ import {
   UniformGroup,
 } from "pixi.js"
 
+export type HeatmapToneMapping = {
+  colorGamma: number
+  alphaGamma: number
+  thresholds: readonly [number, number, number, number, number]
+}
+
+export const DEFAULT_HEATMAP_TONE_MAPPING: HeatmapToneMapping = {
+  colorGamma: 1.2,
+  alphaGamma: 0.7,
+  thresholds: [0, 0.2, 0.4, 0.6, 0.8],
+}
+
 const filterVertex = `
 in vec2 aPosition;
 out vec2 vTextureCoord;
@@ -26,6 +38,13 @@ in vec2 vTextureCoord;
 out vec4 finalColor;
 uniform sampler2D uTexture;
 uniform float uScale;
+uniform float uColorGamma;
+uniform float uAlphaGamma;
+uniform float uThreshold0;
+uniform float uThreshold1;
+uniform float uThreshold2;
+uniform float uThreshold3;
+uniform float uThreshold4;
 uniform vec3 uStop0;
 uniform vec3 uStop1;
 uniform vec3 uStop2;
@@ -34,22 +53,24 @@ uniform vec3 uStop4;
 uniform vec3 uStop5;
 
 vec3 heatColor(float value) {
-  if (value <= 0.15) return uStop0;
-  if (value <= 0.35) return mix(uStop0, uStop1, (value - 0.15) / 0.20);
-  if (value <= 0.55) return mix(uStop1, uStop2, (value - 0.35) / 0.20);
-  if (value <= 0.75) return mix(uStop2, uStop3, (value - 0.55) / 0.20);
-  if (value <= 0.90) return mix(uStop3, uStop4, (value - 0.75) / 0.15);
-  return mix(uStop4, uStop5, (value - 0.90) / 0.10);
+  if (value <= uThreshold0) return uStop0;
+  if (value <= uThreshold1) return mix(uStop0, uStop1, (value - uThreshold0) / (uThreshold1 - uThreshold0));
+  if (value <= uThreshold2) return mix(uStop1, uStop2, (value - uThreshold1) / (uThreshold2 - uThreshold1));
+  if (value <= uThreshold3) return mix(uStop2, uStop3, (value - uThreshold2) / (uThreshold3 - uThreshold2));
+  if (value <= uThreshold4) return mix(uStop3, uStop4, (value - uThreshold3) / (uThreshold4 - uThreshold3));
+  return mix(uStop4, uStop5, (value - uThreshold4) / (1.0 - uThreshold4));
 }
 
 void main(void) {
-  float value = clamp(texture(uTexture, vTextureCoord).r * uScale, 0.0, 1.0);
-  if (value < 0.003) {
+  float density = clamp(texture(uTexture, vTextureCoord).r * uScale, 0.0, 1.0);
+  if (density < 0.003) {
     finalColor = vec4(0.0);
     return;
   }
-  float alpha = 0.08 + value * 0.74;
-  finalColor = vec4(heatColor(value) * alpha, alpha);
+  float colorValue = pow(density, uColorGamma);
+  float alphaValue = pow(density, uAlphaGamma);
+  float alpha = 0.08 + alphaValue * 0.74;
+  finalColor = vec4(heatColor(colorValue) * alpha, alpha);
 }`
 
 export type DensityTexture = {
@@ -68,7 +89,7 @@ export function createDensityTexture(
     width,
     height,
     format: "rgba32float",
-    scaleMode: "nearest",
+    scaleMode: "linear",
     autoGenerateMipmaps: false,
     autoGarbageCollect: false,
     label: "heatmap-density-f32",
@@ -84,8 +105,16 @@ export class HeatmapLutFilter extends Filter {
   private readonly heatmapUniforms: UniformGroup
 
   constructor() {
+    const toneMapping = DEFAULT_HEATMAP_TONE_MAPPING
     const heatmapUniforms = new UniformGroup({
       uScale: { value: 1, type: "f32" },
+      uColorGamma: { value: toneMapping.colorGamma, type: "f32" },
+      uAlphaGamma: { value: toneMapping.alphaGamma, type: "f32" },
+      uThreshold0: { value: toneMapping.thresholds[0], type: "f32" },
+      uThreshold1: { value: toneMapping.thresholds[1], type: "f32" },
+      uThreshold2: { value: toneMapping.thresholds[2], type: "f32" },
+      uThreshold3: { value: toneMapping.thresholds[3], type: "f32" },
+      uThreshold4: { value: toneMapping.thresholds[4], type: "f32" },
       uStop0: { value: [0.1412, 0.3412, 1], type: "vec3<f32>" },
       uStop1: { value: [0.0863, 0.7843, 1], type: "vec3<f32>" },
       uStop2: { value: [0.2078, 0.902, 0.4353], type: "vec3<f32>" },
@@ -100,7 +129,7 @@ export class HeatmapLutFilter extends Filter {
         name: "heatmap-lut-filter",
       }),
       resources: { heatmapUniforms },
-      resolution: 0.5,
+      resolution: 1,
       antialias: "off",
     })
     this.heatmapUniforms = heatmapUniforms
@@ -116,8 +145,56 @@ export class HeatmapLutFilter extends Filter {
     })
     this.heatmapUniforms.update()
   }
+
+  setToneMapping(toneMapping: Partial<HeatmapToneMapping>) {
+    if (toneMapping.colorGamma != null) {
+      this.heatmapUniforms.uniforms.uColorGamma = validGamma(
+        toneMapping.colorGamma,
+        "colorGamma"
+      )
+    }
+    if (toneMapping.alphaGamma != null) {
+      this.heatmapUniforms.uniforms.uAlphaGamma = validGamma(
+        toneMapping.alphaGamma,
+        "alphaGamma"
+      )
+    }
+    if (toneMapping.thresholds) {
+      assertValidThresholds(toneMapping.thresholds)
+      toneMapping.thresholds.forEach((threshold, index) => {
+        this.heatmapUniforms.uniforms[`uThreshold${index}`] = threshold
+      })
+    }
+    this.heatmapUniforms.update()
+  }
 }
 
 export function createHeatmapLutFilter() {
   return new HeatmapLutFilter()
+}
+
+function assertValidThresholds(
+  thresholds: HeatmapToneMapping["thresholds"]
+): void {
+  let previous = -1
+  for (const threshold of thresholds) {
+    if (
+      !Number.isFinite(threshold) ||
+      threshold < 0 ||
+      threshold <= previous ||
+      threshold >= 1
+    ) {
+      throw new Error(
+        "Heatmap LUT thresholds must be finite, strictly increasing values from 0 up to 1"
+      )
+    }
+    previous = threshold
+  }
+}
+
+function validGamma(value: number, name: string) {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`Heatmap ${name} must be a finite number greater than 0`)
+  }
+  return value
 }
