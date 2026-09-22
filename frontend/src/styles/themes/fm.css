@@ -52,7 +52,7 @@
   --pitch-line: #58715e;
   --pitch-zone: rgb(110 15 215 / 9%);
   --pitch-label: var(--text-secondary);
-  --event-important: #8a5a00;
+  --event-important: #ffd166;
   --event-contrast: #4d176d;
   --event-marker-foreground: var(--surface-page);
   --event-marker-shadow: rgb(0 0 0 / 65%);
@@ -115,7 +115,7 @@
   --pitch-line: #9ba8bc;
   --pitch-zone: rgb(175 120 255 / 10%);
   --pitch-label: var(--text-secondary);
-  --event-important: #f6c453;
+  --event-important: #ffd166;
   --event-contrast: #f4f0ff;
   --event-marker-foreground: var(--surface-page);
   --event-marker-shadow: rgb(255 255 255 / 45%);

@@ -16,7 +16,11 @@ export type Shape =
   "square" | "circle" | "triangle" | "triangle-down" | "pentagon" | "diamond"
 
 export type MarkerVariant =
-  "solid" | "outline" | "important" | "dashed" | "contrast" | "double"
+  "solid" | "outline" | "important" | "important-solid"
+
+export type MarkerDecoration = "top" | "bottom" | "left" | "right"
+export type TrajectoryStyle = "solid" | "dashed"
+export type TrajectoryColor = "team" | "important"
 
 export type DataMetric = {
   id: TacticalEventMetricId
@@ -24,6 +28,9 @@ export type DataMetric = {
   group: DataGroupId
   shape: Shape
   variant: MarkerVariant
+  decoration?: MarkerDecoration
+  trajectoryStyle?: TrajectoryStyle
+  trajectoryColor?: TrajectoryColor
   scale?: number
 }
 
@@ -36,6 +43,9 @@ export type TacticalRenderPoint = {
   group: DataGroupId
   shape: Shape
   variant: MarkerVariant
+  decoration?: MarkerDecoration
+  trajectoryStyle: TrajectoryStyle
+  trajectoryColor: TrajectoryColor
   x: number
   y: number
   anchorX?: number
@@ -75,10 +85,10 @@ export const groups: Array<{
 }> = [
   { id: "shots", label: "Shots", shape: "square" },
   { id: "distribution", label: "Distribution", shape: "circle" },
-  { id: "defensive", label: "Defensive", shape: "triangle" },
-  { id: "possession", label: "Possession", shape: "triangle-down" },
-  { id: "discipline", label: "Discipline", shape: "pentagon" },
-  { id: "goalkeeping", label: "Goalkeeping", shape: "diamond" },
+  { id: "defensive", label: "Defensive", shape: "diamond" },
+  { id: "possession", label: "Possession", shape: "pentagon" },
+  { id: "discipline", label: "Discipline", shape: "triangle-down" },
+  { id: "goalkeeping", label: "Goalkeeping", shape: "triangle" },
 ]
 
 export const metrics: DataMetric[] = [
@@ -87,7 +97,8 @@ export const metrics: DataMetric[] = [
     label: "Goals",
     group: "shots",
     shape: "square",
-    variant: "important",
+    variant: "important-solid",
+    trajectoryColor: "important",
     scale: 1.1,
   },
   {
@@ -104,6 +115,7 @@ export const metrics: DataMetric[] = [
     group: "shots",
     shape: "square",
     variant: "outline",
+    trajectoryStyle: "dashed",
     scale: 0.8,
   },
   {
@@ -111,7 +123,7 @@ export const metrics: DataMetric[] = [
     label: "Hit woodwork",
     group: "shots",
     shape: "square",
-    variant: "important",
+    variant: "solid",
     scale: 0.85,
   },
   {
@@ -119,7 +131,8 @@ export const metrics: DataMetric[] = [
     label: "Blocked shots",
     group: "shots",
     shape: "square",
-    variant: "dashed",
+    variant: "outline",
+    trajectoryStyle: "dashed",
     scale: 0.85,
   },
   {
@@ -136,6 +149,7 @@ export const metrics: DataMetric[] = [
     group: "distribution",
     shape: "circle",
     variant: "outline",
+    trajectoryStyle: "dashed",
     scale: 0.65,
   },
   {
@@ -151,7 +165,7 @@ export const metrics: DataMetric[] = [
     label: "Completed crosses",
     group: "distribution",
     shape: "circle",
-    variant: "double",
+    variant: "solid",
     scale: 0.8,
   },
   {
@@ -159,14 +173,15 @@ export const metrics: DataMetric[] = [
     label: "Incomplete crosses",
     group: "distribution",
     shape: "circle",
-    variant: "dashed",
+    variant: "outline",
+    trajectoryStyle: "dashed",
     scale: 0.8,
   },
   {
     id: "tacklesWon",
     label: "Tackles won",
     group: "defensive",
-    shape: "triangle",
+    shape: "diamond",
     variant: "solid",
     scale: 0.8,
   },
@@ -174,7 +189,7 @@ export const metrics: DataMetric[] = [
     id: "tacklesLost",
     label: "Tackles lost",
     group: "defensive",
-    shape: "triangle",
+    shape: "diamond",
     variant: "outline",
     scale: 0.8,
   },
@@ -182,63 +197,68 @@ export const metrics: DataMetric[] = [
     id: "aerialsWon",
     label: "Aerial duels won",
     group: "defensive",
-    shape: "triangle",
-    variant: "contrast",
+    shape: "diamond",
+    variant: "solid",
+    decoration: "top",
     scale: 0.8,
   },
   {
     id: "aerialsLost",
     label: "Aerial duels lost",
     group: "defensive",
-    shape: "triangle",
-    variant: "dashed",
+    shape: "diamond",
+    variant: "outline",
+    decoration: "top",
     scale: 0.8,
   },
   {
     id: "interceptions",
     label: "Interceptions",
     group: "defensive",
-    shape: "triangle",
-    variant: "double",
+    shape: "diamond",
+    variant: "solid",
+    decoration: "bottom",
     scale: 0.8,
   },
   {
     id: "clearances",
     label: "Clearances",
     group: "defensive",
-    shape: "triangle",
-    variant: "important",
+    shape: "diamond",
+    variant: "solid",
+    decoration: "left",
     scale: 0.8,
   },
   {
     id: "defensiveBlocks",
     label: "Defensive blocks",
     group: "defensive",
-    shape: "triangle",
-    variant: "dashed",
+    shape: "diamond",
+    variant: "solid",
+    decoration: "right",
     scale: 0.8,
   },
   {
     id: "dribblesCompleted",
     label: "Completed dribbles",
     group: "possession",
-    shape: "triangle-down",
-    variant: "solid",
+    shape: "pentagon",
+    variant: "important",
     scale: 0.8,
   },
   {
     id: "possessionGained",
     label: "Possession gained",
     group: "possession",
-    shape: "triangle-down",
-    variant: "important",
+    shape: "pentagon",
+    variant: "solid",
     scale: 0.8,
   },
   {
     id: "possessionLost",
     label: "Possession lost",
     group: "possession",
-    shape: "triangle-down",
+    shape: "pentagon",
     variant: "outline",
     scale: 0.8,
   },
@@ -246,31 +266,31 @@ export const metrics: DataMetric[] = [
     id: "touches",
     label: "Specific touches",
     group: "possession",
-    shape: "triangle-down",
-    variant: "contrast",
+    shape: "pentagon",
+    variant: "solid",
     scale: 0.7,
   },
   {
     id: "foulsCommitted",
     label: "Fouls committed",
     group: "discipline",
-    shape: "pentagon",
-    variant: "dashed",
+    shape: "triangle-down",
+    variant: "outline",
     scale: 0.85,
   },
   {
     id: "fouled",
     label: "Fouled",
     group: "discipline",
-    shape: "pentagon",
-    variant: "contrast",
+    shape: "triangle-down",
+    variant: "solid",
     scale: 0.85,
   },
   {
     id: "offsides",
     label: "Offsides",
     group: "discipline",
-    shape: "pentagon",
+    shape: "triangle-down",
     variant: "outline",
     scale: 0.85,
   },
@@ -278,7 +298,7 @@ export const metrics: DataMetric[] = [
     id: "goalkeeperSavesHeld",
     label: "Saves held",
     group: "goalkeeping",
-    shape: "diamond",
+    shape: "triangle",
     variant: "solid",
     scale: 0.9,
   },
@@ -286,7 +306,7 @@ export const metrics: DataMetric[] = [
     id: "goalkeeperSavesParried",
     label: "Saves parried",
     group: "goalkeeping",
-    shape: "diamond",
+    shape: "triangle",
     variant: "outline",
     scale: 0.9,
   },
@@ -391,7 +411,7 @@ export function buildShotChainRenderPoints(chains: readonly ShotChain[]) {
     const metric = metricById.get(metricId)
     if (metric) {
       const point = renderPointForEvent(event, metric)
-      point.size = Math.max(13, 15 * (metric.scale ?? 1))
+      point.size = Math.max(18, 20 * (metric.scale ?? 1))
       points.push(point)
     }
   }
@@ -413,6 +433,9 @@ export function renderPointForEvent(
     group: metric.group,
     shape: metric.shape,
     variant: metric.variant,
+    decoration: metric.decoration,
+    trajectoryStyle: metric.trajectoryStyle ?? "solid",
+    trajectoryColor: metric.trajectoryColor ?? "team",
     x: event.x,
     y: event.y,
     anchorX: event.anchorX,
@@ -426,7 +449,7 @@ export function renderPointForEvent(
       metric.id === "dribblesCompleted" ||
       metric.group === "shots" ||
       metric.group === "distribution",
-    size: Math.max(15, 17 * (metric.scale ?? 1)),
+    size: Math.max(20, 22 * (metric.scale ?? 1)),
     tick: event.tick,
     displayTick: event.displayTick,
     counterpart:

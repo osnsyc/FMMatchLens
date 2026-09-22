@@ -12,6 +12,7 @@ import {
   deduplicateTrajectoryPoints,
   metricById,
   renderPointForEvent,
+  type MarkerDecoration,
   type MarkerVariant,
   type Shape,
   type ShotChain,
@@ -57,7 +58,10 @@ type MarkerRecord = {
 const GRID_SIZE = 20
 const BASE_MARKER_SIZE = 20
 const HIT_DISTANCE_EPSILON = 0.001
-export const TACTICAL_EVENT_OVERSCAN_PX = 8
+const RENDER_RESOLUTION = 2
+const TRAJECTORY_DASH_LENGTH_PX = 4
+const TRAJECTORY_DASH_GAP_PX = 5
+export const TACTICAL_EVENT_OVERSCAN_PX = 16
 
 /** Persistent, demand-rendered tactical scene with incremental event diffs. */
 export class PixiTacticalRenderer {
@@ -152,7 +156,7 @@ export class PixiTacticalRenderer {
       backgroundAlpha: 0,
       antialias: true,
       preference: ["webgl"],
-      resolution: Math.min(window.devicePixelRatio || 1, 2),
+      resolution: RENDER_RESOLUTION,
       autoDensity: true,
     })
     renderer.canvas.className = "pointer-events-none block size-full"
@@ -429,7 +433,7 @@ export class PixiTacticalRenderer {
       ? this.teamColor(record.point.team)
       : this.resolvedAppearance.foreground
     const value = String(shirtNumber)
-    const fontSize = (7 * BASE_MARKER_SIZE) / record.point.size
+    const fontSize = (8.5 * BASE_MARKER_SIZE) / record.point.size
     if (!record.label) {
       record.label = new BitmapText({
         text: value,
@@ -452,6 +456,7 @@ export class PixiTacticalRenderer {
     record.labelValue = value
     record.labelColor = color
     record.labelFontSize = fontSize
+    record.label.position.set(0, markerLabelOffset(record.point.shape))
   }
 
   private markerGeometryKey(point: TacticalRenderPoint) {
@@ -459,6 +464,7 @@ export class PixiTacticalRenderer {
     return [
       point.shape,
       point.variant,
+      point.decoration ?? "",
       this.teamColor(point.team),
       colors.background,
       colors.important,
@@ -473,6 +479,7 @@ export class PixiTacticalRenderer {
     const context = createMarkerContext(
       point.shape,
       point.variant,
+      point.decoration,
       this.teamColor(point.team),
       this.resolvedAppearance
     )
@@ -496,7 +503,9 @@ export class PixiTacticalRenderer {
     drawEventTrajectory(
       graphic,
       point,
-      this.teamColor(point.team),
+      point.trajectoryColor === "important"
+        ? this.resolvedAppearance.important
+        : this.teamColor(point.team),
       this.width,
       this.height,
       false
@@ -674,52 +683,53 @@ export class PixiTacticalRenderer {
 function createMarkerContext(
   shape: Shape,
   variant: MarkerVariant,
+  decoration: MarkerDecoration | undefined,
   teamColor: number,
   appearance: ResolvedAppearance
 ) {
   const context = new GraphicsContext()
-  if (variant === "double") {
-    drawShape(context, shape, 1)
-    context.stroke({ width: 1.8, color: appearance.important, join: "round" })
-    drawShape(context, shape, 0.58)
-    context.fill({ color: teamColor })
-    context.stroke({ width: 1.2, color: appearance.foreground, join: "round" })
-    return context
-  }
-
-  const fill = variant !== "outline" && variant !== "dashed"
+  const fill = variant !== "outline"
+  const fillColor =
+    variant === "important-solid" ? appearance.important : teamColor
   const strokeColor =
-    variant === "important"
+    variant === "important" || variant === "important-solid"
       ? appearance.important
-      : variant === "contrast"
-        ? appearance.contrast
-        : variant === "outline" || variant === "dashed"
-          ? teamColor
-          : appearance.background
+      : teamColor
   const strokeWidth =
     variant === "outline"
       ? 2.2
-      : variant === "important" ||
-          variant === "dashed" ||
-          variant === "contrast"
+      : variant === "important" || variant === "important-solid"
         ? 2
         : 1.2
 
-  if (variant === "dashed") {
-    const outline = shapeOutline(shape)
-    drawDashedPolyline(context, outline, true, 3, 1.8)
-    context.stroke({
-      width: strokeWidth,
-      color: strokeColor,
-      join: "round",
-      cap: "round",
-    })
-    return context
-  }
   drawShape(context, shape, 1)
-  if (fill) context.fill({ color: teamColor })
+  if (fill) context.fill({ color: fillColor })
   context.stroke({ width: strokeWidth, color: strokeColor, join: "round" })
+  if (decoration) {
+    drawMarkerDecoration(context, decoration)
+    context.stroke({ width: 1.8, color: teamColor, cap: "round" })
+  }
   return context
+}
+
+function drawMarkerDecoration(
+  context: GraphicsContext,
+  decoration: MarkerDecoration
+) {
+  switch (decoration) {
+    case "top":
+      context.moveTo(-4, -10).lineTo(4, -10)
+      break
+    case "bottom":
+      context.moveTo(-4, 10).lineTo(4, 10)
+      break
+    case "left":
+      context.moveTo(-10, -4).lineTo(-10, 4)
+      break
+    case "right":
+      context.moveTo(10, -4).lineTo(10, 4)
+      break
+  }
 }
 
 function drawShape(context: GraphicsContext, shape: Shape, scale: number) {
@@ -839,17 +849,24 @@ function drawEventTrajectory(
     )
     return
   }
-  const start = toPixels(
+  const rawStart = toPixels(
     point.trajectoryStartX ?? point.x,
     point.trajectoryStartY ?? point.y,
     width,
     height
   )
   const end = toPixels(point.endX, point.endY, width, height)
-  const dashed =
-    !chain && (point.variant === "outline" || point.variant === "dashed")
+  const start = clipTrajectoryAtMarker(rawStart, end, point, width, height)
+  if (!start) return
+  const dashed = !chain && point.trajectoryStyle === "dashed"
   if (dashed) {
-    drawDashedPolyline(graphic, [start, end], false, 3, 2)
+    drawDashedPolyline(
+      graphic,
+      [start, end],
+      false,
+      TRAJECTORY_DASH_LENGTH_PX,
+      TRAJECTORY_DASH_GAP_PX
+    )
   } else {
     graphic.moveTo(start.x, start.y).lineTo(end.x, end.y)
   }
@@ -896,7 +913,13 @@ function drawDribble(
         normalized[0].y - point.anchorY
       ) >= 0.25
     ) {
-      drawDashedPolyline(graphic, [anchor, first], false, 3, 2)
+      drawDashedPolyline(
+        graphic,
+        [anchor, first],
+        false,
+        TRAJECTORY_DASH_LENGTH_PX,
+        TRAJECTORY_DASH_GAP_PX
+      )
       graphic.stroke({
         width: connectorWidth,
         color,
@@ -971,7 +994,7 @@ function drawRenderPointChain(
     if (Math.hypot(toX - fromX, toY - fromY) < 0.5) continue
     const from = toPixels(fromX, fromY, width, height)
     const to = toPixels(toX, toY, width, height)
-    drawDashedPolyline(graphic, [from, to], false, 4, 3)
+    drawDashedPolyline(graphic, [from, to], false, 5, 5)
     graphic.stroke({ width: 1.25, color, alpha: 0.58, cap: "round" })
     drawArrowHead(graphic, from, to, color, 0.58, 4)
   }
@@ -999,6 +1022,40 @@ function drawArrowHead(
     )
     .closePath()
     .fill({ color, alpha })
+}
+
+function clipTrajectoryAtMarker(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  point: TacticalRenderPoint,
+  width: number,
+  height: number
+) {
+  const center = toPixels(point.x, point.y, width, height)
+  // Include the hover enlargement so the trajectory never shows through a
+  // hollow marker while it is emphasized.
+  const radius = point.size * 0.47
+  const offsetX = start.x - center.x
+  const offsetY = start.y - center.y
+  if (Math.hypot(offsetX, offsetY) >= radius) return start
+
+  const deltaX = end.x - start.x
+  const deltaY = end.y - start.y
+  const length = Math.hypot(deltaX, deltaY)
+  if (length <= radius) return undefined
+  const directionX = deltaX / length
+  const directionY = deltaY / length
+  const projection = offsetX * directionX + offsetY * directionY
+  const discriminant =
+    projection * projection -
+    (offsetX * offsetX + offsetY * offsetY - radius * radius)
+  if (discriminant < 0) return start
+  const exitDistance = -projection + Math.sqrt(discriminant) + 0.75
+  if (exitDistance >= length) return undefined
+  return {
+    x: start.x + directionX * exitDistance,
+    y: start.y + directionY * exitDistance,
+  }
 }
 
 function drawDashedPolyline(
@@ -1042,6 +1099,9 @@ function sameTrajectoryGeometry(
   return (
     left.metricId === right.metricId &&
     left.variant === right.variant &&
+    left.decoration === right.decoration &&
+    left.trajectoryStyle === right.trajectoryStyle &&
+    left.trajectoryColor === right.trajectoryColor &&
     left.x === right.x &&
     left.y === right.y &&
     left.anchorX === right.anchorX &&
@@ -1079,7 +1139,13 @@ function shotChainSignature(chains: readonly ShotChain[]) {
 }
 
 function isHollow(variant: MarkerVariant) {
-  return variant === "outline" || variant === "dashed"
+  return variant === "outline"
+}
+
+function markerLabelOffset(shape: Shape) {
+  if (shape === "triangle") return 1.4
+  if (shape === "triangle-down") return -1.4
+  return 0
 }
 
 function toPixels(x: number, y: number, width: number, height: number) {

@@ -42,6 +42,7 @@ import {
   metricById,
   metrics,
   type DataMetric,
+  type MarkerDecoration,
   type MarkerVariant,
   type Shape,
   type ShotChain,
@@ -186,7 +187,7 @@ export const TacticalBoard = memo(function TacticalBoard({
                     shape={group.shape}
                     variant="solid"
                     color="var(--primary)"
-                    size={12}
+                    size={15}
                   />
                   <span className="truncate">{groupLabel(group)}</span>
                   <span className="text-[9px] text-muted-foreground tabular-nums">
@@ -222,8 +223,9 @@ export const TacticalBoard = memo(function TacticalBoard({
                         <MarkerGlyph
                           shape={metric.shape}
                           variant={metric.variant}
+                          decoration={metric.decoration}
                           color="var(--primary)"
-                          size={13}
+                          size={16}
                         />
                         <span>{metricLabel(metric)}</span>
                       </MenubarCheckboxItem>
@@ -281,8 +283,9 @@ export const TacticalBoard = memo(function TacticalBoard({
                   <MarkerGlyph
                     shape={metric.shape}
                     variant={metric.variant}
+                    decoration={metric.decoration}
                     color="var(--primary)"
-                    size={13}
+                    size={16}
                   />
                   <span className="leading-tight">{metricLabel(metric)}</span>
                 </div>
@@ -430,8 +433,9 @@ function TacticalPointTooltip({
         <MarkerGlyph
           shape={metric.shape}
           variant={metric.variant}
+          decoration={metric.decoration}
           color={color}
-          size={11}
+          size={14}
         />
         <span>
           {metricLabel(metric)}: <strong>1</strong>
@@ -442,8 +446,9 @@ function TacticalPointTooltip({
           <MarkerGlyph
             shape={counterpartMetric.shape}
             variant={counterpartMetric.variant}
+            decoration={counterpartMetric.decoration}
             color={counterpartColor}
-            size={11}
+            size={14}
           />
           <span>
             {metricLabel(counterpartMetric)}:{" "}
@@ -571,40 +576,16 @@ function buildLaneShares(counts: [number, number, number]): LaneShare[] {
 function MarkerGlyph({
   shape,
   variant,
+  decoration,
   color,
   size,
 }: {
   shape: Shape
   variant: MarkerVariant
+  decoration?: MarkerDecoration
   color: string
   size: number
 }) {
-  if (variant === "double") {
-    return (
-      <svg
-        width={size}
-        height={size}
-        viewBox="0 0 20 20"
-        aria-hidden="true"
-        className="shrink-0 overflow-visible"
-      >
-        <ShapeElement
-          shape={shape}
-          fill="transparent"
-          stroke="var(--important-event)"
-          strokeWidth={1.8}
-        />
-        <g transform="translate(10 10) scale(.58) translate(-10 -10)">
-          <ShapeElement
-            shape={shape}
-            fill={color}
-            stroke="var(--event-marker-foreground)"
-            strokeWidth={1.2}
-          />
-        </g>
-      </svg>
-    )
-  }
   return (
     <svg
       width={size}
@@ -614,6 +595,9 @@ function MarkerGlyph({
       className="shrink-0 overflow-visible"
     >
       <ShapeElement shape={shape} {...markerStyle(variant, color)} />
+      {decoration && (
+        <MarkerDecorationElement decoration={decoration} color={color} />
+      )}
     </svg>
   )
 }
@@ -621,23 +605,44 @@ function MarkerGlyph({
 function markerStyle(variant: MarkerVariant, color: string) {
   switch (variant) {
     case "solid":
-      return { fill: color, stroke: "var(--background)", strokeWidth: 1.2 }
+      return { fill: color, stroke: color, strokeWidth: 1.2 }
     case "outline":
       return { fill: "transparent", stroke: color, strokeWidth: 2.2 }
     case "important":
       return { fill: color, stroke: "var(--important-event)", strokeWidth: 2 }
-    case "dashed":
+    case "important-solid":
       return {
-        fill: "transparent",
-        stroke: color,
+        fill: "var(--important-event)",
+        stroke: "var(--important-event)",
         strokeWidth: 2,
-        strokeDasharray: "3 1.8",
       }
-    case "contrast":
-      return { fill: color, stroke: "var(--event-contrast)", strokeWidth: 2 }
     default:
       return { fill: color, stroke: "var(--background)", strokeWidth: 1 }
   }
+}
+
+function MarkerDecorationElement({
+  decoration,
+  color,
+}: {
+  decoration: MarkerDecoration
+  color: string
+}) {
+  const coordinates = {
+    top: { x1: 6, y1: 0, x2: 14, y2: 0 },
+    bottom: { x1: 6, y1: 20, x2: 14, y2: 20 },
+    left: { x1: 0, y1: 6, x2: 0, y2: 14 },
+    right: { x1: 20, y1: 6, x2: 20, y2: 14 },
+  }[decoration]
+  return (
+    <line
+      {...coordinates}
+      stroke={color}
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      vectorEffect="non-scaling-stroke"
+    />
+  )
 }
 
 function ShapeElement({
