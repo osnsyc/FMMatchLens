@@ -53,6 +53,12 @@ type MarkerRecord = {
   labelValue?: string
   geometryKey: string
   historical: boolean
+  targetVisible: boolean
+  revealProgress: number
+}
+
+type MarkerReveal = {
+  startedAt: number
 }
 
 const GRID_SIZE = 20
@@ -61,6 +67,7 @@ const HIT_DISTANCE_EPSILON = 0.001
 const RENDER_RESOLUTION = 2
 const TRAJECTORY_DASH_LENGTH_PX = 4
 const TRAJECTORY_DASH_GAP_PX = 5
+const MARKER_REVEAL_DURATION_MS = 250
 export const TACTICAL_EVENT_OVERSCAN_PX = 16
 
 /** Persistent, demand-rendered tactical scene with incremental event diffs. */
@@ -78,6 +85,7 @@ export class PixiTacticalRenderer {
   private readonly chainMarkerByEventId = new Map<string, MarkerRecord>()
   private readonly markerContextByKey = new Map<string, GraphicsContext>()
   private readonly spatialGrid = new Map<number, MarkerRecord[]>()
+  private readonly markerReveals = new Map<MarkerRecord, MarkerReveal>()
   private visibleEventIds = new Set<string>()
   private readonly colorProbe: HTMLSpanElement
   private readonly colorCanvasContext: CanvasRenderingContext2D
@@ -90,6 +98,10 @@ export class PixiTacticalRenderer {
   private shotChains: readonly ShotChain[] = []
   private hoveredEventId: string | null = null
   private chainSignature = ""
+  private animationFrame: number | null = null
+  private readonly reduceMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)"
+  ).matches
 
   private constructor(
     renderer: Renderer,
@@ -180,7 +192,6 @@ export class PixiTacticalRenderer {
         const geometryChanged = current.geometryKey !== nextKey
         const trajectoryChanged = !sameTrajectoryGeometry(current.point, point)
         current.point = point
-        current.container.visible = true
         if (geometryChanged) {
           current.geometryKey = nextKey
           current.graphic.context = this.markerContext(point)
@@ -196,12 +207,9 @@ export class PixiTacticalRenderer {
     for (const [id, record] of this.markerByEventId) {
       if (nextVisibleIds.has(id)) continue
       if (scene.sourceEventIds.has(id)) {
-        record.container.visible = false
-        const trajectory = this.trajectoryByEventId.get(id)
-        if (trajectory) trajectory.visible = false
+        this.animateMarkerVisibility(record, false)
       } else {
-        this.destroyMarker(this.markerByEventId, id)
-        this.destroyTrajectory(id)
+        this.animateMarkerVisibility(record, false, true)
       }
     }
 
@@ -350,6 +358,9 @@ export class PixiTacticalRenderer {
   }
 
   destroy() {
+    if (this.animationFrame != null) cancelAnimationFrame(this.animationFrame)
+    this.animationFrame = null
+    this.markerReveals.clear()
     for (const context of this.markerContextByKey.values()) context.destroy()
     this.markerContextByKey.clear()
     this.markerByEventId.clear()
@@ -380,6 +391,8 @@ export class PixiTacticalRenderer {
       graphic,
       geometryKey: this.markerGeometryKey(point),
       historical,
+      targetVisible: false,
+      revealProgress: 0,
     }
     this.positionMarker(record)
     this.updateMarkerLabel(record)
@@ -389,6 +402,7 @@ export class PixiTacticalRenderer {
   private destroyMarker(map: Map<string, MarkerRecord>, id: string) {
     const record = map.get(id)
     if (!record) return
+    this.markerReveals.delete(record)
     record.container.removeFromParent()
     record.container.destroy({ children: true })
     map.delete(id)
@@ -399,16 +413,25 @@ export class PixiTacticalRenderer {
       (record.point.x / 100) * this.width,
       (record.point.y / 100) * this.height
     )
-    const scale = record.point.size / BASE_MARKER_SIZE
+    this.applyMarkerScale(record)
     const emphasized = record.point.id === this.hoveredEventId
-    record.container.scale.set(emphasized ? scale * 1.25 : scale)
     record.container.zIndex = emphasized ? 10 : 0
   }
 
   private setMarkerEmphasis(record: MarkerRecord, emphasized: boolean) {
-    const scale = record.point.size / BASE_MARKER_SIZE
-    record.container.scale.set(emphasized ? scale * 1.25 : scale)
+    this.applyMarkerScale(record, emphasized)
     record.container.zIndex = emphasized ? 10 : 0
+  }
+
+  private applyMarkerScale(
+    record: MarkerRecord,
+    emphasized = record.point.id === this.hoveredEventId
+  ) {
+    const scale =
+      (record.point.size / BASE_MARKER_SIZE) *
+      revealScale(record.revealProgress) *
+      (emphasized ? 1.25 : 1)
+    record.container.scale.set(scale)
   }
 
   private updateMarkerLabel(record: MarkerRecord) {
@@ -510,9 +533,9 @@ export class PixiTacticalRenderer {
       this.height,
       false
     )
-    graphic.visible =
-      this.visibleEventIds.has(point.id) &&
-      (this.selectedShotId == null || this.selectedShotId === point.id)
+    const record = this.markerByEventId.get(point.id)
+    graphic.alpha = trajectoryRevealAlpha(record?.revealProgress ?? 0)
+    graphic.visible = record?.container.visible ?? false
   }
 
   private destroyTrajectory(id: string) {
@@ -543,21 +566,122 @@ export class PixiTacticalRenderer {
       }
     }
     for (const id of [...this.chainMarkerByEventId.keys()]) {
-      if (!nextIds.has(id)) this.destroyMarker(this.chainMarkerByEventId, id)
+      if (!nextIds.has(id)) {
+        this.animateMarkerVisibility(
+          this.chainMarkerByEventId.get(id)!,
+          false,
+          true
+        )
+      }
     }
   }
 
   private applySelectionVisibility() {
     for (const [id, record] of this.markerByEventId) {
-      record.container.visible =
+      this.animateMarkerVisibility(
+        record,
         this.visibleEventIds.has(id) &&
-        (this.selectedShotId == null || id === this.selectedShotId)
-      const trajectory = this.trajectoryByEventId.get(id)
-      if (trajectory) trajectory.visible = record.container.visible
+          (this.selectedShotId == null || id === this.selectedShotId)
+      )
     }
-    this.chainMarkerLayer.visible = this.selectedShotId != null
-    this.shotChainLayer.visible = this.selectedShotId != null
+    for (const record of this.chainMarkerByEventId.values()) {
+      this.animateMarkerVisibility(record, this.selectedShotId != null)
+    }
+    this.syncShotChainReveal()
     this.selectionRing.visible = this.selectedShotId != null
+  }
+
+  private animateMarkerVisibility(
+    record: MarkerRecord,
+    visible: boolean,
+    destroyWhenHidden = false
+  ) {
+    record.targetVisible = visible
+    if (!visible) {
+      this.markerReveals.delete(record)
+      record.revealProgress = 0
+      record.container.visible = false
+      this.applyMarkerScale(record)
+      if (!record.historical) {
+        const trajectory = this.trajectoryByEventId.get(record.point.id)
+        if (trajectory) {
+          trajectory.visible = false
+          trajectory.alpha = 0
+        }
+      }
+      if (destroyWhenHidden) this.destroyMarkerRecord(record)
+      return
+    }
+
+    record.container.visible = true
+    const trajectory = record.historical
+      ? undefined
+      : this.trajectoryByEventId.get(record.point.id)
+    if (trajectory) trajectory.visible = true
+
+    if (record.revealProgress >= 1 || this.markerReveals.has(record)) return
+    if (this.reduceMotion) {
+      this.setMarkerReveal(record, 1)
+      return
+    }
+
+    this.setMarkerReveal(record, 0)
+    this.markerReveals.set(record, { startedAt: performance.now() })
+    this.scheduleAnimationFrame()
+  }
+
+  private scheduleAnimationFrame() {
+    if (this.animationFrame != null || this.markerReveals.size === 0) return
+    this.animationFrame = requestAnimationFrame(this.advanceMarkerReveals)
+  }
+
+  private readonly advanceMarkerReveals = (timestamp: number) => {
+    this.animationFrame = null
+    for (const [record, reveal] of this.markerReveals) {
+      const progress = Math.min(
+        1,
+        (timestamp - reveal.startedAt) / MARKER_REVEAL_DURATION_MS
+      )
+      this.setMarkerReveal(record, progress)
+      if (progress < 1) continue
+      this.markerReveals.delete(record)
+    }
+    this.syncShotChainReveal()
+    this.renderOnce()
+    this.scheduleAnimationFrame()
+  }
+
+  private setMarkerReveal(record: MarkerRecord, progress: number) {
+    record.revealProgress = progress
+    this.applyMarkerScale(record)
+    if (record.historical) return
+    const trajectory = this.trajectoryByEventId.get(record.point.id)
+    if (trajectory) trajectory.alpha = trajectoryRevealAlpha(progress)
+  }
+
+  private destroyMarkerRecord(record: MarkerRecord) {
+    const records = record.historical
+      ? this.chainMarkerByEventId
+      : this.markerByEventId
+    if (records.get(record.point.id) !== record) return
+    this.destroyMarker(records, record.point.id)
+    if (!record.historical) this.destroyTrajectory(record.point.id)
+  }
+
+  private syncShotChainReveal() {
+    if (this.selectedShotId == null) {
+      this.shotChainLayer.visible = false
+      this.shotChainLayer.alpha = 0
+      return
+    }
+
+    this.shotChainLayer.visible = true
+    let revealProgress = 1
+    for (const record of this.chainMarkerByEventId.values()) {
+      if (!record.targetVisible) continue
+      revealProgress = Math.min(revealProgress, record.revealProgress)
+    }
+    this.shotChainLayer.alpha = trajectoryRevealAlpha(revealProgress)
   }
 
   private drawSelectionRing() {
@@ -597,7 +721,7 @@ export class PixiTacticalRenderer {
   private rebuildSpatialGrid() {
     this.spatialGrid.clear()
     for (const record of this.allMarkers()) {
-      if (!record.container.visible) continue
+      if (!record.targetVisible) continue
       const cellX = clamp(
         Math.floor(record.point.x / (100 / GRID_SIZE)),
         0,
@@ -1146,6 +1270,15 @@ function markerLabelOffset(shape: Shape) {
   if (shape === "triangle") return 1.4
   if (shape === "triangle-down") return -1.4
   return 0
+}
+
+function revealScale(progress: number) {
+  const normalized = clamp(progress, 0, 1)
+  return 1 - Math.pow(1 - normalized, 3)
+}
+
+function trajectoryRevealAlpha(progress: number) {
+  return clamp((revealScale(progress) - 0.5) * 2, 0, 1)
 }
 
 function toPixels(x: number, y: number, width: number, height: number) {
