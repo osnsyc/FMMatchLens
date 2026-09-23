@@ -1052,8 +1052,6 @@ export function PlayerComparisonPopup({
                 <ComparisonFootAbility
                   leftAttributes={leftPlayer.attributes}
                   rightAttributes={rightPlayer.attributes}
-                  leftColor={leftColor}
-                  rightColor={rightColor}
                 />
               )}
               {columnIndex === 1 && (
@@ -1210,12 +1208,12 @@ function ComparisonAttributeRow({
   leftColor: string
   rightColor: string
 }) {
-  const difference = Math.max(-20, Math.min(20, left - right))
-  const width = `${Math.abs(difference) / 20 * 50}%`
+  const difference = left - right
+  const width = `${Math.min(Math.abs(difference), 10) / 10 * 50}%`
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_1.5rem_minmax(3.5rem,0.85fr)_1.5rem] items-center gap-1 leading-5">
       <div className="truncate text-[11px] text-muted-foreground">{name}</div>
-      <span className="text-right text-xs font-bold tabular-nums" style={{ color: leftColor }}>{left || "-"}</span>
+      <span className={`text-right text-xs font-bold tabular-nums ${attributeValueClass(left)}`}>{left || "-"}</span>
       <div className="relative h-1.5 overflow-hidden rounded-full bg-muted">
         <span className="absolute left-1/2 top-0 h-full w-px bg-border" />
         {difference !== 0 && (
@@ -1227,7 +1225,7 @@ function ComparisonAttributeRow({
           />
         )}
       </div>
-      <span className="text-left text-xs font-bold tabular-nums" style={{ color: rightColor }}>{right || "-"}</span>
+      <span className={`text-left text-xs font-bold tabular-nums ${attributeValueClass(right)}`}>{right || "-"}</span>
     </div>
   )
 }
@@ -1386,29 +1384,23 @@ function PlayerTraitList({ traits: rawTraits }: { traits?: string }) {
 function ComparisonFootAbility({
   leftAttributes,
   rightAttributes,
-  leftColor,
-  rightColor,
 }: {
   leftAttributes?: NonNullable<MatchPlayer["attributes"]>
   rightAttributes?: NonNullable<MatchPlayer["attributes"]>
-  leftColor: string
-  rightColor: string
 }) {
   return (
     <div className="mt-auto grid h-16 grid-cols-2 border-t pt-2">
-      <ComparisonPlayerFeet attributes={leftAttributes} color={leftColor} />
-      <ComparisonPlayerFeet attributes={rightAttributes} color={rightColor} mirrored />
+      <ComparisonPlayerFeet attributes={leftAttributes} />
+      <ComparisonPlayerFeet attributes={rightAttributes} mirrored />
     </div>
   )
 }
 
 function ComparisonPlayerFeet({
   attributes,
-  color,
   mirrored = false,
 }: {
   attributes?: NonNullable<MatchPlayer["attributes"]>
-  color: string
   mirrored?: boolean
 }) {
   const { t } = useTranslation()
@@ -1417,13 +1409,13 @@ function ComparisonPlayerFeet({
     { label: t("playerProfile.rightFoot"), mirrored: false, raw: attributes?.technical["Right Foot"] ?? 0 },
   ]
   return (
-    <div className={`grid grid-cols-2 gap-1 px-1 ${mirrored ? "border-l" : ""} border-border/70`} style={{ color }}>
+    <div className={`grid grid-cols-2 gap-1 px-1 ${mirrored ? "border-l" : ""} border-border/70`}>
       {feet.map((foot) => {
         const tier = footAbilityTier(displayAttributeValue(foot.raw))
         return (
           <div key={foot.label} className="flex min-w-0 flex-col items-center justify-center">
             <FootAbilityIcon mirrored={foot.mirrored} className={tier.className} />
-            <span className="mt-0.5 truncate text-[9px] font-semibold leading-none">
+            <span className={`mt-0.5 truncate text-[9px] font-semibold leading-none ${tier.className}`}>
               {t(`playerProfile.footStrength.${tier.description}`)}
             </span>
           </div>
