@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import {
   ArrowBigLeftDashIcon,
   ArrowBigRightDashIcon,
+  Clock01Icon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
@@ -34,6 +35,7 @@ import {
 import { PitchMarkings } from "@/components/pitch/PitchMarkings"
 import { resolvePitchDimensions } from "@/components/pitch/pitchGeometry"
 import { samePlayerLabels } from "@/lib/matchRenderEquality"
+import { shortPlayerName } from "@/lib/player-name"
 import {
   buildShotChains,
   buildTacticalScene,
@@ -415,59 +417,120 @@ function TacticalPointTooltip({
     : undefined
   const counterpartColor =
     point.counterpart?.team === "home" ? homeColor : awayColor
+  const tooltipX =
+    window.innerWidth < 208
+      ? window.innerWidth / 2
+      : Math.min(Math.max(clientX, 104), window.innerWidth - 104)
+  const placeBelow = clientY < 128
+  const playerName = player ? shortPlayerName(player.name) : unknownPlayer
+  const receiverName = receiver ? shortPlayerName(receiver.name) : unknownPlayer
+  const counterpartName = counterpartPlayer
+    ? shortPlayerName(counterpartPlayer.name)
+    : unknownPlayer
+  const hasReceiver = point.receiverPlayerId != null
+  const hasAssociations = Boolean(
+    hasReceiver || (point.counterpart && counterpartMetric)
+  )
 
   return createPortal(
     <div
       role="tooltip"
-      className="pointer-events-none fixed z-[100] inline-flex w-max max-w-xs -translate-x-1/2 -translate-y-[calc(100%+10px)] flex-col gap-1 rounded-md bg-foreground px-3 py-1.5 text-xs text-background shadow-md"
-      style={{ left: clientX, top: clientY }}
+      className={`pointer-events-none fixed z-[100] w-fit min-w-40 max-w-48 -translate-x-1/2 overflow-hidden rounded-lg border bg-popover/95 text-popover-foreground shadow-xl backdrop-blur-sm ${placeBelow ? "translate-y-2.5" : "-translate-y-[calc(100%+10px)]"}`}
+      style={{ left: tooltipX, top: clientY, borderColor: color }}
     >
-      <div className="font-medium">
-        {player?.name ?? unknownPlayer} #{player?.shirtNumber ?? "-"}
-        {receiver && (
-          <span className="ml-1 opacity-70">
-            → {receiver.name} #{receiver.shirtNumber ?? "-"}
-          </span>
-        )}
-      </div>
-      <div className="flex items-center gap-1.5">
-        <MarkerGlyph
-          shape={metric.shape}
-          variant={point.variant}
-          decoration={metric.decoration}
-          color={color}
-          size={14}
-        />
-        <span>
-          {metricLabel(metric)}: <strong>1</strong>
+      <div className="flex items-center gap-2 px-2.5 py-2">
+        <span
+          className="flex size-7 shrink-0 items-center justify-center rounded-md text-[10px] font-extrabold tabular-nums shadow-sm"
+          style={{
+            backgroundColor: color,
+            color: "var(--event-marker-foreground)",
+          }}
+        >
+          {player?.shirtNumber ?? "-"}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[11px] leading-4 font-semibold">
+            {metricLabel(metric)}
+          </div>
+          <div className="truncate text-[10px] leading-4 text-muted-foreground">
+            {playerName}
+          </div>
+        </div>
+        <span className="flex shrink-0 items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground tabular-nums">
+          <HugeiconsIcon
+            icon={Clock01Icon}
+            strokeWidth={2}
+            className="size-3"
+          />
+          {formatMatchTick(point.displayTick)}
         </span>
       </div>
-      {point.annotations?.map((annotation) => (
-        <div key={annotation} className="text-[10px] font-medium opacity-80">
-          {t(`dataMap.annotations.${annotation}`)}
-        </div>
-      ))}
-      {point.counterpart && counterpartMetric && (
-        <div className="flex items-center gap-1.5 opacity-70">
-          <MarkerGlyph
-            shape={counterpartMetric.shape}
-            variant={counterpartMetric.variant}
-            decoration={counterpartMetric.decoration}
-            color={counterpartColor}
-            size={14}
-          />
-          <span>
-            {metricLabel(counterpartMetric)}:{" "}
-            {counterpartPlayer?.name ?? unknownPlayer} #
-            {counterpartPlayer?.shirtNumber ?? "-"}
-          </span>
+
+      {hasAssociations && (
+        <div className="border-t border-border/60 bg-muted/30 px-2 py-1">
+          {hasReceiver && (
+            <TacticalAssociationRow
+              player={receiver}
+              playerName={receiverName}
+              color={color}
+              eventName={metricLabel(metric)}
+            />
+          )}
+          {point.counterpart && counterpartMetric && (
+            <TacticalAssociationRow
+              player={counterpartPlayer}
+              playerName={counterpartName}
+              color={counterpartColor}
+              eventName={metricLabel(counterpartMetric)}
+            />
+          )}
         </div>
       )}
-      <div className="text-[10px] tabular-nums opacity-70">
-        {formatMatchTick(point.displayTick)}
-      </div>
+
+      {point.annotations && point.annotations.length > 0 && (
+        <div className="flex flex-wrap gap-1 border-t border-border/60 px-2.5 py-1.5">
+          {point.annotations.map((annotation) => (
+            <span
+              key={annotation}
+              className="rounded-sm bg-muted px-1.5 py-0.5 text-[9px] leading-3.5 font-medium text-muted-foreground"
+            >
+              {t(`dataMap.annotations.${annotation}`)}
+            </span>
+          ))}
+        </div>
+      )}
     </div>,
     document.body
+  )
+}
+
+function TacticalAssociationRow({
+  player,
+  playerName,
+  color,
+  eventName,
+}: {
+  player?: MatchPlayer
+  playerName: string
+  color: string
+  eventName: string
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-1.5 py-0.5 text-[9px] leading-4">
+      <span
+        className="flex size-[18px] shrink-0 items-center justify-center rounded text-[8px] font-extrabold tabular-nums"
+        style={{
+          backgroundColor: color,
+          color: "var(--event-marker-foreground)",
+        }}
+      >
+        {player?.shirtNumber ?? "-"}
+      </span>
+      <span className="min-w-0 flex-1 truncate font-medium">{playerName}</span>
+      <span className="max-w-20 shrink-0 truncate text-muted-foreground">
+        {eventName}
+      </span>
+    </div>
   )
 }
 
