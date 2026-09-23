@@ -105,6 +105,18 @@ export const TacticalBoard = memo(function TacticalBoard({
     () => metrics.filter((metric) => selectedMetrics[metric.id]),
     [selectedMetrics]
   )
+  const selectedMetricGroups = useMemo(
+    () =>
+      groups
+        .map((group) => ({
+          group,
+          metrics: selectedMetricList.filter(
+            (metric) => metric.group === group.id
+          ),
+        }))
+        .filter(({ metrics: groupMetrics }) => groupMetrics.length > 0),
+    [selectedMetricList]
+  )
   const scene = useMemo(
     () => buildTacticalScene(match.tacticalEvents, selectedMetrics),
     [match.tacticalEvents, selectedMetrics]
@@ -275,25 +287,46 @@ export const TacticalBoard = memo(function TacticalBoard({
 
       <CardContent className="flex min-h-0 flex-1 flex-col p-0">
         <div className="flex min-h-0 min-w-0 flex-1 items-stretch gap-2 overflow-hidden p-3">
-          <aside className="flex w-28 shrink-0 flex-col gap-1.5 overflow-y-auto py-1 text-[9px]">
-            {selectedMetricList.length > 0 ? (
-              selectedMetricList.map((metric) => (
-                <div
-                  key={`legend-${metric.id}`}
-                  className="flex items-center gap-1.5 text-muted-foreground"
-                >
-                  <MarkerGlyph
-                    shape={metric.shape}
-                    variant={metric.variant}
-                    decoration={metric.decoration}
-                    color="var(--primary)"
-                    size={16}
-                  />
-                  <span className="leading-tight">{metricLabel(metric)}</span>
-                </div>
-              ))
+          <aside className="w-28 shrink-0 overflow-y-auto py-1">
+            {selectedMetricGroups.length > 0 ? (
+              <ul className="space-y-2.5">
+                {selectedMetricGroups.map(({ group, metrics: groupMetrics }) => (
+                  <li key={`legend-group-${group.id}`}>
+                    <div className="flex items-center gap-1.5 text-[10px] font-semibold text-foreground/90">
+                      <MarkerGlyph
+                        shape={group.shape}
+                        variant="solid"
+                        color="var(--primary)"
+                        size={15}
+                      />
+                      <span className="min-w-0 truncate leading-4">
+                        {groupLabel(group)}
+                      </span>
+                    </div>
+                    <ul className="ml-[7px] mt-1 space-y-1 border-l border-border/70 pl-2">
+                      {groupMetrics.map((metric) => (
+                        <li
+                          key={`legend-${metric.id}`}
+                          className="flex items-center gap-1.5 text-[9px] text-muted-foreground"
+                        >
+                          <MarkerGlyph
+                            shape={metric.shape}
+                            variant={metric.variant}
+                            decoration={metric.decoration}
+                            color="var(--primary)"
+                            size={13}
+                          />
+                          <span className="min-w-0 leading-tight">
+                            {metricLabel(metric)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
             ) : (
-              <span className="text-muted-foreground">
+              <span className="text-[9px] text-muted-foreground">
                 {t("dataMap.noSelection")}
               </span>
             )}
