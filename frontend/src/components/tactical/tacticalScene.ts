@@ -1,5 +1,6 @@
 import type {
   TacticalEventMetricId,
+  TacticalEventAnnotation,
   TacticalEventPoint,
   TeamSide,
 } from "@/types/match"
@@ -16,7 +17,11 @@ export type Shape =
   "square" | "circle" | "triangle" | "triangle-down" | "pentagon" | "diamond"
 
 export type MarkerVariant =
-  "solid" | "outline" | "important" | "important-solid"
+  | "solid"
+  | "outline"
+  | "important"
+  | "important-solid"
+  | "negative-solid"
 
 export type MarkerDecoration = "top" | "bottom" | "left" | "right"
 export type TrajectoryStyle = "solid" | "dashed"
@@ -64,6 +69,7 @@ export type TacticalRenderPoint = {
     team: TeamSide
     metricId: TacticalEventMetricId
   }
+  annotations?: TacticalEventAnnotation[]
 }
 
 export type ShotChain = {
@@ -432,7 +438,14 @@ export function renderPointForEvent(
     metricId: metric.id,
     group: metric.group,
     shape: metric.shape,
-    variant: metric.variant,
+    variant:
+      event.nativeEventType === 20
+        ? "important-solid"
+        : event.nativeEventType === 21 || event.nativeEventType === 49
+          ? "negative-solid"
+          : event.nativeEventType === 45
+            ? "important"
+            : metric.variant,
     decoration: metric.decoration,
     trajectoryStyle: metric.trajectoryStyle ?? "solid",
     trajectoryColor: metric.trajectoryColor ?? "team",
@@ -452,6 +465,7 @@ export function renderPointForEvent(
     size: Math.max(20, 22 * (metric.scale ?? 1)),
     tick: event.tick,
     displayTick: event.displayTick,
+    annotations: event.annotations,
     counterpart:
       counterpartEvent && counterpartMetric
         ? {

@@ -1,6 +1,12 @@
 import { startTransition, useEffect, useRef, useState } from "react"
 
 import { HeatmapDerivations } from "@/api/heatmap"
+import {
+  attachAuxiliaryEventAnnotations,
+  nativeMomentumEventAnnotations,
+  nativeMomentumEventMetric,
+  nativeMomentumEventMetricIds,
+} from "@/api/momentumEventSemantics"
 import { HistoricalDerivations } from "@/api/replay/replayDerivations"
 import { reuseMatchSnapshot } from "@/lib/matchSnapshotReuse"
 
@@ -361,6 +367,21 @@ export class LegacyLiveDerivations {
     const halfLength = validPitchHalf(frame.halfPitchLength)
     if (!halfWidth || !halfLength) return
     for (const item of frame.momentumEvents) {
+      if (item.eventType === 20 || item.eventType === 21) {
+        const type = item.eventType === 20 ? "yellow_card" : "red_card"
+        const id = `${frame.matchId}-native-${type}-${item.eventIndex}`
+        if (!this.events.some((event) => event.id === id)) {
+          const displayTick = nativeMomentumEventDisplayTick(frame, item)
+          this.events.push({
+            id,
+            type,
+            minute: Math.floor(displayTick / 240),
+            tick: item.tick,
+            team: item.team,
+            playerId: item.playerId,
+          })
+        }
+      }
       const metricId = nativeMomentumEventMetric(item.eventType)
       if (!metricId) continue
       const metricIds = nativeMomentumEventMetricIds(item, metricId)
@@ -446,6 +467,7 @@ export class LegacyLiveDerivations {
         nativeEventType: item.eventType,
         flags: item.flags,
         sequenceIndex: item.sequenceIndex,
+        annotations: nativeMomentumEventAnnotations(item),
       })
     }
   }
@@ -937,9 +959,31 @@ export function buildMatchEvents(
   throughIndex = frames.length - 1
 ): MatchEvent[] {
   const end = Math.min(Math.max(throughIndex, -1), frames.length - 1)
-  if (end < 1) return []
+  if (end < 0) return []
 
   const events: MatchEvent[] = []
+  const nativeCards = new Set<number>()
+  const appendNativeCards = (frame: RealtimeFrame) => {
+    for (const item of frame.momentumEvents) {
+      if (
+        (item.eventType !== 20 && item.eventType !== 21) ||
+        nativeCards.has(item.eventIndex)
+      )
+        continue
+      nativeCards.add(item.eventIndex)
+      const displayTick = nativeMomentumEventDisplayTick(frame, item)
+      const type = item.eventType === 20 ? "yellow_card" : "red_card"
+      events.push({
+        id: `${frame.matchId}-native-${type}-${item.eventIndex}`,
+        type,
+        minute: Math.floor(displayTick / 240),
+        tick: item.tick,
+        team: item.team,
+        playerId: item.playerId,
+      })
+    }
+  }
+  appendNativeCards(frames[0])
   let homeGoals = frames[0].home.goals
   let awayGoals = frames[0].away.goals
   const previousPlayers = new Map(
@@ -958,6 +1002,8 @@ export function buildMatchEvents(
     const minute = frameMinute(frame)
     let identifiedHomeGoals = 0
     let identifiedAwayGoals = 0
+
+    appendNativeCards(frame)
 
     for (const player of frame.players) {
       const previous = previousPlayers.get(player.playerId)
@@ -1039,12 +1085,14 @@ export function buildTacticalEvents(
   if (end < 0) return []
 
   const events = new Map<number, TacticalEventPoint>()
+  const nativeEvents = new Map<number, RealtimeMomentumEvent>()
   for (let index = 0; index <= end; index += 1) {
     const frame = frames[index]
     const halfWidth = validPitchHalf(frame.halfPitchWidth)
     const halfLength = validPitchHalf(frame.halfPitchLength)
     if (!halfWidth || !halfLength) continue
     for (const item of frame.momentumEvents) {
+      nativeEvents.set(item.eventIndex, item)
       const metricId = nativeMomentumEventMetric(item.eventType)
       if (!metricId) continue
       const metricIds = nativeMomentumEventMetricIds(item, metricId)
@@ -1130,90 +1178,13 @@ export function buildTacticalEvents(
         nativeEventType: item.eventType,
         flags: item.flags,
         sequenceIndex: item.sequenceIndex,
+        annotations: nativeMomentumEventAnnotations(item),
       })
     }
   }
 
+  attachAuxiliaryEventAnnotations(events, [...nativeEvents.values()])
   return [...events.values()].sort((left, right) => left.tick - right.tick)
-}
-
-function nativeMomentumEventMetric(
-  eventType: number
-): TacticalEventPoint["metricId"] | undefined {
-  switch (eventType) {
-    case 1:
-      return "goals"
-    case 2:
-      return "shotsOffTarget"
-    case 3:
-      return "hitWoodwork"
-    case 4:
-      return "shotsOnTarget"
-    case 5:
-      return "blockedShots"
-    case 7:
-      return "passesCompleted"
-    case 6:
-    case 8:
-    case 9:
-    case 10:
-    case 11:
-      return "passesIncomplete"
-    case 12:
-      return "crossesCompleted"
-    case 13:
-    case 14:
-    case 15:
-    case 16:
-    case 17:
-      return "crossesIncomplete"
-    case 18:
-      return "fouled"
-    case 19:
-    case 20:
-    case 21:
-      return "foulsCommitted"
-    case 23:
-      return "offsides"
-    case 24:
-      return "clearances"
-    case 25:
-      return "defensiveBlocks"
-    case 26:
-      return "tacklesWon"
-    case 27:
-      return "tacklesLost"
-    case 28:
-      return "aerialsWon"
-    case 29:
-      return "aerialsLost"
-    case 31:
-      return "interceptions"
-    case 34:
-      return "dribblesCompleted"
-    case 37:
-      return "goalkeeperSavesHeld"
-    case 38:
-      return "goalkeeperSavesParried"
-    case 52:
-      return "possessionGained"
-    case 53:
-      return "possessionLost"
-    case 54:
-      return "touches"
-    default:
-      return undefined
-  }
-}
-
-function nativeMomentumEventMetricIds(
-  item: RealtimeMomentumEvent,
-  primaryMetricId: TacticalEventPoint["metricId"]
-): TacticalEventPoint["metricId"][] {
-  const isPassOrCross = item.eventType >= 6 && item.eventType <= 17
-  return isPassOrCross && (item.flags & 0x02) !== 0
-    ? [primaryMetricId, "keyPasses"]
-    : [primaryMetricId]
 }
 
 function nativeMomentumEventNeedsDisplayRotation(

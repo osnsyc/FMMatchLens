@@ -39,6 +39,7 @@ type ResolvedAppearance = {
   awayColor: number
   background: number
   important: number
+  negative: number
   contrast: number
   foreground: number
 }
@@ -777,6 +778,7 @@ export class PixiTacticalRenderer {
         0x0a0f1e
       ),
       important: this.resolveCssColor(appearance.tokens.eventImportant, 0xf6c453),
+      negative: this.resolveCssColor("var(--status-negative)", 0xff7188),
       contrast: this.resolveCssColor(appearance.tokens.eventContrast, 0xf4f0ff),
       foreground: this.resolveCssColor(
         appearance.tokens.eventMarkerForeground,
@@ -814,15 +816,23 @@ function createMarkerContext(
   const context = new GraphicsContext()
   const fill = variant !== "outline"
   const fillColor =
-    variant === "important-solid" ? appearance.important : teamColor
-  const strokeColor =
-    variant === "important" || variant === "important-solid"
+    variant === "important-solid"
       ? appearance.important
-      : teamColor
+      : variant === "negative-solid"
+        ? appearance.negative
+        : teamColor
+  const strokeColor =
+    variant === "negative-solid"
+      ? appearance.negative
+      : variant === "important" || variant === "important-solid"
+        ? appearance.important
+        : teamColor
   const strokeWidth =
     variant === "outline"
       ? 2.2
-      : variant === "important" || variant === "important-solid"
+      : variant === "important" ||
+          variant === "important-solid" ||
+          variant === "negative-solid"
         ? 2
         : 1.2
 

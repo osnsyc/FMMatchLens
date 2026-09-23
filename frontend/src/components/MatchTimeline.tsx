@@ -556,7 +556,6 @@ export function MatchTimeline({
             <EventRail
               events={homeEvents}
               side="home"
-              color={match.home.color ?? "var(--team-home-fallback)"}
               match={match}
               frames={frames}
               replaying={replaying}
@@ -598,7 +597,6 @@ export function MatchTimeline({
             <EventRail
               events={awayEvents}
               side="away"
-              color={match.away.color ?? "var(--team-away-fallback)"}
               match={match}
               frames={frames}
               replaying={replaying}
@@ -690,14 +688,12 @@ const EventRail = memo(
   function EventRail({
     events,
     side,
-    color,
     match,
     frames,
     replaying,
   }: {
     events: TimelineEvent[]
     side: TeamSide
-    color: string
     match: MatchSnapshot
     frames: readonly RealtimeFrame[]
     replaying: boolean
@@ -723,7 +719,7 @@ const EventRail = memo(
                 />
               }
             >
-              <EventIcon event={event} color={color} />
+              <EventIcon event={event} />
               {event.occurrences > 1 && (
                 <span className="pointer-events-none absolute -top-0.5 -right-1.5 z-30 flex min-w-3.5 items-center justify-center rounded-full bg-foreground px-0.5 text-[8px] leading-3.5 font-bold text-background shadow-sm">
                   {event.occurrences}
@@ -756,7 +752,6 @@ const EventRail = memo(
     if (
       previous.events !== next.events ||
       previous.side !== next.side ||
-      previous.color !== next.color ||
       previous.frames !== next.frames ||
       previous.replaying !== next.replaying
     ) {
@@ -839,12 +834,12 @@ function TimelineDetailIcon({
   return (
     <span
       aria-hidden="true"
-      className={`size-2.5 shrink-0 rounded-[2px] ${event.type === "red_card" ? "bg-status-negative" : "bg-status-warning"}`}
+      className={`match-card-icon ${event.type === "red_card" ? "match-card-icon--red" : "match-card-icon--yellow"}`}
     />
   )
 }
 
-function EventIcon({ event, color }: { event: TimelineEvent; color: string }) {
+function EventIcon({ event }: { event: TimelineEvent }) {
   if (event.type === "own_goal") {
     return (
       <HugeiconsIcon
@@ -875,8 +870,7 @@ function EventIcon({ event, color }: { event: TimelineEvent; color: string }) {
   return (
     <span
       aria-hidden="true"
-      className={`block rounded-[2px] ${event.type === "red_card" ? "size-3 bg-status-negative" : "size-3 bg-status-warning"}`}
-      style={{ boxShadow: `0 0 0 1px ${color}` }}
+      className={`match-card-icon ${event.type === "red_card" ? "match-card-icon--red" : "match-card-icon--yellow"}`}
     />
   )
 }

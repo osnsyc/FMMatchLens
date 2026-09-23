@@ -64,6 +64,8 @@ type StatusIcon =
   | "assist"
   | "sub-on"
   | "sub-off"
+  | "yellow-card"
+  | "red-card"
 
 type PlayerStatus = {
   key: string
@@ -410,6 +412,32 @@ export const SquadPanel = memo(function SquadPanel({
         ),
         count:
           player.stats.assists,
+      })
+    }
+
+    const yellowCardMinutes = minutesFor(player, "yellow_card")
+    if (yellowCardMinutes.length > 0) {
+      statuses.push({
+        key: "yellow-card",
+        label: t("squad.yellowCard"),
+        marker: "",
+        icon: "yellow-card",
+        className: "text-status-warning",
+        minutes: yellowCardMinutes,
+        count: yellowCardMinutes.length,
+      })
+    }
+
+    const redCardMinutes = minutesFor(player, "red_card")
+    if (redCardMinutes.length > 0) {
+      statuses.push({
+        key: "red-card",
+        label: t("squad.redCard"),
+        marker: "",
+        icon: "red-card",
+        className: "text-status-negative",
+        minutes: redCardMinutes,
+        count: redCardMinutes.length,
       })
     }
 
@@ -2192,6 +2220,19 @@ function EventIcon({
   icon: StatusIcon
   className?: string
 }) {
+  if (icon === "yellow-card" || icon === "red-card") {
+    return (
+      <span
+        aria-hidden="true"
+        className={`match-card-icon ${
+          icon === "red-card"
+            ? "match-card-icon--red"
+            : "match-card-icon--yellow"
+        } ${className ?? ""}`}
+      />
+    )
+  }
+
   if (icon === "goal") {
     return (
       <img

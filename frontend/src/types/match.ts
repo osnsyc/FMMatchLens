@@ -110,6 +110,25 @@ export type TacticalEventMetricId =
   | "goalkeeperSavesHeld"
   | "goalkeeperSavesParried"
 
+export type TacticalEventAnnotation =
+  | "corner"
+  | "passTurnedOver"
+  | "passBlocked"
+  | "crossIntercepted"
+  | "crossBlocked"
+  | "crossOutOfPlay"
+  | "goalkeeperSaveHeld"
+  | "goalkeeperSaveParried"
+  | "goalkeeperSaveTipped"
+  | "attackingFreeKick"
+  | "defensiveFreeKick"
+  | "clearCutChance"
+  | "yellowCard"
+  | "redCard"
+  | "penaltyKick"
+  | "ownGoal"
+  | "keyTackle"
+
 export type TacticalEventPoint = {
   id: string
   metricId: TacticalEventMetricId
@@ -132,6 +151,7 @@ export type TacticalEventPoint = {
   nativeEventType: number
   flags: number
   sequenceIndex?: number
+  annotations?: TacticalEventAnnotation[]
 }
 
 export type PlayerStats = {

@@ -397,6 +397,7 @@ function TacticalPointTooltip({
   unknownPlayer: string
   metricLabel: (metric: DataMetric) => string
 }) {
+  const { t } = useTranslation()
   const { point, clientX, clientY } = hovered
   const player = players.get(point.playerId)
   const receiver =
@@ -432,7 +433,7 @@ function TacticalPointTooltip({
       <div className="flex items-center gap-1.5">
         <MarkerGlyph
           shape={metric.shape}
-          variant={metric.variant}
+          variant={point.variant}
           decoration={metric.decoration}
           color={color}
           size={14}
@@ -441,6 +442,11 @@ function TacticalPointTooltip({
           {metricLabel(metric)}: <strong>1</strong>
         </span>
       </div>
+      {point.annotations?.map((annotation) => (
+        <div key={annotation} className="text-[10px] font-medium opacity-80">
+          {t(`dataMap.annotations.${annotation}`)}
+        </div>
+      ))}
       {point.counterpart && counterpartMetric && (
         <div className="flex items-center gap-1.5 opacity-70">
           <MarkerGlyph
@@ -614,6 +620,12 @@ function markerStyle(variant: MarkerVariant, color: string) {
       return {
         fill: "var(--important-event)",
         stroke: "var(--important-event)",
+        strokeWidth: 2,
+      }
+    case "negative-solid":
+      return {
+        fill: "var(--status-negative)",
+        stroke: "var(--status-negative)",
         strokeWidth: 2,
       }
     default:

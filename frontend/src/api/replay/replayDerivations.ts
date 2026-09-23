@@ -1,5 +1,11 @@
 import { HeatmapDerivations, type HeatmapDerivationsState } from "@/api/heatmap"
 import {
+  attachAuxiliaryEventAnnotations,
+  nativeMomentumEventAnnotations,
+  nativeMomentumEventMetric,
+  nativeMomentumEventMetricIds,
+} from "@/api/momentumEventSemantics"
+import {
   sameMomentumEvent,
   sameMomentumPoint,
   streamRevision,
@@ -250,9 +256,53 @@ export class HistoricalDerivations {
     for (const event of revision.tail) {
       this.nativeStream.push(event)
       const point = nativeMomentumEventToTacticalPoint(frame, event)
-      if (point) this.tactical.set(event.eventIndex, point)
+      if (point) {
+        const previousPoint = this.tactical.get(event.eventIndex)
+        this.tactical.set(
+          event.eventIndex,
+          previousPoint?.annotations?.some(
+            (annotation) =>
+              annotation === "clearCutChance" || annotation === "penaltyKick"
+          )
+            ? {
+                ...point,
+                annotations: [
+                  ...(point.annotations ?? []),
+                  ...(previousPoint.annotations ?? []).filter(
+                    (annotation) =>
+                      (annotation === "clearCutChance" ||
+                        annotation === "penaltyKick") &&
+                      !point.annotations?.includes(annotation)
+                  ),
+                ],
+              }
+            : point
+        )
+      }
+      this.appendNativeCard(frame, event)
+      attachAuxiliaryEventAnnotations(this.tactical, this.nativeStream)
     }
     if (revision.tail.length > 0) this.tacticalDirty = true
+  }
+
+  private appendNativeCard(
+    frame: RealtimeFrame,
+    event: RealtimeMomentumEvent
+  ) {
+    if (event.eventType !== 20 && event.eventType !== 21) return
+    const type = event.eventType === 20 ? "yellow_card" : "red_card"
+    const id = `${frame.matchId}-native-${type}-${event.eventIndex}`
+    if (this.events.some((existing) => existing.id === id)) return
+    const displayTick = nativeMomentumEventDisplayTick(frame, event)
+    this.events.push({
+      id,
+      type,
+      minute: Math.floor(displayTick / 240),
+      tick: event.tick,
+      team: event.team,
+      playerId: event.playerId,
+    })
+    this.eventsDirty = true
   }
 
   private appendMatchEvents(previous: RealtimeFrame, frame: RealtimeFrame) {
@@ -383,61 +433,8 @@ export function nativeMomentumEventToTacticalPoint(
     nativeEventType: item.eventType,
     flags: item.flags,
     sequenceIndex: item.sequenceIndex,
+    annotations: nativeMomentumEventAnnotations(item),
   }
-}
-
-function nativeMomentumEventMetric(
-  eventType: number
-): TacticalEventPoint["metricId"] | undefined {
-  const metrics: Partial<Record<number, TacticalEventPoint["metricId"]>> = {
-    1: "goals",
-    2: "shotsOffTarget",
-    3: "hitWoodwork",
-    4: "shotsOnTarget",
-    5: "blockedShots",
-    6: "passesIncomplete",
-    7: "passesCompleted",
-    8: "passesIncomplete",
-    9: "passesIncomplete",
-    10: "passesIncomplete",
-    11: "passesIncomplete",
-    12: "crossesCompleted",
-    13: "crossesIncomplete",
-    14: "crossesIncomplete",
-    15: "crossesIncomplete",
-    16: "crossesIncomplete",
-    17: "crossesIncomplete",
-    18: "fouled",
-    19: "foulsCommitted",
-    20: "foulsCommitted",
-    21: "foulsCommitted",
-    23: "offsides",
-    24: "clearances",
-    25: "defensiveBlocks",
-    26: "tacklesWon",
-    27: "tacklesLost",
-    28: "aerialsWon",
-    29: "aerialsLost",
-    31: "interceptions",
-    34: "dribblesCompleted",
-    37: "goalkeeperSavesHeld",
-    38: "goalkeeperSavesParried",
-    52: "possessionGained",
-    53: "possessionLost",
-    54: "touches",
-  }
-  return metrics[eventType]
-}
-
-function nativeMomentumEventMetricIds(
-  item: RealtimeMomentumEvent,
-  primary: TacticalEventPoint["metricId"]
-) {
-  return item.eventType >= 6 &&
-    item.eventType <= 17 &&
-    (item.flags & 0x02) !== 0
-    ? [primary, "keyPasses" as const]
-    : [primary]
 }
 
 function nativeMomentumEventNeedsDisplayRotation(item: RealtimeMomentumEvent) {

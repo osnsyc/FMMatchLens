@@ -190,6 +190,18 @@
    ========================================================= */
 
 @layer components {
+  .match-card-icon {
+    @apply inline-block h-3 w-2 shrink-0 rounded-[1px];
+  }
+
+  .match-card-icon--yellow {
+    @apply bg-yellow-400;
+  }
+
+  .match-card-icon--red {
+    @apply bg-red-500;
+  }
+
   body.player-profile-open [data-player-profile-blur-target] {
     filter: blur(5px);
     opacity: 0.58;

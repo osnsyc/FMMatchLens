@@ -868,8 +868,8 @@ internal sealed class GameMatchTickHook : IDisposable
             Fouls: ReadByteDirect(teamBase + Offsets.TeamBase.Fouls),
             Corners: ReadByteDirect(teamBase + Offsets.TeamBase.Corners),
             Offsides: ReadByteDirect(teamBase + Offsets.TeamBase.Offsides),
-            YellowCards: ReadByteDirect(teamBase + Offsets.TeamBase.YellowCardsUnconfirmed),
-            RedCards: ReadByteDirect(teamBase + Offsets.TeamBase.RedCardsUnconfirmed));
+            YellowCards: ReadByteDirect(teamBase + Offsets.TeamBase.YellowCards),
+            RedCards: ReadByteDirect(teamBase + Offsets.TeamBase.RedCards));
     }
 
     private static byte ReadByteDirect(nint address) => Marshal.ReadByte(address);

@@ -88,6 +88,8 @@ internal static class Offsets
         public const ushort ThrowInFlag = 0x08;
         public const ushort AttackingFreeKickFlag = 0x10;
         public const ushort DefensiveFreeKickFlag = 0x20;
+        public const ushort CornerFlag = 0x40; // only for cross or #52
+        public const ushort ChanceTriggerFlagCandidate = 0x400;
 
         public const byte ShotGoal = 1;
         public const byte ShotMissedTarget = 2;
@@ -97,24 +99,23 @@ internal static class Offsets
         public const byte PassIncompleteD = 6;
         public const byte PassCompleted = 7;
         public const byte PassTurnedOver = 8;
-        public const byte PassBlockedOrClearedCandidate = 9;
+        public const byte PassBlocked = 9;
         public const byte PassIncompleteB = 10;
         public const byte PassIncompleteC = 11;
         public const byte CrossCompleted = 12;
-        public const byte CrossIncompleteA = 13;
-        public const byte CrossInterceptedCandidate = CrossIncompleteA;
-        public const byte CrossIncompleteB = 14;
+        public const byte CrossIntercepted = 13;
+        public const byte CrossBlocked = 14;
         public const byte CrossIncompleteC = 15;
-        public const byte CrossIncompleteD = 16;
+        public const byte CrossOutOfPlay = 16;
         public const byte CrossIncompleteE = 17;
         public const byte Fouled = 18;
         public const byte FoulCommittedA = 19;
-        public const byte FoulCommittedB = 20;
-        public const byte FoulCommittedC = 21;
-        public const byte UnknownEvent22 = 22;
+        public const byte FoulCommittedYellowCard = 20;
+        public const byte FoulCommittedRedCard = 21;
+        public const byte PenaltyKick = 22;
         public const byte Offside = 23;
         public const byte BallHandledOrKnockedAway = 24;
-        public const byte DefensiveShotBlock = 25;
+        public const byte DefensiveBlock = 25; //shot, pass or cross block
         public const byte TackleWon = 26;
         public const byte TackleLost = 27;
         public const byte AerialWon = 28;
@@ -124,23 +125,21 @@ internal static class Offsets
         public const byte UnknownEvent32 = 32;
         public const byte UnknownEvent33 = 33;
         public const byte DribbleCompleted = 34;
-        // Co-located auxiliary record on a user-confirmed Watkins headed goal.
-        // Keep as a candidate until another headed/non-headed goal comparison.
-        // public const byte HeadedGoalAuxiliaryCandidate = 35;
-        // public const byte GoalAuxiliaryCandidateB = 36;
+        public const byte ClearCutChance = 35;
+        public const byte HalfChanceCandidate = 36; // not implemented
         public const byte GoalkeeperSaveHeld = 37;
         public const byte GoalkeeperSaveParried = 38;
-        public const byte GoalkeeperActionC = 39;
+        public const byte GoalkeeperSaveTipped = 39;
         public const byte UnknownEvent40 = 40;
         public const byte UnknownEvent41 = 41;
         public const byte UnknownEvent42 = 42;
         public const byte UnknownEvent43 = 43;
         public const byte UnknownEvent44 = 44;
-        public const byte UnknownEvent45 = 45;
+        public const byte KeyTackle = 45;
         public const byte UnknownEvent46 = 46;
         public const byte HeaderAction = 47;
         public const byte UnknownEvent48 = 48;
-        public const byte UnknownEvent49 = 49;
+        public const byte OwnGoal = 49;
         public const byte UnknownEvent50 = 50;
         public const byte UnknownEvent51 = 51;
         public const byte PossessionGained = 52;
@@ -264,8 +263,8 @@ internal static class Offsets
         public const int Corners = 0x19D;
         public const int Fouls = 0x1A0;
         public const int Offsides = 0x1A1;
-        public const int YellowCardsUnconfirmed = 0x1A2;
-        public const int RedCardsUnconfirmed = 0x1A3;
+        public const int YellowCards = 0x1A2;
+        public const int RedCards = 0x1A3;
         public const int MatchSquadUnconfirmed = 0x250;
     }
 
