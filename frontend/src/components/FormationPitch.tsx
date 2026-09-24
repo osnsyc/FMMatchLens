@@ -1,10 +1,25 @@
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
+import {
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowDataTransferHorizontalIcon, Pin02Icon } from "@hugeicons/core-free-icons"
+import {
+  ArrowDataTransferHorizontalIcon,
+  Pin02Icon,
+} from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { AnimatePresence, motion } from "framer-motion"
 
-import { CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import {
   HoverCard,
   HoverCardContent,
@@ -24,11 +39,20 @@ import {
   TimelineSeparator,
   TimelineTime,
 } from "@/components/reui/timeline"
-import type { MatchPlayer, MatchSnapshot, PlayerTacticalAssignment, TeamSide } from "@/types/match"
+import type {
+  MatchPlayer,
+  MatchSnapshot,
+  PlayerTacticalAssignment,
+  TeamSide,
+} from "@/types/match"
 
-type FormationPitchProps = { match: MatchSnapshot }
+type FormationPitchProps = {
+  match: MatchSnapshot
+  isFocusMode: boolean
+}
 type FormationView = "home-ip" | "home-oop" | "away-ip" | "away-oop"
-type FormationLine = "gk" | "defence" | "holding" | "midfield" | "attack" | "striker"
+type FormationLine =
+  "gk" | "defence" | "holding" | "midfield" | "attack" | "striker"
 
 type FormationEntry = {
   player: MatchPlayer
@@ -59,7 +83,18 @@ type FormationPlayback = {
 
 type PinnedFormationEntries = Partial<Record<FormationView, string>>
 
-const formationViews: FormationView[] = ["home-ip", "home-oop", "away-ip", "away-oop"]
+const formationViews: FormationView[] = [
+  "home-ip",
+  "home-oop",
+  "away-ip",
+  "away-oop",
+]
+const focusedFormationViews: FormationView[] = [
+  "home-ip",
+  "away-ip",
+  "home-oop",
+  "away-oop",
+]
 
 const emptyFormationHistory = (): FormationHistory => ({
   "home-ip": [],
@@ -87,33 +122,39 @@ const playerMotionVariants = {
   }),
 }
 
-export const FormationPitch = memo(function FormationPitch({ match }: FormationPitchProps) {
+export const FormationPitch = memo(function FormationPitch({
+  match,
+  isFocusMode,
+}: FormationPitchProps) {
   const { t } = useTranslation()
   const pitchDimensions = resolvePitchDimensions(match.pitchDimensions)
   const [view, setView] = useState<FormationView>("home-ip")
-  const { side, inPossession } = formationSelection(view)
   const liveEntries = useMemo(
     () => formationEntries(match.players),
-    [match.players],
+    [match.players]
   )
-  const [history, setHistory] = useState<FormationHistory>(emptyFormationHistory)
+  const [history, setHistory] = useState<FormationHistory>(
+    emptyFormationHistory
+  )
   const [playback, setPlayback] = useState<FormationPlayback | null>(null)
   const [pinnedEntries, setPinnedEntries] = useState<PinnedFormationEntries>({})
-  const [timelineProgressIndex, setTimelineProgressIndex] = useState<number | null>(null)
-  const timelineRef = useRef<HTMLDivElement | null>(null)
-  const activeTimelineItemRef = useRef<HTMLDivElement | null>(null)
+  const [timelineProgressIndex, setTimelineProgressIndex] = useState<
+    number | null
+  >(null)
+  const timelineRefs = useRef<
+    Partial<Record<FormationView, HTMLDivElement | null>>
+  >({})
+  const activeTimelineItemRefs = useRef<
+    Partial<Record<FormationView, HTMLDivElement | null>>
+  >({})
   const matchKeyRef = useRef("")
   const formationSeedKeyRef = useRef("")
-  const teamColor =
-    match[side].color ??
-    (side === "home"
-      ? "var(--team-home-fallback)"
-      : "var(--team-away-fallback)")
-  const matchKey = match.matchId
-    ?? `${match.home.clubUid ?? match.home.uid ?? match.home.name}:${match.away.clubUid ?? match.away.uid ?? match.away.name}`
+  const matchKey =
+    match.matchId ??
+    `${match.home.clubUid ?? match.home.uid ?? match.home.name}:${match.away.clubUid ?? match.away.uid ?? match.away.name}`
   const formationSnapshots = useMemo(
     () => match.formationSnapshots ?? [],
-    [match.formationSnapshots],
+    [match.formationSnapshots]
   )
   const lastFormationSnapshot = formationSnapshots.at(-1)
   const formationSeedKey = `${matchKey}:${formationSnapshots.length}:${lastFormationSnapshot?.tick ?? -1}`
@@ -135,7 +176,7 @@ export const FormationPitch = memo(function FormationPitch({ match }: FormationP
             next,
             formationEntries(snapshot.players),
             snapshot.tick,
-            formatFormationTime(snapshot.minute),
+            formatFormationTime(snapshot.minute)
           )
         }
       }
@@ -143,130 +184,117 @@ export const FormationPitch = memo(function FormationPitch({ match }: FormationP
         next,
         liveEntries,
         match.clock.elapsedTick,
-        formatFormationTime(match.clock.minute),
+        formatFormationTime(match.clock.minute)
       )
     })
-  }, [formationSeedKey, formationSnapshots, liveEntries, match.clock.elapsedTick, match.clock.minute, matchKey])
+  }, [
+    formationSeedKey,
+    formationSnapshots,
+    liveEntries,
+    match.clock.elapsedTick,
+    match.clock.minute,
+    matchKey,
+  ])
 
   useEffect(() => {
     if (!playback) return
 
-    const timeout = window.setTimeout(() => {
-      if (playback.phase === "current") {
-        setTimelineProgressIndex(playback.sourceIndex)
-      }
-      setPlayback((current) => {
-        if (!current) return null
-        return {
-          ...current,
-          phase: current.phase === "previous" ? "current" : "previous",
+    if (!isFocusMode && playback.view !== view) {
+      const timeout = window.setTimeout(() => setPlayback(null), 0)
+      return () => window.clearTimeout(timeout)
+    }
+
+    const timeout = window.setTimeout(
+      () => {
+        if (playback.phase === "current") {
+          setTimelineProgressIndex(playback.sourceIndex)
         }
-      })
-    }, playback.phase === "previous" ? 800 : 2200)
+        setPlayback((current) => {
+          if (!current) return null
+          return {
+            ...current,
+            phase: current.phase === "previous" ? "current" : "previous",
+          }
+        })
+      },
+      playback.phase === "previous" ? 800 : 2200
+    )
 
     return () => window.clearTimeout(timeout)
-  }, [playback])
+  }, [isFocusMode, playback, view])
 
   useEffect(() => {
     if (!playback) return
 
     const stopPlaybackOutsideTimeline = (event: PointerEvent) => {
-      if (timelineRef.current?.contains(event.target as Node)) return
+      if (
+        Object.values(timelineRefs.current).some((timeline) =>
+          timeline?.contains(event.target as Node)
+        )
+      ) {
+        return
+      }
       setPlayback(null)
     }
 
     document.addEventListener("pointerdown", stopPlaybackOutsideTimeline, true)
-    return () => document.removeEventListener("pointerdown", stopPlaybackOutsideTimeline, true)
+    return () =>
+      document.removeEventListener(
+        "pointerdown",
+        stopPlaybackOutsideTimeline,
+        true
+      )
   }, [playback])
 
-  const viewHistory = history[view]
-  const activePlayback = playback?.view === view ? playback : null
-  const targetIndex = activePlayback
-    ? Math.min(activePlayback.targetIndex, Math.max(0, viewHistory.length - 1))
-    : Math.max(0, viewHistory.length - 1)
-  const sourceIndex = activePlayback
-    ? Math.min(activePlayback.sourceIndex, Math.max(0, targetIndex - 1))
-    : targetIndex - 1
-  const displayedIndex = activePlayback?.phase === "previous"
-    ? Math.max(0, sourceIndex)
-    : targetIndex
-  const entries = activePlayback?.phase === "previous" && sourceIndex < 0
-    ? []
-    : viewHistory[displayedIndex]?.entries ?? liveEntries[view]
-  const comparisonEntries = activePlayback
-    ? activePlayback.phase === "current"
-      ? sourceIndex >= 0 ? viewHistory[sourceIndex].entries : []
-      : viewHistory[targetIndex]?.entries ?? []
-    : displayedIndex > 0
-      ? viewHistory[displayedIndex - 1].entries
-      : []
-  const comparisonPlayerIds = new Set(comparisonEntries.map((entry) => entry.player.id))
-  const currentPlayerIds = new Set(entries.map((entry) => entry.player.id))
-  const hasOutgoingPlayers = comparisonEntries.some((entry) => !currentPlayerIds.has(entry.player.id))
-  const resetsToPrevious = activePlayback?.phase === "previous"
-  const pinnedIndex = viewHistory.findIndex((entry) => entry.id === pinnedEntries[view])
-  const playbackSourceEntries = sourceIndex >= 0 ? viewHistory[sourceIndex]?.entries ?? [] : []
-  const playbackTargetEntries = viewHistory[targetIndex]?.entries ?? []
-  const playbackSourcePlayerIds = new Set(playbackSourceEntries.map((entry) => entry.player.id))
-  const playbackTargetPlayerIds = new Set(playbackTargetEntries.map((entry) => entry.player.id))
-  const playbackHasOutgoingPlayers = playbackSourceEntries.some(
-    (entry) => !playbackTargetPlayerIds.has(entry.player.id),
+  const playbackView = playback?.view ?? view
+  const playbackState = formationViewState(
+    playbackView,
+    history,
+    liveEntries,
+    playback,
+    pinnedEntries,
+    timelineProgressIndex
   )
-  const playbackHasIncomingPlayers = playbackTargetEntries.some(
-    (entry) => !playbackSourcePlayerIds.has(entry.player.id),
-  )
-  const playbackSourceByPlayer = new Map(
-    playbackSourceEntries.map((entry) => [entry.player.id, entry]),
-  )
-  const playbackHasPositionChanges = playbackTargetEntries.some((entry) => {
-    const previous = playbackSourceByPlayer.get(entry.player.id)
-    return previous != null
-      && (previous.assignment.positionMask !== entry.assignment.positionMask
-        || previous.assignment.position !== entry.assignment.position)
-  })
-  const playbackHasRoleChanges = playbackTargetEntries.some((entry) => {
-    const previous = playbackSourceByPlayer.get(entry.player.id)
-    return previous != null
-      && (previous.assignment.role !== entry.assignment.role
-        || previous.assignment.roleAbbreviation !== entry.assignment.roleAbbreviation)
-  })
-  const playbackTransitionMilliseconds = playbackHasOutgoingPlayers && playbackHasIncomingPlayers
-    ? 1300
-    : Math.max(
-        playbackHasIncomingPlayers ? 700 : 0,
-        playbackHasOutgoingPlayers ? 550 : 0,
-        playbackHasPositionChanges ? 700 : 0,
-        playbackHasRoleChanges ? 180 : 0,
-        180,
-      )
-  const playbackSegmentCount = Math.max(1, targetIndex - sourceIndex)
-  const timelineSegmentMilliseconds = playbackTransitionMilliseconds / playbackSegmentCount
-  const timelineIndicatorDuration = Math.min(100, timelineSegmentMilliseconds)
-  const timelineActiveIndex = activePlayback
-    ? activePlayback.phase === "previous"
-      ? sourceIndex
-      : timelineProgressIndex ?? sourceIndex
-    : displayedIndex
+  const {
+    activePlayback,
+    sourceIndex,
+    targetIndex,
+    timelineSegmentMilliseconds,
+  } = playbackState
 
   useEffect(() => {
     if (!activePlayback || activePlayback.phase !== "current") return
 
     const timers: number[] = []
     for (let index = sourceIndex + 1; index <= targetIndex; index += 1) {
-      const delay = Math.max(0, index - sourceIndex - 1) * timelineSegmentMilliseconds
-      timers.push(window.setTimeout(() => setTimelineProgressIndex(index), delay))
+      const delay =
+        Math.max(0, index - sourceIndex - 1) * timelineSegmentMilliseconds
+      timers.push(
+        window.setTimeout(() => setTimelineProgressIndex(index), delay)
+      )
     }
 
     return () => timers.forEach((timer) => window.clearTimeout(timer))
   }, [activePlayback, sourceIndex, targetIndex, timelineSegmentMilliseconds])
 
   useEffect(() => {
-    activeTimelineItemRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "nearest",
-      inline: "nearest",
-    })
-  }, [displayedIndex, view, viewHistory.length])
+    const visibleViews = isFocusMode ? focusedFormationViews : [view]
+    for (const visibleView of visibleViews) {
+      activeTimelineItemRefs.current[visibleView]?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "nearest",
+      })
+    }
+  }, [history, isFocusMode, playback, view])
+
+  const viewItems = [
+    { id: "home-ip", label: t("formationView.homeInPossession") },
+    { id: "home-oop", label: t("formationView.homeOutOfPossession") },
+    { id: "away-ip", label: t("formationView.awayInPossession") },
+    { id: "away-oop", label: t("formationView.awayOutOfPossession") },
+  ] satisfies Array<{ id: FormationView; label: string }>
+  const visibleViews = isFocusMode ? focusedFormationViews : [view]
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -274,29 +302,148 @@ export const FormationPitch = memo(function FormationPitch({ match }: FormationP
         <CardTitle className="text-sm font-semibold @max-[350px]/card-header:hidden">
           {t("panels.formation")}
         </CardTitle>
-        <CardAction>
-          <NativeTabs
-            value={view}
-            onValueChange={(value) => setView(value as FormationView)}
-            renderContent={false}
-            className="w-64 max-w-none"
-            listClassName="h-6"
-            triggerClassName="h-5 px-1.5 text-[9px]"
-            items={[
-              { id: "home-ip", label: t("formationView.homeInPossession"), content: null },
-              { id: "home-oop", label: t("formationView.homeOutOfPossession"), content: null },
-              { id: "away-ip", label: t("formationView.awayInPossession"), content: null },
-              { id: "away-oop", label: t("formationView.awayOutOfPossession"), content: null },
-            ]}
-          />
-        </CardAction>
+        {!isFocusMode && (
+          <CardAction>
+            <NativeTabs
+              value={view}
+              onValueChange={(value) => setView(value as FormationView)}
+              renderContent={false}
+              className="w-64 max-w-none"
+              listClassName="h-6"
+              triggerClassName="h-5 px-1.5 text-[9px]"
+              items={viewItems.map((item) => ({ ...item, content: null }))}
+            />
+          </CardAction>
+        )}
       </CardHeader>
 
-      <CardContent className="@container/formation flex min-h-0 flex-1 flex-row p-0">
+      <CardContent
+        className={`${isFocusMode ? "grid grid-cols-2 grid-rows-2 gap-2 p-2" : "flex p-0"} min-h-0 flex-1`}
+      >
+        {visibleViews.map((visibleView) => {
+          const { side: visibleSide } = formationSelection(visibleView)
+          const teamColor =
+            match[visibleSide].color ??
+            (visibleSide === "home"
+              ? "var(--team-home-fallback)"
+              : "var(--team-away-fallback)")
+          return (
+            <FormationViewPane
+              key={visibleView}
+              view={visibleView}
+              label={
+                viewItems.find((item) => item.id === visibleView)?.label ??
+                visibleView
+              }
+              state={formationViewState(
+                visibleView,
+                history,
+                liveEntries,
+                playback,
+                pinnedEntries,
+                timelineProgressIndex
+              )}
+              pitchDimensions={pitchDimensions}
+              teamColor={teamColor}
+              isFocusMode={isFocusMode}
+              timelineRef={(node) => {
+                timelineRefs.current[visibleView] = node
+              }}
+              activeTimelineItemRef={(node) => {
+                activeTimelineItemRefs.current[visibleView] = node
+              }}
+              onPlayback={(sourceIndex, targetIndex) => {
+                setTimelineProgressIndex(sourceIndex)
+                setPlayback({
+                  view: visibleView,
+                  sourceIndex,
+                  targetIndex,
+                  phase: "previous",
+                })
+              }}
+              onTogglePin={(entryId) => {
+                setPlayback(null)
+                setPinnedEntries((current) => ({
+                  ...current,
+                  [visibleView]:
+                    current[visibleView] === entryId ? undefined : entryId,
+                }))
+              }}
+            />
+          )
+        })}
+      </CardContent>
+    </section>
+  )
+}, sameFormationPitchProps)
+
+type FormationViewState = ReturnType<typeof formationViewState>
+
+type FormationViewPaneProps = {
+  view: FormationView
+  label: string
+  state: FormationViewState
+  pitchDimensions: ReturnType<typeof resolvePitchDimensions>
+  teamColor: string
+  isFocusMode: boolean
+  timelineRef: (node: HTMLDivElement | null) => void
+  activeTimelineItemRef: (node: HTMLDivElement | null) => void
+  onPlayback: (sourceIndex: number, targetIndex: number) => void
+  onTogglePin: (entryId: string) => void
+}
+
+function FormationViewPane({
+  view,
+  label,
+  state,
+  pitchDimensions,
+  teamColor,
+  isFocusMode,
+  timelineRef,
+  activeTimelineItemRef,
+  onPlayback,
+  onTogglePin,
+}: FormationViewPaneProps) {
+  const { t } = useTranslation()
+  const { inPossession } = formationSelection(view)
+  const {
+    viewHistory,
+    activePlayback,
+    sourceIndex,
+    targetIndex,
+    displayedIndex,
+    entries,
+    comparisonPlayerIds,
+    hasOutgoingPlayers,
+    resetsToPrevious,
+    pinnedIndex,
+    timelineSegmentMilliseconds,
+    timelineIndicatorDuration,
+    timelineActiveIndex,
+  } = state
+
+  return (
+    <div
+      className={`@container/formation flex min-h-0 min-w-0 flex-1 overflow-hidden ${
+        isFocusMode ? "flex-col rounded-md border bg-background/40" : "flex-row"
+      }`}
+    >
+      {isFocusMode && (
+        <div className="flex h-7 shrink-0 items-center gap-2 border-b bg-muted/20 px-3 text-[11px] font-semibold text-foreground">
+          <span
+            aria-hidden="true"
+            className="size-1.5 rounded-full"
+            style={{ backgroundColor: teamColor }}
+          />
+          {label}
+        </div>
+      )}
+
+      <div className="flex min-h-0 min-w-0 flex-1">
         {viewHistory.length > 1 && (
           <div
             ref={timelineRef}
-            className="scrollbar-hidden w-36 max-w-[30%] shrink-0 overflow-y-auto border-r bg-muted/15 py-3 pr-2.5 pl-4 @max-[380px]/formation:hidden"
+            className={`${isFocusMode ? "w-32" : "w-36 @max-[380px]/formation:hidden"} scrollbar-hidden max-w-[30%] shrink-0 overflow-y-auto border-r bg-muted/15 py-3 pr-2.5 pl-4`}
           >
             <Timeline
               orientation="vertical"
@@ -305,68 +452,68 @@ export const FormationPitch = memo(function FormationPitch({ match }: FormationP
             >
               {viewHistory.map((entry, index) => {
                 const description = formationChangeDescription(entry.changes, t)
-                const animationSourceIndex = pinnedIndex >= 0 && pinnedIndex < index
-                  ? pinnedIndex
-                  : index - 1
+                const animationSourceIndex =
+                  pinnedIndex >= 0 && pinnedIndex < index
+                    ? pinnedIndex
+                    : index - 1
                 return (
                   <TimelineItem
                     key={entry.id}
-                    ref={index === displayedIndex ? activeTimelineItemRef : undefined}
+                    ref={
+                      index === displayedIndex
+                        ? activeTimelineItemRef
+                        : undefined
+                    }
                     step={index + 1}
                     className="min-w-0 flex-none gap-0 group-data-[orientation=vertical]/timeline:not-last:pb-3"
                   >
                     <TimelineHeader>
                       <TimelineTime
-                        onClick={() => {
-                          setTimelineProgressIndex(animationSourceIndex)
-                          setPlayback({
-                            view,
-                            sourceIndex: animationSourceIndex,
-                            targetIndex: index,
-                            phase: "previous",
-                          })
-                        }}
+                        onClick={() => onPlayback(animationSourceIndex, index)}
                         aria-label={`${entry.time} ${description}`}
-                        className={index === displayedIndex ? "mb-0 text-primary" : "mb-0"}
+                        className={
+                          index === displayedIndex
+                            ? "mb-0 text-primary"
+                            : "mb-0"
+                        }
                       >
                         {entry.time}
                       </TimelineTime>
                     </TimelineHeader>
                     <HoverCard>
                       <HoverCardTrigger
-                        render={(
+                        render={
                           <TimelineIndicator
-                            aria-label={t(index === pinnedIndex
-                              ? "formationHistory.unpinStart"
-                              : "formationHistory.pinStart")}
+                            aria-label={t(
+                              index === pinnedIndex
+                                ? "formationHistory.unpinStart"
+                                : "formationHistory.pinStart"
+                            )}
                             aria-pressed={index === pinnedIndex}
-                            onClick={() => {
-                              setPlayback(null)
-                              setPinnedEntries((current) => ({
-                                ...current,
-                                [view]: current[view] === entry.id ? undefined : entry.id,
-                              }))
-                            }}
+                            onClick={() => onTogglePin(entry.id)}
                             style={{
                               transitionDuration: `${timelineIndicatorDuration}ms`,
-                              transitionDelay: activePlayback?.phase === "current"
-                                && index >= sourceIndex
-                                && index <= targetIndex
-                                ? `${Math.max(0, timelineSegmentMilliseconds - timelineIndicatorDuration)}ms`
-                                : "0ms",
+                              transitionDelay:
+                                activePlayback?.phase === "current" &&
+                                index >= sourceIndex &&
+                                index <= targetIndex
+                                  ? `${Math.max(0, timelineSegmentMilliseconds - timelineIndicatorDuration)}ms`
+                                  : "0ms",
                             }}
                             className="border-border group-data-completed/timeline-item:border-primary group-data-active/timeline-item:bg-primary"
                           />
-                        )}
+                        }
                       />
                       <HoverCardContent
                         side="top"
                         sideOffset={6}
-                        className="w-auto whitespace-nowrap px-2.5 py-1.5 font-medium"
+                        className="w-auto px-2.5 py-1.5 font-medium whitespace-nowrap"
                       >
-                        {t(index === pinnedIndex
-                          ? "formationHistory.unpinStart"
-                          : "formationHistory.pinStart")}
+                        {t(
+                          index === pinnedIndex
+                            ? "formationHistory.unpinStart"
+                            : "formationHistory.pinStart"
+                        )}
                       </HoverCardContent>
                     </HoverCard>
                     {index === pinnedIndex && (
@@ -374,15 +521,24 @@ export const FormationPitch = memo(function FormationPitch({ match }: FormationP
                         aria-hidden="true"
                         className="pointer-events-none absolute top-0 -left-4 flex size-3 items-center justify-center text-foreground"
                       >
-                        <HugeiconsIcon icon={Pin02Icon} className="size-3" strokeWidth={2} />
+                        <HugeiconsIcon
+                          icon={Pin02Icon}
+                          className="size-3"
+                          strokeWidth={2}
+                        />
                       </span>
                     )}
                     <TimelineSeparator
-                      style={{
-                        "--timeline-segment-duration": `${resetsToPrevious ? 0 : timelineSegmentMilliseconds}ms`,
-                      } as CSSProperties}
+                      style={
+                        {
+                          "--timeline-segment-duration": `${resetsToPrevious ? 0 : timelineSegmentMilliseconds}ms`,
+                        } as CSSProperties
+                      }
                     />
-                    <TimelineContent className="truncate whitespace-nowrap text-[10px] leading-3" title={description}>
+                    <TimelineContent
+                      className="truncate text-[10px] leading-3 whitespace-nowrap"
+                      title={description}
+                    >
                       {description}
                     </TimelineContent>
                   </TimelineItem>
@@ -392,13 +548,18 @@ export const FormationPitch = memo(function FormationPitch({ match }: FormationP
           </div>
         )}
 
-        <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-3">
+        <div
+          className={`${isFocusMode ? "p-2" : "p-3"} flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden`}
+        >
           <div
             className="pitch-frame relative h-full max-h-full max-w-full shrink-0"
-            style={{
-              aspectRatio: `${pitchDimensions.length} / ${pitchDimensions.width}`,
-              "--pitch-frame-aspect": pitchDimensions.length / pitchDimensions.width,
-            } as CSSProperties}
+            style={
+              {
+                aspectRatio: `${pitchDimensions.length} / ${pitchDimensions.width}`,
+                "--pitch-frame-aspect":
+                  pitchDimensions.length / pitchDimensions.width,
+              } as CSSProperties
+            }
           >
             <div className="player-pitch relative size-full bg-[var(--formation-pitch-surface)]">
               <PitchMarkings
@@ -407,103 +568,251 @@ export const FormationPitch = memo(function FormationPitch({ match }: FormationP
               />
               <div className="pointer-events-none absolute inset-0">
                 <AnimatePresence custom={resetsToPrevious}>
-                {entries.map(({ player, assignment, x, y }) => {
-                  const roleNamespace = inPossession
-                    ? "inPossessionRoleNames"
-                    : "outOfPossessionRoleNames"
-                  const roleName = t(`${roleNamespace}.${assignment.roleAbbreviation}`, {
-                    defaultValue: assignment.role,
-                  })
-                  const entersPitch = !comparisonPlayerIds.has(player.id)
-                  const shouldAnimateEntrance = !resetsToPrevious && entersPitch
-                  const entryDelay = !resetsToPrevious && entersPitch && hasOutgoingPlayers ? 0.6 : 0
-                  const movementDuration = resetsToPrevious ? 0 : 0.7
-                  return (
-                  <motion.div
-                    key={`formation-${view}-${player.id}`}
-                    className="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2"
-                    custom={resetsToPrevious}
-                    variants={playerMotionVariants}
-                    initial={shouldAnimateEntrance ? "initial" : false}
-                    animate={{ left: `${x}%`, top: `${y}%`, opacity: 1 }}
-                    exit="exit"
-                    transition={{
-                      left: { duration: movementDuration, delay: entryDelay },
-                      top: { duration: movementDuration, delay: entryDelay },
-                      opacity: { duration: resetsToPrevious ? 0 : 0.25, delay: entryDelay },
-                    }}
-                  >
-                    <HoverCard>
-                      <HoverCardTrigger
-                        render={<div className="flex max-w-36 flex-col items-center text-center" />}
+                  {entries.map(({ player, assignment, x, y }) => {
+                    const roleNamespace = inPossession
+                      ? "inPossessionRoleNames"
+                      : "outOfPossessionRoleNames"
+                    const roleName = t(
+                      `${roleNamespace}.${assignment.roleAbbreviation}`,
+                      { defaultValue: assignment.role }
+                    )
+                    const entersPitch = !comparisonPlayerIds.has(player.id)
+                    const shouldAnimateEntrance =
+                      !resetsToPrevious && entersPitch
+                    const entryDelay =
+                      !resetsToPrevious && entersPitch && hasOutgoingPlayers
+                        ? 0.6
+                        : 0
+                    const movementDuration = resetsToPrevious ? 0 : 0.7
+                    return (
+                      <motion.div
+                        key={`formation-${view}-${player.id}`}
+                        className="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2"
+                        custom={resetsToPrevious}
+                        variants={playerMotionVariants}
+                        initial={shouldAnimateEntrance ? "initial" : false}
+                        animate={{
+                          left: `${x}%`,
+                          top: `${y}%`,
+                          opacity: 1,
+                        }}
+                        exit="exit"
+                        transition={{
+                          left: {
+                            duration: movementDuration,
+                            delay: entryDelay,
+                          },
+                          top: {
+                            duration: movementDuration,
+                            delay: entryDelay,
+                          },
+                          opacity: {
+                            duration: resetsToPrevious ? 0 : 0.25,
+                            delay: entryDelay,
+                          },
+                        }}
                       >
-                        <PitchPlayerBadge
-                          number={player.shirtNumber}
-                          numberColor="var(--formation-player-number)"
-                          style={{ backgroundColor: teamColor }}
-                          badge={
-                            player.status?.subbedOnMinute != null ? (
-                              <HugeiconsIcon icon={ArrowDataTransferHorizontalIcon} strokeWidth={2} />
-                            ) : null
-                          }
-                          badgeClassName="bg-background text-foreground ring-1 ring-background"
-                        />
-                        <div className="pitch-player-name mt-0.5 flex max-w-36 items-center whitespace-nowrap rounded-sm bg-background/90 px-1 py-px text-[9px] font-semibold leading-3 text-foreground shadow-sm">
-                          <AnimatePresence mode="wait" initial={false}>
-                            <motion.span
-                              key={assignment.roleAbbreviation}
-                              className="shrink-0"
-                              initial={{ opacity: 0, y: 2 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, y: -2 }}
-                              transition={{ duration: 0.18 }}
-                            >
-                              {assignment.roleAbbreviation}
-                            </motion.span>
-                          </AnimatePresence>
-                          <span aria-hidden="true" className="mx-1 h-2.5 w-px shrink-0 bg-border" />
-                          <span className="min-w-0 truncate">
-                            {playerSurname(player.name)}
-                          </span>
-                        </div>
-                      </HoverCardTrigger>
-                      <HoverCardContent
-                        side="top"
-                        sideOffset={6}
-                        className="w-auto max-w-72 whitespace-nowrap px-2.5 py-1.5 font-medium"
-                      >
-                        {roleName}
-                      </HoverCardContent>
-                    </HoverCard>
-                  </motion.div>
-                  )
-                })}
+                        <HoverCard>
+                          <HoverCardTrigger
+                            render={
+                              <div className="flex max-w-36 flex-col items-center text-center" />
+                            }
+                          >
+                            <PitchPlayerBadge
+                              number={player.shirtNumber}
+                              numberColor="var(--formation-player-number)"
+                              style={{ backgroundColor: teamColor }}
+                              badge={
+                                player.status?.subbedOnMinute != null ? (
+                                  <HugeiconsIcon
+                                    icon={ArrowDataTransferHorizontalIcon}
+                                    strokeWidth={2}
+                                  />
+                                ) : null
+                              }
+                              badgeClassName="bg-background text-foreground ring-1 ring-background"
+                            />
+                            <div className="pitch-player-name mt-0.5 flex max-w-36 items-center rounded-sm bg-background/90 px-1 py-px text-[9px] leading-3 font-semibold whitespace-nowrap text-foreground shadow-sm">
+                              <AnimatePresence mode="wait" initial={false}>
+                                <motion.span
+                                  key={assignment.roleAbbreviation}
+                                  className="shrink-0"
+                                  initial={{ opacity: 0, y: 2 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  exit={{ opacity: 0, y: -2 }}
+                                  transition={{ duration: 0.18 }}
+                                >
+                                  {assignment.roleAbbreviation}
+                                </motion.span>
+                              </AnimatePresence>
+                              <span
+                                aria-hidden="true"
+                                className="mx-1 h-2.5 w-px shrink-0 bg-border"
+                              />
+                              <span className="min-w-0 truncate">
+                                {playerSurname(player.name)}
+                              </span>
+                            </div>
+                          </HoverCardTrigger>
+                          <HoverCardContent
+                            side="top"
+                            sideOffset={6}
+                            className="w-auto max-w-72 px-2.5 py-1.5 font-medium whitespace-nowrap"
+                          >
+                            {roleName}
+                          </HoverCardContent>
+                        </HoverCard>
+                      </motion.div>
+                    )
+                  })}
                 </AnimatePresence>
               </div>
             </div>
           </div>
         </div>
-      </CardContent>
-    </section>
+      </div>
+    </div>
   )
-}, sameFormationPitchProps)
+}
 
-function sameFormationPitchProps(previous: FormationPitchProps, next: FormationPitchProps) {
+function formationViewState(
+  view: FormationView,
+  history: FormationHistory,
+  liveEntries: Record<FormationView, FormationEntry[]>,
+  playback: FormationPlayback | null,
+  pinnedEntries: PinnedFormationEntries,
+  timelineProgressIndex: number | null
+) {
+  const viewHistory = history[view]
+  const activePlayback = playback?.view === view ? playback : null
+  const targetIndex = activePlayback
+    ? Math.min(activePlayback.targetIndex, Math.max(0, viewHistory.length - 1))
+    : Math.max(0, viewHistory.length - 1)
+  const sourceIndex = activePlayback
+    ? Math.min(activePlayback.sourceIndex, Math.max(0, targetIndex - 1))
+    : targetIndex - 1
+  const displayedIndex =
+    activePlayback?.phase === "previous"
+      ? Math.max(0, sourceIndex)
+      : targetIndex
+  const entries =
+    activePlayback?.phase === "previous" && sourceIndex < 0
+      ? []
+      : (viewHistory[displayedIndex]?.entries ?? liveEntries[view])
+  const comparisonEntries = activePlayback
+    ? activePlayback.phase === "current"
+      ? sourceIndex >= 0
+        ? viewHistory[sourceIndex].entries
+        : []
+      : (viewHistory[targetIndex]?.entries ?? [])
+    : displayedIndex > 0
+      ? viewHistory[displayedIndex - 1].entries
+      : []
+  const comparisonPlayerIds = new Set(
+    comparisonEntries.map((entry) => entry.player.id)
+  )
+  const currentPlayerIds = new Set(entries.map((entry) => entry.player.id))
+  const hasOutgoingPlayers = comparisonEntries.some(
+    (entry) => !currentPlayerIds.has(entry.player.id)
+  )
+  const resetsToPrevious = activePlayback?.phase === "previous"
+  const pinnedIndex = viewHistory.findIndex(
+    (entry) => entry.id === pinnedEntries[view]
+  )
+  const playbackSourceEntries =
+    sourceIndex >= 0 ? (viewHistory[sourceIndex]?.entries ?? []) : []
+  const playbackTargetEntries = viewHistory[targetIndex]?.entries ?? []
+  const playbackSourcePlayerIds = new Set(
+    playbackSourceEntries.map((entry) => entry.player.id)
+  )
+  const playbackTargetPlayerIds = new Set(
+    playbackTargetEntries.map((entry) => entry.player.id)
+  )
+  const playbackHasOutgoingPlayers = playbackSourceEntries.some(
+    (entry) => !playbackTargetPlayerIds.has(entry.player.id)
+  )
+  const playbackHasIncomingPlayers = playbackTargetEntries.some(
+    (entry) => !playbackSourcePlayerIds.has(entry.player.id)
+  )
+  const playbackSourceByPlayer = new Map(
+    playbackSourceEntries.map((entry) => [entry.player.id, entry])
+  )
+  const playbackHasPositionChanges = playbackTargetEntries.some((entry) => {
+    const previous = playbackSourceByPlayer.get(entry.player.id)
+    return (
+      previous != null &&
+      (previous.assignment.positionMask !== entry.assignment.positionMask ||
+        previous.assignment.position !== entry.assignment.position)
+    )
+  })
+  const playbackHasRoleChanges = playbackTargetEntries.some((entry) => {
+    const previous = playbackSourceByPlayer.get(entry.player.id)
+    return (
+      previous != null &&
+      (previous.assignment.role !== entry.assignment.role ||
+        previous.assignment.roleAbbreviation !==
+          entry.assignment.roleAbbreviation)
+    )
+  })
+  const playbackTransitionMilliseconds =
+    playbackHasOutgoingPlayers && playbackHasIncomingPlayers
+      ? 1300
+      : Math.max(
+          playbackHasIncomingPlayers ? 700 : 0,
+          playbackHasOutgoingPlayers ? 550 : 0,
+          playbackHasPositionChanges ? 700 : 0,
+          playbackHasRoleChanges ? 180 : 0,
+          180
+        )
+  const playbackSegmentCount = Math.max(1, targetIndex - sourceIndex)
+  const timelineSegmentMilliseconds =
+    playbackTransitionMilliseconds / playbackSegmentCount
+  const timelineIndicatorDuration = Math.min(100, timelineSegmentMilliseconds)
+  const timelineActiveIndex = activePlayback
+    ? activePlayback.phase === "previous"
+      ? sourceIndex
+      : (timelineProgressIndex ?? sourceIndex)
+    : displayedIndex
+
+  return {
+    viewHistory,
+    activePlayback,
+    sourceIndex,
+    targetIndex,
+    displayedIndex,
+    entries,
+    comparisonPlayerIds,
+    hasOutgoingPlayers,
+    resetsToPrevious,
+    pinnedIndex,
+    timelineSegmentMilliseconds,
+    timelineIndicatorDuration,
+    timelineActiveIndex,
+  }
+}
+
+function sameFormationPitchProps(
+  previous: FormationPitchProps,
+  next: FormationPitchProps
+) {
   const left = previous.match
   const right = next.match
-  return left.matchId === right.matchId
-    && left.pitchDimensions?.length === right.pitchDimensions?.length
-    && left.pitchDimensions?.width === right.pitchDimensions?.width
-    && left.home.uid === right.home.uid
-    && left.home.clubUid === right.home.clubUid
-    && left.home.name === right.home.name
-    && left.home.color === right.home.color
-    && left.away.uid === right.away.uid
-    && left.away.clubUid === right.away.clubUid
-    && left.away.name === right.away.name
-    && left.away.color === right.away.color
-    && left.formationSnapshots === right.formationSnapshots
-    && sameFormationPlayers(left.players, right.players)
+  return (
+    previous.isFocusMode === next.isFocusMode &&
+    left.matchId === right.matchId &&
+    left.pitchDimensions?.length === right.pitchDimensions?.length &&
+    left.pitchDimensions?.width === right.pitchDimensions?.width &&
+    left.home.uid === right.home.uid &&
+    left.home.clubUid === right.home.clubUid &&
+    left.home.name === right.home.name &&
+    left.home.color === right.home.color &&
+    left.away.uid === right.away.uid &&
+    left.away.clubUid === right.away.clubUid &&
+    left.away.name === right.away.name &&
+    left.away.color === right.away.color &&
+    left.formationSnapshots === right.formationSnapshots &&
+    sameFormationPlayers(left.players, right.players)
+  )
 }
 
 function playerSurname(name: string) {
@@ -515,13 +824,18 @@ function updateFormationHistory(
   current: FormationHistory,
   liveEntries: Record<FormationView, FormationEntry[]>,
   tick: number,
-  time: string,
+  time: string
 ) {
   let changed = false
   const next = { ...current }
 
   for (const view of formationViews) {
-    const updated = upsertFormationHistory(current[view], liveEntries[view], tick, time)
+    const updated = upsertFormationHistory(
+      current[view],
+      liveEntries[view],
+      tick,
+      time
+    )
     if (updated !== current[view]) {
       next[view] = updated
       changed = true
@@ -535,7 +849,7 @@ function upsertFormationHistory(
   history: FormationHistoryEntry[],
   entries: FormationEntry[],
   tick: number,
-  time: string,
+  time: string
 ) {
   if (entries.length === 0) return history
 
@@ -556,40 +870,55 @@ function upsertFormationHistory(
     entries: [...entries],
     changes: [],
   }
-  const sorted = [...history.filter((entry) => entry.tick !== tick), candidate]
-    .sort((left, right) => left.tick - right.tick)
-  const deduplicated = sorted.filter((entry, index) => (
-    index === 0 || entry.signature !== sorted[index - 1].signature
-  ))
+  const sorted = [
+    ...history.filter((entry) => entry.tick !== tick),
+    candidate,
+  ].sort((left, right) => left.tick - right.tick)
+  const deduplicated = sorted.filter(
+    (entry, index) =>
+      index === 0 || entry.signature !== sorted[index - 1].signature
+  )
 
   return deduplicated.map<FormationHistoryEntry>((entry, index) => ({
     ...entry,
-    changes: index === 0
-      ? ["initial"]
-      : formationChanges(deduplicated[index - 1].entries, entry.entries),
+    changes:
+      index === 0
+        ? ["initial"]
+        : formationChanges(deduplicated[index - 1].entries, entry.entries),
   }))
 }
 
 function formationSignature(entries: FormationEntry[]) {
   return entries
-    .map(({ player, assignment }) => [
-      player.id,
-      assignment.positionMask,
-      assignment.role,
-      assignment.roleAbbreviation,
-    ].join(":"))
+    .map(({ player, assignment }) =>
+      [
+        player.id,
+        assignment.positionMask,
+        assignment.role,
+        assignment.roleAbbreviation,
+      ].join(":")
+    )
     .sort()
     .join("|")
 }
 
-function formationChanges(previous: FormationEntry[], current: FormationEntry[]): FormationChangeType[] {
+function formationChanges(
+  previous: FormationEntry[],
+  current: FormationEntry[]
+): FormationChangeType[] {
   const changes = new Set<FormationChangeType>()
-  const previousPlayers = new Map(previous.map((entry) => [entry.player.id, entry]))
-  const currentPlayers = new Map(current.map((entry) => [entry.player.id, entry]))
+  const previousPlayers = new Map(
+    previous.map((entry) => [entry.player.id, entry])
+  )
+  const currentPlayers = new Map(
+    current.map((entry) => [entry.player.id, entry])
+  )
 
   if (
-    previousPlayers.size !== currentPlayers.size
-    || [...previousPlayers.keys()].some((playerId) => !currentPlayers.has(playerId))
+    previousPlayers.size !== currentPlayers.size ||
+    [...previousPlayers.keys()].some(
+      (playerId) => !currentPlayers.has(playerId)
+    )
   ) {
     changes.add("personnel")
   }
@@ -599,14 +928,16 @@ function formationChanges(previous: FormationEntry[], current: FormationEntry[])
     if (!previousEntry) continue
 
     if (
-      previousEntry.assignment.positionMask !== currentEntry.assignment.positionMask
-      || previousEntry.assignment.position !== currentEntry.assignment.position
+      previousEntry.assignment.positionMask !==
+        currentEntry.assignment.positionMask ||
+      previousEntry.assignment.position !== currentEntry.assignment.position
     ) {
       changes.add("formation")
     }
     if (
-      previousEntry.assignment.role !== currentEntry.assignment.role
-      || previousEntry.assignment.roleAbbreviation !== currentEntry.assignment.roleAbbreviation
+      previousEntry.assignment.role !== currentEntry.assignment.role ||
+      previousEntry.assignment.roleAbbreviation !==
+        currentEntry.assignment.roleAbbreviation
     ) {
       changes.add("role")
     }
@@ -617,9 +948,14 @@ function formationChanges(previous: FormationEntry[], current: FormationEntry[])
 
 function formationChangeDescription(
   changes: FormationChangeType[],
-  t: (key: string) => string,
+  t: (key: string) => string
 ) {
-  const priority: FormationChangeType[] = ["initial", "formation", "personnel", "role"]
+  const priority: FormationChangeType[] = [
+    "initial",
+    "formation",
+    "personnel",
+    "role",
+  ]
   return priority
     .filter((change) => changes.includes(change))
     .map((change) => t(`formationHistory.${change}`))
@@ -630,7 +966,10 @@ function formatFormationTime(minute: number) {
   return `${Math.max(0, minute)}′`
 }
 
-function formationSelection(view: FormationView): { side: TeamSide; inPossession: boolean } {
+function formationSelection(view: FormationView): {
+  side: TeamSide
+  inPossession: boolean
+} {
   return {
     side: view.startsWith("home") ? "home" : "away",
     inPossession: view.endsWith("-ip"),
@@ -638,13 +977,19 @@ function formationSelection(view: FormationView): { side: TeamSide; inPossession
 }
 
 function formationEntries(players: MatchPlayer[]) {
-  return Object.fromEntries(formationViews.map((view) => {
-    const selection = formationSelection(view)
-    return [view, layoutTeam(players, selection.side, selection.inPossession)]
-  })) as Record<FormationView, FormationEntry[]>
+  return Object.fromEntries(
+    formationViews.map((view) => {
+      const selection = formationSelection(view)
+      return [view, layoutTeam(players, selection.side, selection.inPossession)]
+    })
+  ) as Record<FormationView, FormationEntry[]>
 }
 
-function layoutTeam(players: MatchPlayer[], side: TeamSide, inPossession: boolean): FormationEntry[] {
+function layoutTeam(
+  players: MatchPlayer[],
+  side: TeamSide,
+  inPossession: boolean
+): FormationEntry[] {
   const teamPlayers = players.filter((player) => player.team === side)
   const onPitch = teamPlayers.filter((player) => player.isOnPitch)
   const assignmentFor = (player: MatchPlayer) =>
@@ -653,10 +998,12 @@ function layoutTeam(players: MatchPlayer[], side: TeamSide, inPossession: boolea
     onPitch.flatMap((player) => {
       const assignment = assignmentFor(player)
       return assignment ? [assignment.positionMask] : []
-    }),
+    })
   )
   const vacatedAssignments = teamPlayers
-    .filter((player) => !player.isOnPitch && player.status?.subbedOffMinute != null)
+    .filter(
+      (player) => !player.isOnPitch && player.status?.subbedOffMinute != null
+    )
     .flatMap((player) => {
       const assignment = assignmentFor(player)
       return assignment && !occupiedPositions.has(assignment.positionMask)
@@ -671,12 +1018,23 @@ function layoutTeam(players: MatchPlayer[], side: TeamSide, inPossession: boolea
 
       const substitutionMinute = player.status?.subbedOnMinute
       const matchingIndex = vacatedAssignments.findIndex(
-        ({ minute }) => substitutionMinute != null && minute === substitutionMinute,
+        ({ minute }) =>
+          substitutionMinute != null && minute === substitutionMinute
       )
-      const fallback = vacatedAssignments.splice(matchingIndex >= 0 ? matchingIndex : 0, 1)[0]
+      const fallback = vacatedAssignments.splice(
+        matchingIndex >= 0 ? matchingIndex : 0,
+        1
+      )[0]
       return fallback ? { player, assignment: fallback.assignment } : null
     })
-    .filter((entry): entry is { player: MatchPlayer; assignment: PlayerTacticalAssignment } => entry != null)
+    .filter(
+      (
+        entry
+      ): entry is {
+        player: MatchPlayer
+        assignment: PlayerTacticalAssignment
+      } => entry != null
+    )
     .map(({ player, assignment }) => {
       const depth = lineDepth[lineForPosition(assignment.position)]
       const lane = laneForPosition(assignment.position)

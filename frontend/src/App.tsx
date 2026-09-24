@@ -702,7 +702,10 @@ export function App() {
                   </AnimatedDashboardCard>
 
                   <AnimatedDashboardCard>
-                    <FormationPitch match={match} />
+                    <FormationPitch
+                      match={match}
+                      isFocusMode={focusedPanel === "formation"}
+                    />
                   </AnimatedDashboardCard>
                 </motion.div>
 
