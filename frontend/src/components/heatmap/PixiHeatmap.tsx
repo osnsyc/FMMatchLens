@@ -8,6 +8,7 @@ import {
   DEFAULT_HEATMAP_TONE_MAPPING,
   type HeatmapToneMapping,
 } from "@/components/heatmap/heatmapTexture"
+import { hexColorToNormalizedRgb } from "@/lib/cssColor"
 import type { HeatmapGrid } from "@/types/match"
 import { useTheme } from "@/components/theme-provider"
 
@@ -128,8 +129,5 @@ function resolveCssVariables(color: string, style: CSSStyleDeclaration) {
 }
 
 function cssColorToRgb(color: string): number[] {
-  const match = color.trim().match(/^#([0-9a-f]{6})$/i)
-  if (!match) return [0, 0, 0]
-  const value = Number.parseInt(match[1], 16)
-  return [((value >> 16) & 255) / 255, ((value >> 8) & 255) / 255, (value & 255) / 255]
+  return hexColorToNormalizedRgb(color) ?? [0, 0, 0]
 }
