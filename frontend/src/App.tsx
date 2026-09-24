@@ -48,6 +48,11 @@ import {
   updatePinnedPlayer,
   type PinnedPlayersState,
 } from "@/lib/pinnedPlayerSelection"
+import {
+  shortcutForKeyboardEvent,
+  playbackToggleEventName,
+  type DashboardFocusPanel,
+} from "@/lib/appShortcuts"
 
 const FormationPitch = lazy(() =>
   import("@/components/FormationPitch").then((module) => ({
@@ -87,7 +92,13 @@ const ZonePanel = lazy(() =>
 
 export function App() {
   const { t, i18n } = useTranslation()
-  const { settings, resolvedScheme, preset } = useTheme()
+  const {
+    settings,
+    resolvedScheme,
+    preset,
+    schemeLocked,
+    setSchemePreference,
+  } = useTheme()
   const [replayMatch, setReplayMatch] = useState<MatchSnapshot | null>(null)
   const [experimentalLiveEnabled, setExperimentalLiveEnabled] = useState(false)
   const liveConnectionEnabled =
@@ -99,13 +110,19 @@ export function App() {
   const [archiveError, setArchiveError] = useState("")
   const [draggingArchive, setDraggingArchive] = useState(false)
   const [isDemoLoading, setIsDemoLoading] = useState(false)
-  const [isTacticalFocusMode, setIsTacticalFocusMode] = useState(false)
+  const [focusedPanel, setFocusedPanel] = useState<DashboardFocusPanel | null>(
+    null
+  )
+  const [isChromeHidden, setIsChromeHidden] = useState(false)
+  const isTacticalFocusMode = focusedPanel === "tactical"
   const [tacticalEventFilterMode, setTacticalEventFilterMode] =
     useState<TacticalEventFilterMode>("all")
-  const [tacticalPlayerIds, setTacticalPlayerIds] = useState<ReadonlySet<number>>(
-    () => new Set()
-  )
-  const [pinnedPlayers, setPinnedPlayers] = useState<PinnedPlayersState>({ ids: {} })
+  const [tacticalPlayerIds, setTacticalPlayerIds] = useState<
+    ReadonlySet<number>
+  >(() => new Set())
+  const [pinnedPlayers, setPinnedPlayers] = useState<PinnedPlayersState>({
+    ids: {},
+  })
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const demoAbortRef = useRef<AbortController | null>(null)
   const showReplayFrame = useCallback((snapshot: MatchSnapshot) => {
@@ -255,11 +272,11 @@ export function App() {
   }, [])
   const setPinnedHomePlayer = useCallback(
     (playerId?: number) => setPinnedPlayer("home", playerId),
-    [setPinnedPlayer],
+    [setPinnedPlayer]
   )
   const setPinnedAwayPlayer = useCallback(
     (playerId?: number) => setPinnedPlayer("away", playerId),
-    [setPinnedPlayer],
+    [setPinnedPlayer]
   )
   const toggleTacticalPlayer = useCallback((playerId: number) => {
     setTacticalPlayerIds((current) => {
@@ -274,33 +291,52 @@ export function App() {
     if (pinnedPlayers.ids.home == null && pinnedPlayers.ids.away == null) return
     const closePinnedProfiles = (event: PointerEvent) => {
       const target = event.target
-      if (target instanceof Element && target.closest("[data-player-profile-popup], [data-player-comparison-popup], [data-player-profile-pin]")) return
+      if (
+        target instanceof Element &&
+        target.closest(
+          "[data-player-profile-popup], [data-player-comparison-popup], [data-player-profile-pin]"
+        )
+      )
+        return
       setPinnedPlayers({ ids: {} })
     }
     document.addEventListener("pointerdown", closePinnedProfiles, true)
-    return () => document.removeEventListener("pointerdown", closePinnedProfiles, true)
+    return () =>
+      document.removeEventListener("pointerdown", closePinnedProfiles, true)
   }, [pinnedPlayers.ids.away, pinnedPlayers.ids.home])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        !hasMatch ||
-        event.repeat ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey ||
-        event.key.toLowerCase() !== "t" ||
-        isEditableTarget(event.target)
-      ) {
-        return
-      }
+      const shortcut = shortcutForKeyboardEvent(event)
+      if (!shortcut || (shortcut.requiresMatch && !hasMatch)) return
 
-      setIsTacticalFocusMode((current) => !current)
+      event.preventDefault()
+      switch (shortcut.id) {
+        case "zen":
+          setIsChromeHidden((current) => !current)
+          break
+        case "matchStats":
+        case "tactical":
+        case "heatmap":
+        case "formation": {
+          const panel = shortcut.id
+          setFocusedPanel((current) => (current === panel ? null : panel))
+          break
+        }
+        case "playback":
+          window.dispatchEvent(new Event(playbackToggleEventName))
+          break
+        case "theme":
+          if (!schemeLocked) {
+            setSchemePreference(resolvedScheme === "dark" ? "light" : "dark")
+          }
+          break
+      }
     }
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [hasMatch])
+  }, [hasMatch, resolvedScheme, schemeLocked, setSchemePreference])
 
   if (!match) {
     return (
@@ -493,8 +529,12 @@ export function App() {
   const homePlayers = match.players.filter((player) => player.team === "home")
 
   const awayPlayers = match.players.filter((player) => player.team === "away")
-  const pinnedHomePlayer = homePlayers.find((player) => player.id === pinnedPlayers.ids.home)
-  const pinnedAwayPlayer = awayPlayers.find((player) => player.id === pinnedPlayers.ids.away)
+  const pinnedHomePlayer = homePlayers.find(
+    (player) => player.id === pinnedPlayers.ids.home
+  )
+  const pinnedAwayPlayer = awayPlayers.find(
+    (player) => player.id === pinnedPlayers.ids.away
+  )
   const comparisonOpen = pinnedHomePlayer != null && pinnedAwayPlayer != null
 
   return (
@@ -508,12 +548,17 @@ export function App() {
       >
         <div
           data-player-profile-blur-scope
-          className="grid h-full min-h-0 w-full min-w-0 grid-cols-1 grid-rows-[64px_minmax(0,1fr)_88px] gap-2 md:min-w-[1360px]"
+          data-chrome-hidden={isChromeHidden || undefined}
+          className={`grid h-full min-h-0 w-full min-w-0 grid-cols-1 gap-2 md:min-w-[1360px] ${
+            isChromeHidden
+              ? "grid-rows-[minmax(0,1fr)]"
+              : "grid-rows-[64px_minmax(0,1fr)_88px]"
+          }`}
         >
           {/* Score header */}
           <Card
             data-player-profile-blur-target
-            className="min-h-0 border-transparent bg-transparent p-0 shadow-none"
+            className={`${isChromeHidden ? "hidden" : ""} min-h-0 border-transparent bg-transparent p-0 shadow-none`}
           >
             <ScoreHeader match={match} />
           </Card>
@@ -534,7 +579,11 @@ export function App() {
                 events={match.events}
                 teamColor={match.home.color}
                 pinnedPlayerId={pinnedHomePlayer?.id}
-                attackingOpponent={pinnedPlayers.attackingSide === "away" ? pinnedAwayPlayer : undefined}
+                attackingOpponent={
+                  pinnedPlayers.attackingSide === "away"
+                    ? pinnedAwayPlayer
+                    : undefined
+                }
                 profilePopupSuppressed={comparisonOpen}
                 onPinnedPlayerChange={setPinnedHomePlayer}
                 tacticalSelectionActive={
@@ -548,9 +597,9 @@ export function App() {
 
             {/* Central dashboard */}
             <div
-              data-tactical-focus-mode={isTacticalFocusMode ? "true" : "false"}
+              data-dashboard-focus={focusedPanel ?? "none"}
               className={`relative grid min-h-0 min-w-0 gap-2 ${
-                isTacticalFocusMode
+                focusedPanel != null
                   ? "grid-rows-1"
                   : "grid-rows-2 md:grid-rows-[minmax(0,0.8fr)_minmax(0,1.25fr)]"
               }`}
@@ -559,14 +608,24 @@ export function App() {
               <div
                 data-player-profile-blur-target
                 className={`${
-                  isTacticalFocusMode ? "hidden" : "grid"
-                } min-h-0 min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,3fr)]`}
+                  focusedPanel != null && focusedPanel !== "formation"
+                    ? "hidden"
+                    : "grid"
+                } min-h-0 min-w-0 grid-cols-1 gap-2 ${
+                  focusedPanel === "formation"
+                    ? ""
+                    : "md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,3fr)]"
+                }`}
               >
-                <Card className="min-h-0 min-w-0 overflow-hidden p-0">
+                <Card
+                  className={`${focusedPanel === "formation" ? "hidden" : ""} min-h-0 min-w-0 overflow-hidden p-0`}
+                >
                   <Momentum match={match} />
                 </Card>
 
-                <Card className="min-h-0 min-w-0 overflow-hidden p-0">
+                <Card
+                  className={`${focusedPanel === "formation" ? "hidden" : ""} min-h-0 min-w-0 overflow-hidden p-0`}
+                >
                   <XgTimeline match={match} />
                 </Card>
 
@@ -578,21 +637,21 @@ export function App() {
               {/* Bottom row: stats | tactical board | zone */}
               <div
                 data-player-profile-blur-target
-                className={`grid min-h-0 min-w-0 grid-cols-1 gap-2 ${
-                  isTacticalFocusMode
-                    ? ""
-                    : "md:grid-cols-[minmax(180px,2.2fr)_minmax(0,6fr)_minmax(220px,2.5fr)]"
+                className={`${focusedPanel === "formation" ? "hidden" : "grid"} min-h-0 min-w-0 grid-cols-1 gap-2 ${
+                  focusedPanel == null
+                    ? "md:grid-cols-[minmax(180px,2.2fr)_minmax(0,6fr)_minmax(220px,2.5fr)]"
+                    : ""
                 }`}
               >
                 <Card
-                  className={`${isTacticalFocusMode ? "hidden" : ""} min-h-0 min-w-0 overflow-hidden p-0`}
+                  className={`${focusedPanel != null && focusedPanel !== "matchStats" ? "hidden" : ""} min-h-0 min-w-0 overflow-hidden p-0`}
                 >
                   <MatchStatsPanel match={match} />
                 </Card>
 
                 <Card
                   data-tactical-board
-                  className="min-h-0 min-w-0 overflow-hidden p-0"
+                  className={`${focusedPanel != null && focusedPanel !== "tactical" ? "hidden" : ""} min-h-0 min-w-0 overflow-hidden p-0`}
                 >
                   <TacticalBoard
                     match={match}
@@ -604,7 +663,7 @@ export function App() {
                 </Card>
 
                 <Card
-                  className={`${isTacticalFocusMode ? "hidden" : ""} min-h-0 min-w-0 overflow-hidden p-0`}
+                  className={`${focusedPanel != null && focusedPanel !== "heatmap" ? "hidden" : ""} min-h-0 min-w-0 overflow-hidden p-0`}
                 >
                   <ZonePanel match={match} />
                 </Card>
@@ -633,7 +692,11 @@ export function App() {
                 events={match.events}
                 teamColor={match.away.color}
                 pinnedPlayerId={pinnedAwayPlayer?.id}
-                attackingOpponent={pinnedPlayers.attackingSide === "home" ? pinnedHomePlayer : undefined}
+                attackingOpponent={
+                  pinnedPlayers.attackingSide === "home"
+                    ? pinnedHomePlayer
+                    : undefined
+                }
                 profilePopupSuppressed={comparisonOpen}
                 onPinnedPlayerChange={setPinnedAwayPlayer}
                 tacticalSelectionActive={
@@ -649,7 +712,7 @@ export function App() {
           {/* Match timeline */}
           <Card
             data-player-profile-blur-target
-            className="min-h-0 border-transparent bg-transparent p-0 shadow-none"
+            className={`${isChromeHidden ? "hidden" : ""} min-h-0 border-transparent bg-transparent p-0 shadow-none`}
           >
             <MatchTimeline
               match={match}
@@ -662,14 +725,6 @@ export function App() {
         </div>
       </Suspense>
     </main>
-  )
-}
-
-function isEditableTarget(target: EventTarget | null) {
-  return (
-    target instanceof HTMLElement &&
-    (target.isContentEditable ||
-      target.matches("input, textarea, select, [role='textbox']"))
   )
 }
 

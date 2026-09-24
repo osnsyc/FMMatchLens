@@ -47,12 +47,12 @@ export function ThemeToggle() {
   const currentSchemeLabel = t(`appearance.scheme.${resolvedScheme}`)
 
   return (
-    <div className="inline-flex items-center gap-1">
+    <div className="inline-flex items-center gap-2">
       <Button
         type="button"
         variant="outline"
         size="icon"
-        className="size-8"
+        className="size-8 active:translate-y-px"
         disabled={schemeLocked}
         onClick={toggleScheme}
         aria-label={`${t("appearance.scheme.label")}: ${currentSchemeLabel}`}
@@ -66,7 +66,7 @@ export function ThemeToggle() {
               type="button"
               variant="outline"
               size="icon"
-              className="size-8"
+              className="size-8 active:translate-y-px"
               aria-label={t("appearance.open")}
               title={t("appearance.open")}
             />

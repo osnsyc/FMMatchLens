@@ -57,13 +57,6 @@ function disableTransitionsTemporarily() {
   }
 }
 
-function isEditableTarget(target: EventTarget | null) {
-  return target instanceof HTMLElement && (
-    target.isContentEditable ||
-    target.closest("input, textarea, select, [contenteditable='true']") !== null
-  )
-}
-
 function applyRootAppearance(settings: AppearanceSettings, scheme: Scheme) {
   const root = document.documentElement
   root.dataset.preset = settings.presetId
@@ -142,25 +135,6 @@ export function ThemeProvider({
     mediaQuery.addEventListener("change", handleChange)
     return () => mediaQuery.removeEventListener("change", handleChange)
   }, [])
-
-  React.useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.repeat || event.metaKey || event.ctrlKey || event.altKey ||
-        isEditableTarget(event.target) || event.key.toLowerCase() !== "d"
-      ) return
-      const current = settingsRef.current
-      const currentPreset = getThemePreset(current.presetId)
-      if (isSchemeLocked(currentPreset)) return
-      const currentResolved = resolveScheme(current.schemePreference, getSystemScheme(), currentPreset)
-      updateSettings(() => ({
-          ...current,
-          schemePreference: currentResolved === "dark" ? "light" : "dark",
-      }))
-    }
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [updateSettings])
 
   React.useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {

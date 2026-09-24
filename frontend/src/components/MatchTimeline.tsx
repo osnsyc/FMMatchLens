@@ -37,6 +37,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import type { MatchEventType, MatchSnapshot, TeamSide } from "@/types/match"
+import { playbackToggleEventName } from "@/lib/appShortcuts"
 
 const apiBase = `http://127.0.0.1:${__API_PORT__}`
 const pageSize = 2_400
@@ -329,6 +330,17 @@ export function MatchTimeline({
   )
   const replaying = selectedId !== ""
   const busy = loading || preprocessing
+
+  useEffect(() => {
+    const togglePlayback = () => {
+      if (!replaying || busy || frames.length === 0) return
+      setPlaying((current) => !current)
+    }
+    window.addEventListener(playbackToggleEventName, togglePlayback)
+    return () =>
+      window.removeEventListener(playbackToggleEventName, togglePlayback)
+  }, [busy, frames.length, replaying])
+
   const sliderMax = 100
   const committedSliderPercent = replaying
     ? replayPercent(frameIndex, frames)
