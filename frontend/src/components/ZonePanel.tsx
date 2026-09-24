@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card"
 import { MultiStateButton } from "@/components/ui/multi-state-button"
 import type {
+  HeatmapGrid,
   HeatmapPhase,
   MatchPlayer,
   MatchSnapshot,
@@ -27,9 +28,18 @@ import type {
 
 type ZonePanelProps = {
   match: MatchSnapshot
+  isFocusMode: boolean
 }
 
 const PITCH_FRAME_GAP = 4
+const PITCH_HOST_PADDING = 12
+const FOCUSED_PITCH_GAP = 12
+const FOCUSED_PHASE_LABEL_HEIGHT = 24
+const heatmapPhases: readonly HeatmapPhase[] = [
+  "all",
+  "inPossession",
+  "outOfPossession",
+]
 
 type HeatLabel = {
   x: number
@@ -38,7 +48,18 @@ type HeatLabel = {
   player: MatchPlayer
 }
 
-export function ZonePanel({ match }: ZonePanelProps) {
+type HeatmapView = {
+  phase: HeatmapPhase
+  grid: HeatmapGrid
+  colorScale: {
+    maxCellShare: number
+    sampleDivisor: number
+    lutScale: number
+  }
+  labels: HeatLabel[]
+}
+
+export function ZonePanel({ match, isFocusMode }: ZonePanelProps) {
   const { t } = useTranslation()
   const pitchDimensions = resolvePitchDimensions(match.pitchDimensions)
   const [selectedTeam, setSelectedTeam] = useState<TeamSide>("home")
@@ -68,80 +89,85 @@ export function ZonePanel({ match }: ZonePanelProps) {
   const selectedPlayer = teamPlayers.find(
     (player) => player.id === selectedPlayerByTeam[selectedTeam]
   )
-  const isPlayerHeatmap = selectedPlayer != null
   const outfieldPlayerIdKeys = getOutfieldPlayerIdKeys(match.players)
-  const outfieldHeatmaps = useMemo(() => {
-    const forPlayerIds = (playerIdKey: string) =>
+  const heatmapViews = useMemo<HeatmapView[]>(() => {
+    const phases = isFocusMode ? heatmapPhases : [selectedPhase]
+    const forPlayerIds = (playerIdKey: string, phase: HeatmapPhase) =>
       combineHeatmapGrids(
         parsePlayerIdKey(playerIdKey).map((playerId) =>
           getHeatmap(match.heatmaps, {
             scope: { type: "player", playerId },
-            phase: selectedPhase,
+            phase,
             range: selectedRange,
           })
         )
       )
-    return {
-      home: forPlayerIds(outfieldPlayerIdKeys.home),
-      away: forPlayerIds(outfieldPlayerIdKeys.away),
-    }
-  }, [
-    match.heatmaps,
-    outfieldPlayerIdKeys.away,
-    outfieldPlayerIdKeys.home,
-    selectedPhase,
-    selectedRange,
-  ])
-  const heatmapGrid = selectedPlayer
-    ? getHeatmap(match.heatmaps, {
-        scope: { type: "player", playerId: selectedPlayer.id },
-        phase: selectedPhase,
-        range: selectedRange,
-      })
-    : outfieldHeatmaps[selectedTeam]
-  const heatmapColorScale = useMemo(() => {
-    const bounds = getHeatmapColorScaleBounds(
-      isPlayerHeatmap
-        ? [heatmapGrid]
-        : [outfieldHeatmaps.home, outfieldHeatmaps.away]
-    )
-    return {
-      maxCellShare: bounds.rawMaxCellShare,
-      sampleDivisor: heatmapGrid.sampleCount,
-      lutScale:
-        bounds.blurredP99CellShare > 0
-          ? bounds.rawMaxCellShare / bounds.blurredP99CellShare
-          : 1,
-    }
-  }, [
-    heatmapGrid,
-    isPlayerHeatmap,
-    outfieldHeatmaps.away,
-    outfieldHeatmaps.home,
-  ])
 
-  const heatLabels = useMemo<HeatLabel[]>(
-    () =>
-      teamPlayers
+    return phases.map((phase) => {
+      let grid: HeatmapGrid
+      let comparableGrids: HeatmapGrid[]
+
+      if (selectedPlayer) {
+        grid = getHeatmap(match.heatmaps, {
+          scope: { type: "player", playerId: selectedPlayer.id },
+          phase,
+          range: selectedRange,
+        })
+        comparableGrids = [grid]
+      } else {
+        const outfieldHeatmaps = {
+          home: forPlayerIds(outfieldPlayerIdKeys.home, phase),
+          away: forPlayerIds(outfieldPlayerIdKeys.away, phase),
+        }
+        grid = outfieldHeatmaps[selectedTeam]
+        comparableGrids = [outfieldHeatmaps.home, outfieldHeatmaps.away]
+      }
+
+      const bounds = getHeatmapColorScaleBounds(comparableGrids)
+      const labels = teamPlayers
         .filter((player) => player.isOnPitch)
         .map((player) => {
-          const grid = getHeatmap(match.heatmaps, {
+          const playerGrid = getHeatmap(match.heatmaps, {
             scope: { type: "player", playerId: player.id },
-            phase: selectedPhase,
+            phase,
             range: selectedRange,
           })
-          return grid.sampleCount > 0
+          return playerGrid.sampleCount > 0
             ? {
-                x: grid.averageX,
-                y: grid.averageY,
-                sampleCount: grid.sampleCount,
+                x: playerGrid.averageX,
+                y: playerGrid.averageY,
+                sampleCount: playerGrid.sampleCount,
                 player,
               }
             : null
         })
-        .filter((label): label is HeatLabel => label != null),
-    [match.heatmaps, selectedPhase, selectedRange, teamPlayers]
-  )
+        .filter((label): label is HeatLabel => label != null)
+
+      return {
+        phase,
+        grid,
+        colorScale: {
+          maxCellShare: bounds.rawMaxCellShare,
+          sampleDivisor: grid.sampleCount,
+          lutScale:
+            bounds.blurredP99CellShare > 0
+              ? bounds.rawMaxCellShare / bounds.blurredP99CellShare
+              : 1,
+        },
+        labels,
+      }
+    })
+  }, [
+    isFocusMode,
+    match.heatmaps,
+    outfieldPlayerIdKeys.away,
+    outfieldPlayerIdKeys.home,
+    selectedPlayer,
+    selectedPhase,
+    selectedRange,
+    selectedTeam,
+    teamPlayers,
+  ])
 
   useEffect(() => {
     const host = pitchHostRef.current
@@ -151,8 +177,20 @@ export function ZonePanel({ match }: ZonePanelProps) {
     }
 
     const updatePitchSize = () => {
-      const availableWidth = host.clientWidth
-      const availableHeight = host.clientHeight
+      const contentWidth = Math.max(
+        0,
+        host.clientWidth - PITCH_HOST_PADDING * 2
+      )
+      const contentHeight = Math.max(
+        0,
+        host.clientHeight -
+          PITCH_HOST_PADDING * 2 -
+          (isFocusMode ? FOCUSED_PHASE_LABEL_HEIGHT : 0)
+      )
+      const availableWidth = isFocusMode
+        ? Math.max(0, (contentWidth - FOCUSED_PITCH_GAP * 2) / 3)
+        : contentWidth
+      const availableHeight = contentHeight
       const pitchRatio = pitchDimensions.width / pitchDimensions.length
 
       if (availableWidth <= 0 || availableHeight <= 0) {
@@ -182,7 +220,7 @@ export function ZonePanel({ match }: ZonePanelProps) {
     return () => {
       resizeObserver.disconnect()
     }
-  }, [pitchDimensions.length, pitchDimensions.width])
+  }, [isFocusMode, pitchDimensions.length, pitchDimensions.width])
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -225,6 +263,7 @@ export function ZonePanel({ match }: ZonePanelProps) {
           <MultiStateButton
             value={selectedPhase}
             onValueChange={setSelectedPhase}
+            disabled={isFocusMode}
             variant="outline"
             size="sm"
             className="min-w-12 px-2 text-[11px]"
@@ -256,80 +295,92 @@ export function ZonePanel({ match }: ZonePanelProps) {
       <CardContent className="flex min-h-0 flex-1 p-0">
         <div
           ref={pitchHostRef}
-          className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-3"
+          className={`${isFocusMode ? "grid grid-cols-3 gap-3" : "flex items-center justify-center"} min-h-0 min-w-0 flex-1 overflow-hidden p-3`}
         >
-          <div
-            className="pitch-frame relative shrink-0 text-[var(--pitch-line)]"
-            style={{
-              width: `${pitchSize.width}px`,
-              height: `${pitchSize.height}px`,
-              "--pitch-frame-aspect": pitchFrameAspect,
-            } as CSSProperties}
-            onClick={() => {
-              setSelectedPlayerByTeam((current) => ({
-                ...current,
-                [selectedTeam]: null,
-              }))
-            }}
-          >
-            <div className="player-pitch relative size-full bg-[var(--heatmap-pitch-surface)]">
+          {heatmapViews.map((view) => (
+            <div
+              key={view.phase}
+              className="flex min-h-0 min-w-0 flex-col items-center justify-center"
+            >
+              {isFocusMode && (
+                <div className="flex h-6 shrink-0 items-start justify-center text-xs font-semibold text-muted-foreground">
+                  {t(`heatmap.${view.phase}`)}
+                </div>
+              )}
               <div
-                className="pointer-events-none absolute inset-0"
-                aria-hidden="true"
+                className="pitch-frame relative shrink-0 text-[var(--pitch-line)]"
+                style={{
+                  width: `${pitchSize.width}px`,
+                  height: `${pitchSize.height}px`,
+                  "--pitch-frame-aspect": pitchFrameAspect,
+                } as CSSProperties}
+                onClick={() => {
+                  setSelectedPlayerByTeam((current) => ({
+                    ...current,
+                    [selectedTeam]: null,
+                  }))
+                }}
               >
-                {innerPitchSize.width > 1 && innerPitchSize.height > 1 && (
-                  <PixiHeatmap
-                    grid={heatmapGrid}
-                    width={innerPitchSize.width}
-                    height={innerPitchSize.height}
-                    colorScale={heatmapColorScale}
-                  />
-                )}
-              </div>
+                <div className="player-pitch relative size-full bg-[var(--heatmap-pitch-surface)]">
+                  <div
+                    className="pointer-events-none absolute inset-0"
+                    aria-hidden="true"
+                  >
+                    {innerPitchSize.width > 1 && innerPitchSize.height > 1 && (
+                      <PixiHeatmap
+                        grid={view.grid}
+                        width={innerPitchSize.width}
+                        height={innerPitchSize.height}
+                        colorScale={view.colorScale}
+                      />
+                    )}
+                  </div>
 
-              <PitchMarkings
-                dimensions={pitchDimensions}
-                orientation="vertical"
-              />
-
-              <div className="pointer-events-none absolute inset-0">
-                {heatLabels.map((label) => (
-                <button
-                  type="button"
-                  key={`heat-player-${label.player.id}`}
-                  className="pointer-events-auto absolute z-10 flex -translate-x-1/2 -translate-y-1/2 cursor-pointer flex-col items-center rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                  style={{
-                    left: `${label.x}%`,
-                    top: `${label.y}%`,
-                  }}
-                  title={`${label.player.name} · ${t("heatmapRange.samples", { count: label.sampleCount })}`}
-                  aria-pressed={selectedPlayer?.id === label.player.id}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    setSelectedPlayerByTeam((current) => ({
-                      ...current,
-                      [selectedTeam]: label.player.id,
-                    }))
-                  }}
-                >
-                  <PitchPlayerBadge
-                    number={label.player.shirtNumber}
-                    numberColor="var(--heatmap-player-number)"
-                    className={`border-2 border-background after:hidden transition-transform hover:scale-110 ${
-                      selectedPlayer?.id === label.player.id
-                        ? "ring-2 ring-ring ring-offset-1 ring-offset-background"
-                        : ""
-                    }`}
-                    style={{ backgroundColor: teamColor }}
+                  <PitchMarkings
+                    dimensions={pitchDimensions}
+                    orientation="vertical"
                   />
-                  <span className="pitch-player-name mt-1 max-w-20 truncate text-[9px] leading-none font-medium whitespace-nowrap text-foreground drop-shadow-sm">
-                    {getPlayerSurname(label.player)}
-                  </span>
-                </button>
-                ))}
+
+                  <div className="pointer-events-none absolute inset-0">
+                    {view.labels.map((label) => (
+                      <button
+                        type="button"
+                        key={`heat-player-${label.player.id}`}
+                        className="pointer-events-auto absolute z-10 flex -translate-x-1/2 -translate-y-1/2 cursor-pointer flex-col items-center rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        style={{
+                          left: `${label.x}%`,
+                          top: `${label.y}%`,
+                        }}
+                        title={`${label.player.name} · ${t("heatmapRange.samples", { count: label.sampleCount })}`}
+                        aria-pressed={selectedPlayer?.id === label.player.id}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setSelectedPlayerByTeam((current) => ({
+                            ...current,
+                            [selectedTeam]: label.player.id,
+                          }))
+                        }}
+                      >
+                        <PitchPlayerBadge
+                          number={label.player.shirtNumber}
+                          numberColor="var(--heatmap-player-number)"
+                          className={`border-2 border-background after:hidden transition-transform hover:scale-110 ${
+                            selectedPlayer?.id === label.player.id
+                              ? "ring-2 ring-ring ring-offset-1 ring-offset-background"
+                              : ""
+                          }`}
+                          style={{ backgroundColor: teamColor }}
+                        />
+                        <span className="pitch-player-name mt-1 max-w-20 truncate text-[9px] leading-none font-medium whitespace-nowrap text-foreground drop-shadow-sm">
+                          {getPlayerSurname(label.player)}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          ))}
         </div>
       </CardContent>
     </section>

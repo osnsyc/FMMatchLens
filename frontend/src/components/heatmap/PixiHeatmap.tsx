@@ -59,6 +59,10 @@ export function PixiHeatmap({
           return
         }
         rendererRef.current = renderer
+        const latestSize = sizeRef.current
+        if (latestSize.width > 0 && latestSize.height > 0) {
+          renderer.resize(latestSize.width, latestSize.height)
+        }
         renderer.updateLut(readHeatmapStops())
         renderer.updateToneMapping(
           toneMappingRef.current ?? DEFAULT_HEATMAP_TONE_MAPPING

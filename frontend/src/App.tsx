@@ -750,7 +750,10 @@ export function App() {
                   <AnimatedDashboardCard
                     active={focusedPanel == null || focusedPanel === "heatmap"}
                   >
-                    <ZonePanel match={match} />
+                    <ZonePanel
+                      match={match}
+                      isFocusMode={focusedPanel === "heatmap"}
+                    />
                   </AnimatedDashboardCard>
                 </motion.div>
                 {comparisonOpen && (
