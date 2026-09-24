@@ -17,6 +17,7 @@ import type {
 
 type MatchStatsPanelProps = {
   match: MatchSnapshot
+  isFocusMode: boolean
 }
 
 type StatGroup = "all" | "attack" | "defence"
@@ -101,6 +102,28 @@ const defenceRows: StatRow[] = [
   { label: "stats.redCards", source: "redCards", lowerIsBetter: true },
 ]
 
+// Keep the first two focused columns stable. Future rows overflow into the
+// independently scrollable third column instead of making every column scroll.
+const focusedStaticColumnCapacity = 9
+
+function focusedRowColumns(rows: readonly StatRow[]) {
+  const firstColumnSize = Math.min(
+    focusedStaticColumnCapacity,
+    Math.ceil(rows.length / 3)
+  )
+  const remainingAfterFirst = rows.length - firstColumnSize
+  const secondColumnSize = Math.min(
+    focusedStaticColumnCapacity,
+    Math.ceil(remainingAfterFirst / 2)
+  )
+
+  return [
+    rows.slice(0, firstColumnSize),
+    rows.slice(firstColumnSize, firstColumnSize + secondColumnSize),
+    rows.slice(firstColumnSize + secondColumnSize),
+  ]
+}
+
 const groups: Array<{
   id: StatGroup
   label: string
@@ -142,6 +165,7 @@ function opposite(
 
 export const MatchStatsPanel = memo(function MatchStatsPanel({
   match,
+  isFocusMode,
 }: MatchStatsPanelProps) {
   const { t } = useTranslation()
 
@@ -159,6 +183,8 @@ export const MatchStatsPanel = memo(function MatchStatsPanel({
       (group) =>
         group.id === activeGroup
     )?.rows ?? allRows
+
+  const focusedColumns = focusedRowColumns(activeRows)
 
   function numericValue(
     row: StatRow,
@@ -322,6 +348,58 @@ export const MatchStatsPanel = memo(function MatchStatsPanel({
     return 0
   }
 
+  function renderStatRow(row: StatRow, compact = false) {
+    return (
+      <div
+        key={row.source}
+        className={compact ? "py-1.5" : "py-2.5"}
+      >
+        <div
+          className={`${compact ? "mb-1.5" : "mb-2"} truncate text-center text-xs leading-none text-muted-foreground`}
+        >
+          {t(row.label)}
+        </div>
+
+        <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center gap-1.5">
+          <span
+            className={`truncate text-right text-sm leading-none tabular-nums ${
+              isLeading(row, "home")
+                ? "font-semibold text-foreground"
+                : "font-medium text-muted-foreground"
+            }`}
+          >
+            {formattedValue(row, "home")}
+          </span>
+
+          <div
+            className="grid h-2.5 w-full min-w-0 gap-1"
+            style={barStyle(row)}
+            aria-hidden="true"
+          >
+            <div
+              className="h-full min-w-0 rounded-full"
+              style={{ backgroundColor: homeColor }}
+            />
+            <div
+              className="h-full min-w-0 rounded-full"
+              style={{ backgroundColor: awayColor }}
+            />
+          </div>
+
+          <span
+            className={`truncate text-left text-sm leading-none tabular-nums ${
+              isLeading(row, "away")
+                ? "font-semibold text-foreground"
+                : "font-medium text-muted-foreground"
+            }`}
+          >
+            {formattedValue(row, "away")}
+          </span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
       <CardHeader className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 border-b px-4 py-2">
@@ -357,76 +435,36 @@ export const MatchStatsPanel = memo(function MatchStatsPanel({
       </CardHeader>
 
       <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-        <ScrollArea className="scrollbar-hidden min-h-0 flex-1">
-          <div className="px-4 py-3">
-            <div>
-              {activeRows.map((row) => (
-                <div
-                  key={row.source}
-                  className="py-2.5"
-                >
-                  {/* Statistic name */}
-                  <div className="mb-2 truncate text-center text-xs leading-none text-muted-foreground">
-                    {t(row.label)}
-                  </div>
-
-                  {/* Values + comparison bar */}
-                  <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center gap-1.5">
-                    {/* Home value */}
-                    <span
-                      className={`truncate text-right text-sm leading-none tabular-nums ${isLeading(row, "home")
-                          ? "font-semibold text-foreground"
-                          : "font-medium text-muted-foreground"
-                        }`}
-                    >
-                      {formattedValue(row, "home")}
-                    </span>
-
-                    {/* Comparison bar */}
-                    <div
-                      className="grid h-2.5 w-full min-w-0 gap-1"
-                      style={barStyle(row)}
-                      aria-hidden="true"
-                    >
-                      {/* Home bar */}
-                      <div
-                        className="h-full min-w-0 rounded-full"
-                        style={{
-                          backgroundColor: homeColor,
-                        }}
-                      />
-
-                      {/* Away bar */}
-                      <div
-                        className="h-full min-w-0 rounded-full"
-                        style={{
-                          backgroundColor: awayColor,
-                        }}
-                      />
-                    </div>
-
-                    {/* Away value */}
-                    <span
-                      className={`truncate text-left text-sm leading-none tabular-nums ${isLeading(row, "away")
-                          ? "font-semibold text-foreground"
-                          : "font-medium text-muted-foreground"
-                        }`}
-                    >
-                      {formattedValue(row, "away")}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+        {isFocusMode ? (
+          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-3 px-4 py-3">
+            {focusedColumns.map((rows, columnIndex) => (
+              <div
+                key={columnIndex}
+                className={`min-h-0 min-w-0 px-4 ${columnIndex > 0 ? "border-l border-border/70" : ""} ${
+                  columnIndex === 2
+                    ? "scrollbar-hidden overflow-y-auto overscroll-contain"
+                    : "overflow-hidden"
+                }`}
+              >
+                {rows.map((row) => renderStatRow(row, true))}
+              </div>
+            ))}
           </div>
-        </ScrollArea>
+        ) : (
+          <ScrollArea className="scrollbar-hidden min-h-0 flex-1">
+            <div className="px-4 py-3">
+              <div>{activeRows.map((row) => renderStatRow(row))}</div>
+            </div>
+          </ScrollArea>
+        )}
       </CardContent>
     </section>
   )
 }, sameMatchStatsPanelProps)
 
 function sameMatchStatsPanelProps(previous: MatchStatsPanelProps, next: MatchStatsPanelProps) {
-  return previous.match.home.color === next.match.home.color
+  return previous.isFocusMode === next.isFocusMode
+    && previous.match.home.color === next.match.home.color
     && previous.match.away.color === next.match.away.color
     && sameTeamStats(previous.match.home.stats, next.match.home.stats)
     && sameTeamStats(previous.match.away.stats, next.match.away.stats)

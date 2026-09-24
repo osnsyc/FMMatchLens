@@ -728,7 +728,10 @@ export function App() {
                       focusedPanel == null || focusedPanel === "matchStats"
                     }
                   >
-                    <MatchStatsPanel match={match} />
+                    <MatchStatsPanel
+                      match={match}
+                      isFocusMode={focusedPanel === "matchStats"}
+                    />
                   </AnimatedDashboardCard>
 
                   <AnimatedDashboardCard
