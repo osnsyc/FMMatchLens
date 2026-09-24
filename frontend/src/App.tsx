@@ -7,8 +7,10 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react"
 import { useTranslation } from "react-i18next"
+import { motion, MotionConfig } from "framer-motion"
 import {
   Coffee01Icon,
   Github01Icon,
@@ -89,6 +91,45 @@ const ZonePanel = lazy(() =>
     default: module.ZonePanel,
   }))
 )
+
+const layoutTransition = {
+  duration: 0.20,
+  ease: [0.2, 0, 0, 1],
+} as const
+
+const cardTransition = {
+  duration: 0.12,
+  ease: [0.2, 0, 0, 1],
+} as const
+
+function AnimatedDashboardCard({
+  active = true,
+  tacticalBoard = false,
+  children,
+}: {
+  active?: boolean
+  tacticalBoard?: boolean
+  children: ReactNode
+}) {
+  return (
+    <motion.div
+      layout
+      initial={false}
+      animate={{ opacity: active ? 1 : 0 }}
+      transition={layoutTransition}
+      aria-hidden={!active}
+      inert={!active ? true : undefined}
+      className={`${active ? "" : "hidden"} min-h-0 min-w-0 overflow-hidden`}
+    >
+      <Card
+        data-tactical-board={tacticalBoard || undefined}
+        className="h-full min-h-0 min-w-0 overflow-hidden p-0"
+      >
+        {children}
+      </Card>
+    </motion.div>
+  )
+}
 
 export function App() {
   const { t, i18n } = useTranslation()
@@ -546,183 +587,236 @@ export function App() {
           </div>
         }
       >
-        <div
-          data-player-profile-blur-scope
-          data-chrome-hidden={isChromeHidden || undefined}
-          className={`grid h-full min-h-0 w-full min-w-0 grid-cols-1 gap-2 md:min-w-[1360px] ${
-            isChromeHidden
-              ? "grid-rows-[minmax(0,1fr)]"
-              : "grid-rows-[64px_minmax(0,1fr)_88px]"
-          }`}
-        >
-          {/* Score header */}
-          <Card
-            data-player-profile-blur-target
-            className={`${isChromeHidden ? "hidden" : ""} min-h-0 border-transparent bg-transparent p-0 shadow-none`}
+        <MotionConfig reducedMotion="user" transition={layoutTransition}>
+          <motion.div
+            data-player-profile-blur-scope
+            data-chrome-hidden={isChromeHidden || undefined}
+            className={`relative grid h-full min-h-0 w-full min-w-0 grid-cols-1 gap-x-2 md:min-w-[1360px] ${
+              isChromeHidden
+                ? "grid-rows-[minmax(0,1fr)] gap-y-0"
+                : "grid-rows-[64px_minmax(0,1fr)_88px] gap-y-2"
+            }`}
           >
-            <ScoreHeader match={match} />
-          </Card>
-
-          {/* Main layout: home squad | central dashboard | away squad */}
-          <div className="grid min-h-0 min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(260px,1fr)_minmax(0,6fr)_minmax(260px,1fr)]">
-            {/* Home squad */}
-            <Card
-              data-squad-panel
-              className="min-h-0 min-w-0 overflow-hidden p-0"
+            {/* Score header */}
+            <motion.div
+              data-player-profile-blur-target
+              initial={false}
+              animate={{
+                opacity: isChromeHidden ? 0 : 1,
+                y: isChromeHidden ? -4 : 0,
+              }}
+              transition={cardTransition}
+              aria-hidden={isChromeHidden}
+              inert={isChromeHidden ? true : undefined}
+              layout
+              className={`${isChromeHidden ? "pointer-events-none absolute inset-x-0 top-0 h-16" : "relative min-h-0"} overflow-hidden`}
             >
-              <SquadPanel
-                title={match.home.name}
-                teamUid={match.home.uid}
-                side="home"
-                players={homePlayers}
-                allPlayers={match.players}
-                events={match.events}
-                teamColor={match.home.color}
-                pinnedPlayerId={pinnedHomePlayer?.id}
-                attackingOpponent={
-                  pinnedPlayers.attackingSide === "away"
-                    ? pinnedAwayPlayer
-                    : undefined
-                }
-                profilePopupSuppressed={comparisonOpen}
-                onPinnedPlayerChange={setPinnedHomePlayer}
-                tacticalSelectionActive={
-                  isTacticalFocusMode &&
-                  tacticalEventFilterMode === "individual"
-                }
-                tacticalSelectedPlayerIds={tacticalPlayerIds}
-                onTacticalPlayerToggle={toggleTacticalPlayer}
-              />
-            </Card>
+              <Card className="h-full min-h-0 border-transparent bg-transparent p-0 shadow-none">
+                <ScoreHeader match={match} />
+              </Card>
+            </motion.div>
 
-            {/* Central dashboard */}
-            <div
-              data-dashboard-focus={focusedPanel ?? "none"}
-              className={`relative grid min-h-0 min-w-0 gap-2 ${
-                focusedPanel != null
-                  ? "grid-rows-1"
-                  : "grid-rows-2 md:grid-rows-[minmax(0,0.8fr)_minmax(0,1.25fr)]"
-              }`}
+            {/* Main layout: home squad | central dashboard | away squad */}
+            <motion.div
+              layout
+              transition={layoutTransition}
+              className="grid min-h-0 min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(260px,1fr)_minmax(0,6fr)_minmax(260px,1fr)]"
             >
-              {/* Top row: momentum | xG | formation */}
-              <div
-                data-player-profile-blur-target
-                className={`${
-                  focusedPanel != null && focusedPanel !== "formation"
-                    ? "hidden"
-                    : "grid"
-                } min-h-0 min-w-0 grid-cols-1 gap-2 ${
-                  focusedPanel === "formation"
-                    ? ""
-                    : "md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,3fr)]"
-                }`}
+              {/* Home squad */}
+              <Card
+                data-squad-panel
+                className="min-h-0 min-w-0 overflow-hidden p-0"
               >
-                <Card
-                  className={`${focusedPanel === "formation" ? "hidden" : ""} min-h-0 min-w-0 overflow-hidden p-0`}
-                >
-                  <Momentum match={match} />
-                </Card>
-
-                <Card
-                  className={`${focusedPanel === "formation" ? "hidden" : ""} min-h-0 min-w-0 overflow-hidden p-0`}
-                >
-                  <XgTimeline match={match} />
-                </Card>
-
-                <Card className="min-h-0 min-w-0 overflow-hidden p-0">
-                  <FormationPitch match={match} />
-                </Card>
-              </div>
-
-              {/* Bottom row: stats | tactical board | zone */}
-              <div
-                data-player-profile-blur-target
-                className={`${focusedPanel === "formation" ? "hidden" : "grid"} min-h-0 min-w-0 grid-cols-1 gap-2 ${
-                  focusedPanel == null
-                    ? "md:grid-cols-[minmax(180px,2.2fr)_minmax(0,6fr)_minmax(220px,2.5fr)]"
-                    : ""
-                }`}
-              >
-                <Card
-                  className={`${focusedPanel != null && focusedPanel !== "matchStats" ? "hidden" : ""} min-h-0 min-w-0 overflow-hidden p-0`}
-                >
-                  <MatchStatsPanel match={match} />
-                </Card>
-
-                <Card
-                  data-tactical-board
-                  className={`${focusedPanel != null && focusedPanel !== "tactical" ? "hidden" : ""} min-h-0 min-w-0 overflow-hidden p-0`}
-                >
-                  <TacticalBoard
-                    match={match}
-                    isFocusMode={isTacticalFocusMode}
-                    eventFilterMode={tacticalEventFilterMode}
-                    selectedPlayerIds={tacticalPlayerIds}
-                    onEventFilterModeChange={setTacticalEventFilterMode}
-                  />
-                </Card>
-
-                <Card
-                  className={`${focusedPanel != null && focusedPanel !== "heatmap" ? "hidden" : ""} min-h-0 min-w-0 overflow-hidden p-0`}
-                >
-                  <ZonePanel match={match} />
-                </Card>
-              </div>
-              {comparisonOpen && (
-                <PlayerComparisonPopup
-                  leftPlayer={pinnedHomePlayer}
-                  rightPlayer={pinnedAwayPlayer}
-                  leftColor={match.home.color ?? "var(--team-home-fallback)"}
-                  rightColor={match.away.color ?? "var(--team-away-fallback)"}
+                <SquadPanel
+                  title={match.home.name}
+                  teamUid={match.home.uid}
+                  side="home"
+                  players={homePlayers}
+                  allPlayers={match.players}
+                  events={match.events}
+                  teamColor={match.home.color}
+                  pinnedPlayerId={pinnedHomePlayer?.id}
+                  attackingOpponent={
+                    pinnedPlayers.attackingSide === "away"
+                      ? pinnedAwayPlayer
+                      : undefined
+                  }
+                  profilePopupSuppressed={comparisonOpen}
+                  onPinnedPlayerChange={setPinnedHomePlayer}
+                  tacticalSelectionActive={
+                    isTacticalFocusMode &&
+                    tacticalEventFilterMode === "individual"
+                  }
+                  tacticalSelectedPlayerIds={tacticalPlayerIds}
+                  onTacticalPlayerToggle={toggleTacticalPlayer}
                 />
-              )}
-            </div>
+              </Card>
 
-            {/* Away squad */}
-            <Card
-              data-squad-panel
-              className="min-h-0 min-w-0 overflow-hidden p-0"
+              {/* Central dashboard */}
+              <motion.div
+                data-dashboard-focus={focusedPanel ?? "none"}
+                layout
+                transition={layoutTransition}
+                className={`relative grid min-h-0 min-w-0 gap-2 ${
+                  focusedPanel != null
+                    ? "grid-rows-1"
+                    : "grid-rows-2 md:grid-rows-[minmax(0,0.8fr)_minmax(0,1.25fr)]"
+                }`}
+              >
+                {/* Top row: momentum | xG | formation */}
+                <motion.div
+                  data-player-profile-blur-target
+                  layout
+                  initial={false}
+                  animate={{
+                    opacity:
+                      focusedPanel != null && focusedPanel !== "formation"
+                        ? 0
+                        : 1,
+                  }}
+                  transition={cardTransition}
+                  aria-hidden={
+                    focusedPanel != null && focusedPanel !== "formation"
+                  }
+                  inert={
+                    focusedPanel != null && focusedPanel !== "formation"
+                      ? true
+                      : undefined
+                  }
+                  className={`${
+                    focusedPanel != null && focusedPanel !== "formation"
+                      ? "hidden"
+                      : "grid"
+                  } min-h-0 min-w-0 grid-cols-1 gap-2 overflow-hidden ${
+                    focusedPanel === "formation"
+                      ? ""
+                      : "md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,3fr)]"
+                  }`}
+                >
+                  <AnimatedDashboardCard active={focusedPanel !== "formation"}>
+                    <Momentum match={match} />
+                  </AnimatedDashboardCard>
+
+                  <AnimatedDashboardCard active={focusedPanel !== "formation"}>
+                    <XgTimeline match={match} />
+                  </AnimatedDashboardCard>
+
+                  <AnimatedDashboardCard>
+                    <FormationPitch match={match} />
+                  </AnimatedDashboardCard>
+                </motion.div>
+
+                {/* Bottom row: stats | tactical board | zone */}
+                <motion.div
+                  data-player-profile-blur-target
+                  layout
+                  initial={false}
+                  animate={{
+                    opacity: focusedPanel === "formation" ? 0 : 1,
+                  }}
+                  transition={cardTransition}
+                  aria-hidden={focusedPanel === "formation"}
+                  inert={focusedPanel === "formation" ? true : undefined}
+                  className={`${focusedPanel === "formation" ? "hidden" : "grid"} min-h-0 min-w-0 grid-cols-1 gap-2 overflow-hidden ${
+                    focusedPanel == null
+                      ? "md:grid-cols-[minmax(180px,2.2fr)_minmax(0,6fr)_minmax(220px,2.5fr)]"
+                      : ""
+                  }`}
+                >
+                  <AnimatedDashboardCard
+                    active={
+                      focusedPanel == null || focusedPanel === "matchStats"
+                    }
+                  >
+                    <MatchStatsPanel match={match} />
+                  </AnimatedDashboardCard>
+
+                  <AnimatedDashboardCard
+                    active={focusedPanel == null || focusedPanel === "tactical"}
+                    tacticalBoard
+                  >
+                    <TacticalBoard
+                      match={match}
+                      isFocusMode={isTacticalFocusMode}
+                      eventFilterMode={tacticalEventFilterMode}
+                      selectedPlayerIds={tacticalPlayerIds}
+                      onEventFilterModeChange={setTacticalEventFilterMode}
+                    />
+                  </AnimatedDashboardCard>
+
+                  <AnimatedDashboardCard
+                    active={focusedPanel == null || focusedPanel === "heatmap"}
+                  >
+                    <ZonePanel match={match} />
+                  </AnimatedDashboardCard>
+                </motion.div>
+                {comparisonOpen && (
+                  <PlayerComparisonPopup
+                    leftPlayer={pinnedHomePlayer}
+                    rightPlayer={pinnedAwayPlayer}
+                    leftColor={match.home.color ?? "var(--team-home-fallback)"}
+                    rightColor={match.away.color ?? "var(--team-away-fallback)"}
+                  />
+                )}
+              </motion.div>
+
+              {/* Away squad */}
+              <Card
+                data-squad-panel
+                className="min-h-0 min-w-0 overflow-hidden p-0"
+              >
+                <SquadPanel
+                  title={match.away.name}
+                  teamUid={match.away.uid}
+                  side="away"
+                  players={awayPlayers}
+                  allPlayers={match.players}
+                  events={match.events}
+                  teamColor={match.away.color}
+                  pinnedPlayerId={pinnedAwayPlayer?.id}
+                  attackingOpponent={
+                    pinnedPlayers.attackingSide === "home"
+                      ? pinnedHomePlayer
+                      : undefined
+                  }
+                  profilePopupSuppressed={comparisonOpen}
+                  onPinnedPlayerChange={setPinnedAwayPlayer}
+                  tacticalSelectionActive={
+                    isTacticalFocusMode &&
+                    tacticalEventFilterMode === "individual"
+                  }
+                  tacticalSelectedPlayerIds={tacticalPlayerIds}
+                  onTacticalPlayerToggle={toggleTacticalPlayer}
+                />
+              </Card>
+            </motion.div>
+
+            {/* Match timeline */}
+            <motion.div
+              data-player-profile-blur-target
+              initial={false}
+              animate={{
+                opacity: isChromeHidden ? 0 : 1,
+                y: isChromeHidden ? 4 : 0,
+              }}
+              transition={cardTransition}
+              aria-hidden={isChromeHidden}
+              inert={isChromeHidden ? true : undefined}
+              layout
+              className={`${isChromeHidden ? "pointer-events-none absolute inset-x-0 bottom-0 h-[88px]" : "relative min-h-0"} overflow-hidden`}
             >
-              <SquadPanel
-                title={match.away.name}
-                teamUid={match.away.uid}
-                side="away"
-                players={awayPlayers}
-                allPlayers={match.players}
-                events={match.events}
-                teamColor={match.away.color}
-                pinnedPlayerId={pinnedAwayPlayer?.id}
-                attackingOpponent={
-                  pinnedPlayers.attackingSide === "home"
-                    ? pinnedHomePlayer
-                    : undefined
-                }
-                profilePopupSuppressed={comparisonOpen}
-                onPinnedPlayerChange={setPinnedAwayPlayer}
-                tacticalSelectionActive={
-                  isTacticalFocusMode &&
-                  tacticalEventFilterMode === "individual"
-                }
-                tacticalSelectedPlayerIds={tacticalPlayerIds}
-                onTacticalPlayerToggle={toggleTacticalPlayer}
-              />
-            </Card>
-          </div>
-
-          {/* Match timeline */}
-          <Card
-            data-player-profile-blur-target
-            className={`${isChromeHidden ? "hidden" : ""} min-h-0 border-transparent bg-transparent p-0 shadow-none`}
-          >
-            <MatchTimeline
-              match={match}
-              initialLocalArchive={startupArchive}
-              localConnectionEnabled={liveConnectionEnabled}
-              onReplayFrame={showReplayFrame}
-              onLive={returnToLive}
-            />
-          </Card>
-        </div>
+              <Card className="h-full min-h-0 border-transparent bg-transparent p-0 shadow-none">
+                <MatchTimeline
+                  match={match}
+                  initialLocalArchive={startupArchive}
+                  localConnectionEnabled={liveConnectionEnabled}
+                  onReplayFrame={showReplayFrame}
+                  onLive={returnToLive}
+                />
+              </Card>
+            </motion.div>
+          </motion.div>
+        </MotionConfig>
       </Suspense>
     </main>
   )
