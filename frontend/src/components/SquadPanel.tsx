@@ -56,6 +56,9 @@ type SquadPanelProps = {
   attackingOpponent?: MatchPlayer
   profilePopupSuppressed?: boolean
   onPinnedPlayerChange: (playerId?: number) => void
+  tacticalSelectionActive?: boolean
+  tacticalSelectedPlayerIds?: ReadonlySet<number>
+  onTacticalPlayerToggle?: (playerId: number) => void
 }
 
 type StatusIcon =
@@ -78,6 +81,7 @@ type PlayerStatus = {
 }
 
 let openPlayerProfileCount = 0
+const emptyPlayerIdSet: ReadonlySet<number> = new Set()
 
 function setPlayerProfileBackdrop(open: boolean) {
   openPlayerProfileCount = Math.max(0, openPlayerProfileCount + (open ? 1 : -1))
@@ -230,6 +234,9 @@ export const SquadPanel = memo(function SquadPanel({
   attackingOpponent,
   profilePopupSuppressed = false,
   onPinnedPlayerChange,
+  tacticalSelectionActive = false,
+  tacticalSelectedPlayerIds = emptyPlayerIdSet,
+  onTacticalPlayerToggle,
 }: SquadPanelProps) {
   const { t } = useTranslation()
   const panelRef = useRef<HTMLElement | null>(null)
@@ -461,6 +468,8 @@ export const SquadPanel = memo(function SquadPanel({
         : positionLabel
     const isFormationNearest = positionHighlights.formation.has(player.id)
     const isMatchupNearest = positionHighlights.matchup.has(player.id)
+    const isTacticalSelected =
+      tacticalSelectionActive && tacticalSelectedPlayerIds.has(player.id)
     const positionHighlightStyle: React.CSSProperties | undefined = isFormationNearest || isMatchupNearest
       ? {
           background: isFormationNearest && isMatchupNearest
@@ -476,6 +485,24 @@ export const SquadPanel = memo(function SquadPanel({
         key={player.id}
         data-formation-nearest={isFormationNearest || undefined}
         data-matchup-nearest={isMatchupNearest || undefined}
+        data-tactical-selected={isTacticalSelected || undefined}
+        role={tacticalSelectionActive ? "button" : undefined}
+        tabIndex={tacticalSelectionActive ? 0 : undefined}
+        aria-pressed={tacticalSelectionActive ? isTacticalSelected : undefined}
+        onClick={
+          tacticalSelectionActive
+            ? () => onTacticalPlayerToggle?.(player.id)
+            : undefined
+        }
+        onKeyDown={
+          tacticalSelectionActive
+            ? (event) => {
+                if (event.key !== "Enter" && event.key !== " ") return
+                event.preventDefault()
+                onTacticalPlayerToggle?.(player.id)
+              }
+            : undefined
+        }
         className={`
           group relative grid min-w-0
           grid-cols-[1.75rem_1.5rem_minmax(3.5rem,1fr)_minmax(0,3.25rem)_2.25rem]
@@ -483,8 +510,10 @@ export const SquadPanel = memo(function SquadPanel({
           px-1.5 py-1.5
           transition-colors
           hover:bg-muted/45
+          focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none
           sm:grid-cols-[2rem_1.75rem_minmax(4.5rem,1fr)_minmax(0,4rem)_2.5rem]
           sm:gap-1.5 sm:px-2
+          ${tacticalSelectionActive ? "cursor-pointer" : ""}
           ${
             !player.isOnPitch
               ? "opacity-50"
@@ -494,6 +523,16 @@ export const SquadPanel = memo(function SquadPanel({
       >
         {positionHighlightStyle && (
           <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-md" style={positionHighlightStyle} />
+        )}
+        {isTacticalSelected && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 rounded-md"
+            style={{
+              background: `linear-gradient(90deg, color-mix(in srgb, ${resolvedTeamColor} 22%, transparent), transparent 78%)`,
+              boxShadow: `inset 0 0 0 1px ${resolvedTeamColor}99`,
+            }}
+          />
         )}
         {/* subtle team-color hover marker */}
         <span
@@ -520,8 +559,9 @@ export const SquadPanel = memo(function SquadPanel({
           teamColor={resolvedTeamColor}
           panelRef={panelRef}
           pinned={pinnedPlayerId === player.id}
-          hoverEnabled={!profilePopupSuppressed && (pinnedPlayerId == null || pinnedPlayerId === player.id)}
-          popupSuppressed={profilePopupSuppressed}
+          hoverEnabled={!tacticalSelectionActive && !profilePopupSuppressed && (pinnedPlayerId == null || pinnedPlayerId === player.id)}
+          popupSuppressed={profilePopupSuppressed || tacticalSelectionActive}
+          interactionDisabled={tacticalSelectionActive}
           onPinnedPlayerChange={onPinnedPlayerChange}
         >
         <div className="flex size-7 shrink-0 items-center justify-center sm:size-8">
@@ -784,6 +824,9 @@ function sameSquadPanelProps(previous: SquadPanelProps, next: SquadPanelProps) {
     && previous.attackingOpponent === next.attackingOpponent
     && previous.profilePopupSuppressed === next.profilePopupSuppressed
     && previous.onPinnedPlayerChange === next.onPinnedPlayerChange
+    && previous.tacticalSelectionActive === next.tacticalSelectionActive
+    && previous.tacticalSelectedPlayerIds === next.tacticalSelectedPlayerIds
+    && previous.onTacticalPlayerToggle === next.onTacticalPlayerToggle
     && previous.events === next.events
     && sameSquadPlayers(previous.players, next.players)
     && sameSquadPlayers(
@@ -800,6 +843,7 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   pinned,
   hoverEnabled,
   popupSuppressed,
+  interactionDisabled,
   onPinnedPlayerChange,
   children,
 }: {
@@ -810,6 +854,7 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   pinned: boolean
   hoverEnabled: boolean
   popupSuppressed: boolean
+  interactionDisabled: boolean
   onPinnedPlayerChange: (playerId?: number) => void
   children: React.ReactNode
 }) {
@@ -860,18 +905,26 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
       <TooltipTrigger
         render={
           <div
-            role="button"
-            tabIndex={0}
-            aria-pressed={pinned}
-            data-player-profile-pin
-            className="cursor-pin"
-            onPointerEnter={(event) => updateOffset(event.currentTarget)}
-            onClick={togglePinned}
-            onKeyDown={(event) => {
-              if (event.key !== "Enter" && event.key !== " ") return
-              event.preventDefault()
-              togglePinned()
-            }}
+            role={interactionDisabled ? undefined : "button"}
+            tabIndex={interactionDisabled ? undefined : 0}
+            aria-pressed={interactionDisabled ? undefined : pinned}
+            data-player-profile-pin={interactionDisabled ? undefined : true}
+            className={interactionDisabled ? "cursor-pointer" : "cursor-pin"}
+            onPointerEnter={
+              interactionDisabled
+                ? undefined
+                : (event) => updateOffset(event.currentTarget)
+            }
+            onClick={interactionDisabled ? undefined : togglePinned}
+            onKeyDown={
+              interactionDisabled
+                ? undefined
+                : (event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return
+                    event.preventDefault()
+                    togglePinned()
+                  }
+            }
           />
         }
       >
@@ -972,6 +1025,7 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   previous.pinned === next.pinned &&
   previous.hoverEnabled === next.hoverEnabled &&
   previous.popupSuppressed === next.popupSuppressed &&
+  previous.interactionDisabled === next.interactionDisabled &&
   previous.onPinnedPlayerChange === next.onPinnedPlayerChange &&
   previous.player.uid === next.player.uid &&
   previous.player.name === next.player.name &&

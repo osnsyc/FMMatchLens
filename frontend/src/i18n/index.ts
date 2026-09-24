@@ -506,6 +506,14 @@ const resources = {
       },
       dataMap: {
         points: "{{count}} 个点",
+        eventFilter: "事件筛选",
+        selectPlayers: "请在两侧阵容中选择球员",
+        filters: {
+          all: "全部",
+          home: "主队",
+          away: "客队",
+          individual: "个人",
+        },
         showNumbers: "球员号码",
         displaySettings: "选项",
         attackFocus: "攻击重心",
@@ -1089,6 +1097,14 @@ const resources = {
       },
       dataMap: {
         points: "{{count}} points",
+        eventFilter: "Event filter",
+        selectPlayers: "Select players from either squad",
+        filters: {
+          all: "All",
+          home: "Home",
+          away: "Away",
+          individual: "Individual",
+        },
         showNumbers: "Player numbers",
         displaySettings: "Option",
         attackFocus: "Attacking focus",

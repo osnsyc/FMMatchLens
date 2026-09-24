@@ -37,7 +37,11 @@ import { preprocessReplayArchive } from "@/api/replay/replayPreprocessor"
 import { buildInitialReplaySnapshot } from "@/api/replay/replaySession"
 import type { ReplayArchive } from "@/api/replay/replayTypes"
 import { changeLanguage, type SupportedLanguage } from "@/i18n"
-import type { MatchSnapshot, TeamSide } from "@/types/match"
+import type {
+  MatchSnapshot,
+  TacticalEventFilterMode,
+  TeamSide,
+} from "@/types/match"
 import { selectTeamDisplayColors } from "@/lib/teamColors"
 import {
   pinnedPlayerMatchScopeKey,
@@ -96,6 +100,11 @@ export function App() {
   const [draggingArchive, setDraggingArchive] = useState(false)
   const [isDemoLoading, setIsDemoLoading] = useState(false)
   const [isTacticalFocusMode, setIsTacticalFocusMode] = useState(false)
+  const [tacticalEventFilterMode, setTacticalEventFilterMode] =
+    useState<TacticalEventFilterMode>("all")
+  const [tacticalPlayerIds, setTacticalPlayerIds] = useState<ReadonlySet<number>>(
+    () => new Set()
+  )
   const [pinnedPlayers, setPinnedPlayers] = useState<PinnedPlayersState>({ ids: {} })
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const demoAbortRef = useRef<AbortController | null>(null)
@@ -196,6 +205,7 @@ export function App() {
     if (pinnedPlayerMatchScopeRef.current === pinnedPlayerMatchScope) return
     pinnedPlayerMatchScopeRef.current = pinnedPlayerMatchScope
     setPinnedPlayers({ ids: {} })
+    setTacticalPlayerIds(new Set())
   }, [pinnedPlayerMatchScope])
 
   const match = useMemo(() => {
@@ -251,6 +261,14 @@ export function App() {
     (playerId?: number) => setPinnedPlayer("away", playerId),
     [setPinnedPlayer],
   )
+  const toggleTacticalPlayer = useCallback((playerId: number) => {
+    setTacticalPlayerIds((current) => {
+      const next = new Set(current)
+      if (next.has(playerId)) next.delete(playerId)
+      else next.add(playerId)
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     if (pinnedPlayers.ids.home == null && pinnedPlayers.ids.away == null) return
@@ -519,6 +537,12 @@ export function App() {
                 attackingOpponent={pinnedPlayers.attackingSide === "away" ? pinnedAwayPlayer : undefined}
                 profilePopupSuppressed={comparisonOpen}
                 onPinnedPlayerChange={setPinnedHomePlayer}
+                tacticalSelectionActive={
+                  isTacticalFocusMode &&
+                  tacticalEventFilterMode === "individual"
+                }
+                tacticalSelectedPlayerIds={tacticalPlayerIds}
+                onTacticalPlayerToggle={toggleTacticalPlayer}
               />
             </Card>
 
@@ -570,7 +594,13 @@ export function App() {
                   data-tactical-board
                   className="min-h-0 min-w-0 overflow-hidden p-0"
                 >
-                  <TacticalBoard match={match} />
+                  <TacticalBoard
+                    match={match}
+                    isFocusMode={isTacticalFocusMode}
+                    eventFilterMode={tacticalEventFilterMode}
+                    selectedPlayerIds={tacticalPlayerIds}
+                    onEventFilterModeChange={setTacticalEventFilterMode}
+                  />
                 </Card>
 
                 <Card
@@ -606,6 +636,12 @@ export function App() {
                 attackingOpponent={pinnedPlayers.attackingSide === "home" ? pinnedHomePlayer : undefined}
                 profilePopupSuppressed={comparisonOpen}
                 onPinnedPlayerChange={setPinnedAwayPlayer}
+                tacticalSelectionActive={
+                  isTacticalFocusMode &&
+                  tacticalEventFilterMode === "individual"
+                }
+                tacticalSelectedPlayerIds={tacticalPlayerIds}
+                onTacticalPlayerToggle={toggleTacticalPlayer}
               />
             </Card>
           </div>

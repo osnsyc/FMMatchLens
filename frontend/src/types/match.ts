@@ -1,4 +1,5 @@
 export type TeamSide = "home" | "away"
+export type TacticalEventFilterMode = "all" | TeamSide | "individual"
 
 export const playerPositionLabels = [
   "GK",

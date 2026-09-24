@@ -10,6 +10,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 
 import { Button } from "@/components/ui/button"
 import { CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { MultiStateButton } from "@/components/ui/multi-state-button"
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -53,6 +54,7 @@ import {
 import type {
   MatchPlayer,
   MatchSnapshot,
+  TacticalEventFilterMode,
   TacticalEventPoint,
   TeamSide,
 } from "@/types/match"
@@ -61,6 +63,10 @@ import { cssVizTokens } from "@/theme/vizTokens"
 
 type TacticalBoardProps = {
   match: MatchSnapshot
+  isFocusMode: boolean
+  eventFilterMode: TacticalEventFilterMode
+  selectedPlayerIds: ReadonlySet<number>
+  onEventFilterModeChange: (mode: TacticalEventFilterMode) => void
 }
 type HorizontalZone = 0 | 1 | 2
 
@@ -80,6 +86,10 @@ const emptyShotChains: readonly ShotChain[] = []
 
 export const TacticalBoard = memo(function TacticalBoard({
   match,
+  isFocusMode,
+  eventFilterMode,
+  selectedPlayerIds,
+  onEventFilterModeChange,
 }: TacticalBoardProps) {
   const { t } = useTranslation()
   const pitchDimensions = resolvePitchDimensions(match.pitchDimensions)
@@ -117,9 +127,20 @@ export const TacticalBoard = memo(function TacticalBoard({
         .filter(({ metrics: groupMetrics }) => groupMetrics.length > 0),
     [selectedMetricList]
   )
+  const filteredTacticalEvents = useMemo(() => {
+    if (eventFilterMode === "all") return match.tacticalEvents
+    if (eventFilterMode === "individual") {
+      return match.tacticalEvents.filter((event) =>
+        selectedPlayerIds.has(event.playerId)
+      )
+    }
+    return match.tacticalEvents.filter(
+      (event) => event.team === eventFilterMode
+    )
+  }, [eventFilterMode, match.tacticalEvents, selectedPlayerIds])
   const scene = useMemo(
-    () => buildTacticalScene(match.tacticalEvents, selectedMetrics),
-    [match.tacticalEvents, selectedMetrics]
+    () => buildTacticalScene(filteredTacticalEvents, selectedMetrics),
+    [filteredTacticalEvents, selectedMetrics]
   )
   const playerById = useMemo(
     () => new Map(match.players.map((player) => [player.id, player])),
@@ -137,14 +158,14 @@ export const TacticalBoard = memo(function TacticalBoard({
     () =>
       activeSelectedShotId == null
         ? emptyShotChains
-        : buildShotChains(match.tacticalEvents, selectedMetrics).filter(
+        : buildShotChains(filteredTacticalEvents, selectedMetrics).filter(
             (chain) => chain.shotEventId === activeSelectedShotId
           ),
-    [activeSelectedShotId, match.tacticalEvents, selectedMetrics]
+    [activeSelectedShotId, filteredTacticalEvents, selectedMetrics]
   )
   const momentumLaneShares = useMemo(
-    () => calculateMomentumLaneShares(match.tacticalEvents),
-    [match.tacticalEvents]
+    () => calculateMomentumLaneShares(filteredTacticalEvents),
+    [filteredTacticalEvents]
   )
   const appearance = useMemo(
     () => ({
@@ -185,6 +206,26 @@ export const TacticalBoard = memo(function TacticalBoard({
         <CardTitle className="shrink-0 text-sm font-semibold @max-[420px]/card-header:hidden">
           {t("panels.dataMap")}
         </CardTitle>
+
+        {isFocusMode && (
+          <MultiStateButton
+            value={eventFilterMode}
+            onValueChange={onEventFilterModeChange}
+            variant="outline"
+            size="sm"
+            className="min-w-14 px-2 text-[10px]"
+            aria-label={t("dataMap.eventFilter")}
+            contextMenuClassName="min-w-28"
+            states={
+              (["all", "home", "away", "individual"] as const).map(
+                (value) => ({
+                  value,
+                  label: t(`dataMap.filters.${value}`),
+                })
+              )
+            }
+          />
+        )}
 
         <Menubar className="ml-auto h-6 min-w-0 flex-1">
           {groups.map((group) => {
@@ -377,6 +418,9 @@ export const TacticalBoard = memo(function TacticalBoard({
                     <div className="rounded-md border bg-background/90 px-3 py-2 text-xs text-muted-foreground shadow-sm backdrop-blur-sm">
                       {selectedMetricList.length === 0
                         ? t("dataMap.noMetrics")
+                        : eventFilterMode === "individual" &&
+                            selectedPlayerIds.size === 0
+                          ? t("dataMap.selectPlayers")
                         : t("dataMap.noData")}
                     </div>
                   </div>
@@ -409,6 +453,10 @@ function sameTacticalBoardProps(
   const right = next.match
   return (
     left.tacticalEvents === right.tacticalEvents &&
+    previous.isFocusMode === next.isFocusMode &&
+    previous.eventFilterMode === next.eventFilterMode &&
+    previous.selectedPlayerIds === next.selectedPlayerIds &&
+    previous.onEventFilterModeChange === next.onEventFilterModeChange &&
     left.pitchDimensions?.length === right.pitchDimensions?.length &&
     left.pitchDimensions?.width === right.pitchDimensions?.width &&
     left.home.color === right.home.color &&
