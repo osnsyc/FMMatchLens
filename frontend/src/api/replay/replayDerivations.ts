@@ -6,10 +6,10 @@ import {
   nativeMomentumEventMetricIds,
 } from "@/api/momentumEventSemantics"
 import {
-  sameMomentumEvent,
   sameMomentumPoint,
   streamRevision,
 } from "@/api/replay/replayPreprocessor"
+import { MomentumEventReconciler } from "@/api/momentumEventReconciler"
 import type {
   HistoricalDerivationSnapshot,
   ReplayStreamRevision,
@@ -18,6 +18,7 @@ import type {
 import type {
   RealtimeFrame,
   RealtimeMomentumEvent,
+  RealtimeMomentumEventUpdate,
   RealtimeMomentumPoint,
 } from "@/api/realtimeMatch"
 import type {
@@ -35,7 +36,9 @@ export type HistoricalDerivationsState = {
   tactical: Array<[number, TacticalEventPoint]>
   momentum: Array<[number, MatchMomentumPoint]>
   rollingMomentum: Array<[number, MatchMomentumPoint]>
-  nativeStream: RealtimeMomentumEvent[]
+  nativeEvents: Array<
+    [number, { event: RealtimeMomentumEvent; revision: number }]
+  >
   momentumStream: RealtimeMomentumPoint[]
   rollingStream: RealtimeMomentumPoint[]
   heatmaps: HeatmapDerivationsState
@@ -49,7 +52,11 @@ export class HistoricalDerivations {
   private tactical = new Map<number, TacticalEventPoint>()
   private momentum = new Map<number, MatchMomentumPoint>()
   private rollingMomentum = new Map<number, MatchMomentumPoint>()
-  private nativeStream: RealtimeMomentumEvent[] = []
+  private nativeEvents = new Map<
+    number,
+    { event: RealtimeMomentumEvent; revision: number }
+  >()
+  private legacyEventReconciler = new MomentumEventReconciler()
   private momentumStream: RealtimeMomentumPoint[] = []
   private rollingStream: RealtimeMomentumPoint[] = []
   private heatmaps = new HeatmapDerivations()
@@ -72,7 +79,8 @@ export class HistoricalDerivations {
     this.tactical.clear()
     this.momentum.clear()
     this.rollingMomentum.clear()
-    this.nativeStream = []
+    this.nativeEvents.clear()
+    this.legacyEventReconciler = new MomentumEventReconciler()
     this.momentumStream = []
     this.rollingStream = []
     this.heatmaps.reset()
@@ -97,11 +105,12 @@ export class HistoricalDerivations {
 
   appendFrame(frame: RealtimeFrame, revision?: ReplayStreamRevision) {
     const streams = revision ?? {
-      momentumEvents: streamRevision(
-        this.nativeStream,
-        frame.momentumEvents,
-        sameMomentumEvent
-      ),
+      momentumEvents: {
+        commonLength: 0,
+        tail:
+          frame.momentumEventUpdates ??
+          this.legacyEventReconciler.apply(frame.momentumEvents),
+      },
       momentum: streamRevision(
         this.momentumStream,
         frame.momentum,
@@ -134,7 +143,9 @@ export class HistoricalDerivations {
     }
     if (this.tacticalDirty) {
       this.tacticalOutput = [...this.tactical.values()].sort(
-        (left, right) => left.tick - right.tick
+        (left, right) =>
+          left.tick - right.tick ||
+          (left.sequenceIndex ?? 0) - (right.sequenceIndex ?? 0)
       )
       this.tacticalDirty = false
     }
@@ -174,7 +185,10 @@ export class HistoricalDerivations {
       tactical: [...this.tactical],
       momentum: [...this.momentum],
       rollingMomentum: [...this.rollingMomentum],
-      nativeStream: this.nativeStream.slice(),
+      nativeEvents: [...this.nativeEvents].map(([key, value]) => [
+        key,
+        { event: value.event, revision: value.revision },
+      ]),
       momentumStream: this.momentumStream.slice(),
       rollingStream: this.rollingStream.slice(),
       heatmaps: this.heatmaps.exportState(),
@@ -188,7 +202,7 @@ export class HistoricalDerivations {
     this.tactical = new Map(state.tactical)
     this.momentum = new Map(state.momentum)
     this.rollingMomentum = new Map(state.rollingMomentum)
-    this.nativeStream = state.nativeStream.slice()
+    this.nativeEvents = new Map(state.nativeEvents)
     this.momentumStream = state.momentumStream.slice()
     this.rollingStream = state.rollingStream.slice()
     this.heatmaps.restoreState(state.heatmaps)
@@ -247,19 +261,21 @@ export class HistoricalDerivations {
 
   private applyNativeRevision(
     frame: RealtimeFrame,
-    revision: StreamRevision<RealtimeMomentumEvent>
+    revision: StreamRevision<RealtimeMomentumEventUpdate>
   ) {
-    // MomentumEvents is capped by the capture layer. Buffer rotation must not
-    // erase historical render points. A later item with the same eventIndex
-    // still replaces the point below.
-    this.nativeStream.length = revision.commonLength
-    for (const event of revision.tail) {
-      this.nativeStream.push(event)
+    for (const update of revision.tail) {
+      const event = update.event
+      const existing = this.nativeEvents.get(update.sequenceIndex)
+      if (existing && update.revision <= existing.revision) continue
+      this.nativeEvents.set(update.sequenceIndex, {
+        event,
+        revision: update.revision,
+      })
       const point = nativeMomentumEventToTacticalPoint(frame, event)
       if (point) {
-        const previousPoint = this.tactical.get(event.eventIndex)
+        const previousPoint = this.tactical.get(event.sequenceIndex)
         this.tactical.set(
-          event.eventIndex,
+          event.sequenceIndex,
           previousPoint?.annotations?.some(
             (annotation) =>
               annotation === "clearCutChance" || annotation === "penaltyKick"
@@ -280,29 +296,45 @@ export class HistoricalDerivations {
         )
       }
       this.appendNativeCard(frame, event)
-      attachAuxiliaryEventAnnotations(this.tactical, this.nativeStream)
+      this.refreshAuxiliaryAnnotations()
     }
     if (revision.tail.length > 0) this.tacticalDirty = true
   }
 
-  private appendNativeCard(
-    frame: RealtimeFrame,
-    event: RealtimeMomentumEvent
-  ) {
+  private appendNativeCard(frame: RealtimeFrame, event: RealtimeMomentumEvent) {
     if (event.eventType !== 20 && event.eventType !== 21) return
     const type = event.eventType === 20 ? "yellow_card" : "red_card"
-    const id = `${frame.matchId}-native-${type}-${event.eventIndex}`
-    if (this.events.some((existing) => existing.id === id)) return
+    const id = `${frame.matchId}-native-${type}-${event.sequenceIndex}`
     const displayTick = nativeMomentumEventDisplayTick(frame, event)
-    this.events.push({
+    const card: MatchEvent = {
       id,
       type,
       minute: Math.floor(displayTick / 240),
       tick: event.tick,
       team: event.team,
       playerId: event.playerId,
-    })
+    }
+    const existingIndex = this.events.findIndex(
+      (existing) => existing.id === id
+    )
+    if (existingIndex >= 0) this.events[existingIndex] = card
+    else this.events.push(card)
     this.eventsDirty = true
+  }
+
+  private refreshAuxiliaryAnnotations() {
+    for (const [key, point] of this.tactical) {
+      const annotations = point.annotations?.filter(
+        (annotation) =>
+          annotation !== "clearCutChance" && annotation !== "penaltyKick"
+      )
+      if (annotations?.length !== point.annotations?.length)
+        this.tactical.set(key, { ...point, annotations })
+    }
+    attachAuxiliaryEventAnnotations(
+      this.tactical,
+      [...this.nativeEvents.values()].map((state) => state.event)
+    )
   }
 
   private appendMatchEvents(previous: RealtimeFrame, frame: RealtimeFrame) {
@@ -395,7 +427,7 @@ export function nativeMomentumEventToTacticalPoint(
   const endLongitudinal = rotateValue(item.trajectoryEndLongitudinalPosition)
   const displayTick = nativeMomentumEventDisplayTick(frame, item)
   return {
-    id: `${frame.matchId}-native-momentum-${item.eventIndex}`,
+    id: `${frame.matchId}-native-momentum-${item.sequenceIndex}`,
     metricId,
     metricIds: nativeMomentumEventMetricIds(item, metricId),
     playerId: item.playerId,

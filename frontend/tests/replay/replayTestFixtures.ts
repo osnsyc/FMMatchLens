@@ -40,6 +40,7 @@ export function replayFixture() {
   const replacement: RealtimeMomentumEvent = {
     ...completedEvent,
     eventIndex: 8,
+    sequenceIndex: 2,
     tick: recentWindowTick,
     eventType: 4,
     playerId: 102,

@@ -187,6 +187,21 @@ internal sealed class LocalApiServer : IDisposable
                 case "/api/match/status":
                     await WriteJsonAsync(context.Response, _timeline.GetStatus(), cancellationToken).ConfigureAwait(false);
                     break;
+                case "/api/match/momentum/events":
+                    await WriteJsonAsync(
+                        context.Response,
+                        _timeline.GetMomentumEventSnapshot(),
+                        cancellationToken).ConfigureAwait(false);
+                    break;
+                case "/api/match/momentum/updates":
+                    var momentumQuery = context.Request.QueryString;
+                    var afterUpdateSequence = TryParseQueryLong(momentumQuery["after"]) ?? 0;
+                    var momentumLimit = ParseQueryInt(momentumQuery["limit"], 2_400);
+                    await WriteJsonAsync(
+                        context.Response,
+                        _timeline.GetMomentumEventUpdates(afterUpdateSequence, momentumLimit),
+                        cancellationToken).ConfigureAwait(false);
+                    break;
                 case "/api/match/frames":
                     var query = context.Request.QueryString;
                     var fromTick = ParseQueryInt(query["fromTick"], 0);
@@ -354,6 +369,9 @@ internal sealed class LocalApiServer : IDisposable
     {
         return int.TryParse(value, out var parsed) ? parsed : fallback;
     }
+
+    private static long? TryParseQueryLong(string? value) =>
+        long.TryParse(value, out var parsed) ? parsed : null;
 
     private static int? TryParseQueryInt(string? value)
     {

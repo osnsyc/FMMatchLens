@@ -144,6 +144,8 @@ internal sealed class RawRealtimeTickFrame
     public byte MomentumEventCount;
     public byte MomentumCount;
     public byte RollingMomentumCount;
+    public long MomentumNativeTailChanges;
+    public int MomentumMaxBackfillDepth;
     public TeamTickData Home;
     public TeamTickData Away;
     public PlayerTickData[] Players { get; }

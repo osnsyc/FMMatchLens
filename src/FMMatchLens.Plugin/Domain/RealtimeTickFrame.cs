@@ -22,7 +22,28 @@ internal sealed record RealtimeTickFrame(
     IReadOnlyList<MomentumTickData> RollingMomentum,
     TeamTickData Home,
     TeamTickData Away,
-    IReadOnlyList<PlayerTickData> Players);
+    IReadOnlyList<PlayerTickData> Players,
+    IReadOnlyList<MomentumEventUpdate>? MomentumEventUpdates = null);
+
+internal enum MomentumEventUpdateKind
+{
+    Add,
+    Update,
+}
+
+internal readonly record struct MomentumEventUpdate(
+    long UpdateSequence,
+    MomentumEventUpdateKind Operation,
+    int SequenceIndex,
+    int Revision,
+    NativeMomentumEventData Event);
+
+internal readonly record struct LogicalMomentumEvent(
+    int SequenceIndex,
+    int Revision,
+    int FirstSeenFrameTick,
+    int LastUpdatedFrameTick,
+    NativeMomentumEventData Event);
 
 internal readonly record struct NativeMomentumEventData(
     int EventIndex,

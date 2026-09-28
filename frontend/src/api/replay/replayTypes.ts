@@ -1,7 +1,7 @@
 import type {
   RealtimeFrame,
   RealtimeMatchMetadata,
-  RealtimeMomentumEvent,
+  RealtimeMomentumEventUpdate,
   RealtimeMomentumPoint,
 } from "@/api/realtimeMatch"
 import type { LocalArchiveSummary } from "@/api/localArchive"
@@ -19,7 +19,7 @@ export type StreamRevision<T> = {
 }
 
 export type ReplayStreamRevision = {
-  momentumEvents: StreamRevision<RealtimeMomentumEvent>
+  momentumEvents: StreamRevision<RealtimeMomentumEventUpdate>
   momentum: StreamRevision<RealtimeMomentumPoint>
   rollingMomentum: StreamRevision<RealtimeMomentumPoint>
 }

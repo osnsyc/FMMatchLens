@@ -90,6 +90,7 @@ export type RealtimeFrame = {
   halfPitchWidth: number
   halfPitchLength: number
   momentumEvents: RealtimeMomentumEvent[]
+  momentumEventUpdates?: RealtimeMomentumEventUpdate[]
   momentum: RealtimeMomentumPoint[]
   rollingMomentum: RealtimeMomentumPoint[]
   home: RealtimeTeam
@@ -119,6 +120,14 @@ export type RealtimeMomentumEvent = {
   flags: number
   sequenceIndex: number
   completionTick: number
+}
+
+export type RealtimeMomentumEventUpdate = {
+  updateSequence: number
+  operation: "add" | "update"
+  sequenceIndex: number
+  revision: number
+  event: RealtimeMomentumEvent
 }
 
 export type RealtimeMomentumPoint = {
@@ -369,7 +378,7 @@ export class LegacyLiveDerivations {
     for (const item of frame.momentumEvents) {
       if (item.eventType === 20 || item.eventType === 21) {
         const type = item.eventType === 20 ? "yellow_card" : "red_card"
-        const id = `${frame.matchId}-native-${type}-${item.eventIndex}`
+        const id = `${frame.matchId}-native-${type}-${item.sequenceIndex}`
         if (!this.events.some((event) => event.id === id)) {
           const displayTick = nativeMomentumEventDisplayTick(frame, item)
           this.events.push({
@@ -433,8 +442,8 @@ export class LegacyLiveDerivations {
         halfLength
       )
       const displayTick = nativeMomentumEventDisplayTick(frame, item)
-      this.tactical.set(item.eventIndex, {
-        id: `${frame.matchId}-native-momentum-${item.eventIndex}`,
+      this.tactical.set(item.sequenceIndex, {
+        id: `${frame.matchId}-native-momentum-${item.sequenceIndex}`,
         metricId,
         metricIds,
         playerId: item.playerId,
@@ -967,14 +976,14 @@ export function buildMatchEvents(
     for (const item of frame.momentumEvents) {
       if (
         (item.eventType !== 20 && item.eventType !== 21) ||
-        nativeCards.has(item.eventIndex)
+        nativeCards.has(item.sequenceIndex)
       )
         continue
-      nativeCards.add(item.eventIndex)
+      nativeCards.add(item.sequenceIndex)
       const displayTick = nativeMomentumEventDisplayTick(frame, item)
       const type = item.eventType === 20 ? "yellow_card" : "red_card"
       events.push({
-        id: `${frame.matchId}-native-${type}-${item.eventIndex}`,
+        id: `${frame.matchId}-native-${type}-${item.sequenceIndex}`,
         type,
         minute: Math.floor(displayTick / 240),
         tick: item.tick,
@@ -1092,7 +1101,15 @@ export function buildTacticalEvents(
     const halfLength = validPitchHalf(frame.halfPitchLength)
     if (!halfWidth || !halfLength) continue
     for (const item of frame.momentumEvents) {
-      nativeEvents.set(item.eventIndex, item)
+      const existing = nativeEvents.get(item.sequenceIndex)
+      if (
+        existing &&
+        (existing.tick !== item.tick ||
+          existing.team !== item.team ||
+          existing.playerSlot !== item.playerSlot)
+      )
+        continue
+      nativeEvents.set(item.sequenceIndex, item)
       const metricId = nativeMomentumEventMetric(item.eventType)
       if (!metricId) continue
       const metricIds = nativeMomentumEventMetricIds(item, metricId)
@@ -1144,8 +1161,8 @@ export function buildTacticalEvents(
         halfLength
       )
       const displayTick = nativeMomentumEventDisplayTick(frame, item)
-      events.set(item.eventIndex, {
-        id: `${frame.matchId}-native-momentum-${item.eventIndex}`,
+      events.set(item.sequenceIndex, {
+        id: `${frame.matchId}-native-momentum-${item.sequenceIndex}`,
         metricId,
         metricIds,
         playerId: item.playerId,

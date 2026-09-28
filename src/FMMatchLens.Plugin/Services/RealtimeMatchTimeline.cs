@@ -1,4 +1,5 @@
 using FMMatchLens.Plugin.Domain;
+using FMMatchLens.Plugin.Diagnostics;
 using FMMatchLens.Plugin.Memory;
 
 namespace FMMatchLens.Plugin.Services;
@@ -17,12 +18,15 @@ internal sealed class RealtimeMatchTimeline
     private readonly GraphicsAssetIndex _graphicsAssets;
     private readonly List<RealtimeTickFrame[]> _chunks = new();
     private readonly List<RealtimeMetadataTimelineEntry> _metadataTimeline = new();
+    private readonly MomentumEventReconciler _momentumEventReconciler = new(PluginLogger.Warning);
     private int _lastChunkCount;
     private int _frameCount;
     private int _lastTick = -1;
     private long _missingTickCount;
     private long _duplicateTickCount;
     private long _outOfOrderTickCount;
+    private long _momentumNativeTailChanges;
+    private int _momentumMaxBackfillDepth;
     private nint _sourceMatchAddress;
     private string _status = "waiting";
     private string? _matchId;
@@ -113,6 +117,9 @@ internal sealed class RealtimeMatchTimeline
             Array.Copy(raw.RollingMomentum, rollingMomentum, rollingMomentum.Length);
             var momentumEvents = new NativeMomentumEventData[raw.MomentumEventCount];
             Array.Copy(raw.MomentumEvents, momentumEvents, momentumEvents.Length);
+            var momentumEventUpdates = _momentumEventReconciler.Apply(raw.Tick, momentumEvents);
+            _momentumNativeTailChanges = Math.Max(_momentumNativeTailChanges, raw.MomentumNativeTailChanges);
+            _momentumMaxBackfillDepth = Math.Max(_momentumMaxBackfillDepth, raw.MomentumMaxBackfillDepth);
 
             var frame = new RealtimeTickFrame(
                 Sequence: raw.Sequence,
@@ -130,7 +137,8 @@ internal sealed class RealtimeMatchTimeline
                 RollingMomentum: rollingMomentum,
                 Home: raw.Home,
                 Away: raw.Away,
-                Players: players);
+                Players: players,
+                MomentumEventUpdates: momentumEventUpdates);
 
             if (_chunks.Count == 0 || _lastChunkCount == ChunkSize)
             {
@@ -264,7 +272,13 @@ internal sealed class RealtimeMatchTimeline
                 _current?.Period,
                 _missingTickCount,
                 _duplicateTickCount,
-                _outOfOrderTickCount);
+                _outOfOrderTickCount,
+                _momentumNativeTailChanges,
+                _momentumEventReconciler.RelocationCount,
+                _momentumEventReconciler.SemanticRevisionCount,
+                _momentumEventReconciler.SequenceCollisionCount,
+                _momentumMaxBackfillDepth,
+                _momentumEventReconciler.LatestUpdateSequence);
         }
     }
 
@@ -281,6 +295,29 @@ internal sealed class RealtimeMatchTimeline
         lock (_gate)
         {
             return _metadata;
+        }
+    }
+
+    public MomentumEventSnapshot GetMomentumEventSnapshot()
+    {
+        lock (_gate)
+        {
+            return new MomentumEventSnapshot(
+                _matchId,
+                _momentumEventReconciler.LatestUpdateSequence,
+                _momentumEventReconciler.GetSnapshot());
+        }
+    }
+
+    public MomentumEventUpdateSlice GetMomentumEventUpdates(long after, int limit)
+    {
+        lock (_gate)
+        {
+            return new MomentumEventUpdateSlice(
+                _matchId,
+                after,
+                _momentumEventReconciler.LatestUpdateSequence,
+                _momentumEventReconciler.GetUpdatesAfter(after, limit));
         }
     }
 
@@ -375,6 +412,9 @@ internal sealed class RealtimeMatchTimeline
         _missingTickCount = 0;
         _duplicateTickCount = 0;
         _outOfOrderTickCount = 0;
+        _momentumNativeTailChanges = 0;
+        _momentumMaxBackfillDepth = 0;
+        _momentumEventReconciler.Reset();
         _sourceMatchAddress = default;
         _matchId = null;
         _current = null;
@@ -697,7 +737,24 @@ internal sealed record RealtimeTimelineStatus(
     int? Period,
     long MissingTickCount,
     long DuplicateTickCount,
-    long OutOfOrderTickCount);
+    long OutOfOrderTickCount,
+    long MomentumNativeTailChanges,
+    long MomentumRelocations,
+    long MomentumSemanticRevisions,
+    long MomentumSequenceCollisions,
+    int MomentumMaxBackfillDepth,
+    long MomentumLatestUpdateSequence);
+
+internal sealed record MomentumEventSnapshot(
+    string? MatchId,
+    long LatestUpdateSequence,
+    IReadOnlyList<LogicalMomentumEvent> Events);
+
+internal sealed record MomentumEventUpdateSlice(
+    string? MatchId,
+    long AfterUpdateSequence,
+    long LatestUpdateSequence,
+    IReadOnlyList<MomentumEventUpdate> Updates);
 
 internal sealed record RealtimeFrameSlice(
     string? MatchId,

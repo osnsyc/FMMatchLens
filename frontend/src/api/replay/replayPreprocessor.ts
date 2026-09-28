@@ -4,6 +4,10 @@ import type {
   RealtimeMomentumEvent,
   RealtimeMomentumPoint,
 } from "@/api/realtimeMatch"
+import {
+  MomentumEventReconciler,
+  sameMomentumEventSemanticContent,
+} from "@/api/momentumEventReconciler"
 import type { LocalArchiveSummary } from "@/api/localArchive"
 import type {
   ReplayArchive,
@@ -33,7 +37,7 @@ export async function preprocessReplayArchive(
   const frames: ReplayFrame[] = new Array(input.frames.length)
   const streamRevisions: ReplayStreamRevision[] = new Array(input.frames.length)
   const ticks = new Int32Array(input.frames.length)
-  let previousEvents: readonly RealtimeMomentumEvent[] = []
+  const eventReconciler = new MomentumEventReconciler()
   let previousMomentum: readonly RealtimeMomentumPoint[] = []
   let previousRolling: readonly RealtimeMomentumPoint[] = []
 
@@ -42,11 +46,10 @@ export async function preprocessReplayArchive(
     const end = Math.min(input.frames.length, start + batchSize)
     for (let index = start; index < end; index += 1) {
       const source = input.frames[index]
-      const momentumEvents = streamRevision(
-        previousEvents,
-        source.momentumEvents,
-        sameMomentumEvent
-      )
+      const logicalUpdates =
+        source.momentumEventUpdates ??
+        eventReconciler.apply(source.momentumEvents)
+      const momentumEvents = { commonLength: 0, tail: logicalUpdates }
       const momentum = streamRevision(
         previousMomentum,
         source.momentum,
@@ -58,13 +61,13 @@ export async function preprocessReplayArchive(
         sameMomentumPoint
       )
       streamRevisions[index] = { momentumEvents, momentum, rollingMomentum }
-      previousEvents = source.momentumEvents
       previousMomentum = source.momentum
       previousRolling = source.rollingMomentum
       ticks[index] = source.tick
       frames[index] = {
         ...source,
         momentumEvents: [],
+        momentumEventUpdates: [],
         momentum: [],
         rollingMomentum: [],
       }
@@ -120,40 +123,7 @@ export function sameMomentumEvent(
   left: RealtimeMomentumEvent,
   right: RealtimeMomentumEvent
 ) {
-  if (
-    left.eventIndex !== right.eventIndex ||
-    left.tick !== right.tick ||
-    left.lateralPosition !== right.lateralPosition ||
-    left.longitudinalPosition !== right.longitudinalPosition ||
-    left.trajectoryStartLateralPosition !==
-      right.trajectoryStartLateralPosition ||
-    left.trajectoryStartLongitudinalPosition !==
-      right.trajectoryStartLongitudinalPosition ||
-    left.trajectoryEndLateralPosition !== right.trajectoryEndLateralPosition ||
-    left.trajectoryEndLongitudinalPosition !==
-      right.trajectoryEndLongitudinalPosition ||
-    left.team !== right.team ||
-    left.playerSlot !== right.playerSlot ||
-    left.playerId !== right.playerId ||
-    left.receiverPlayerSlot !== right.receiverPlayerSlot ||
-    left.receiverPlayerId !== right.receiverPlayerId ||
-    left.eventType !== right.eventType ||
-    left.flags !== right.flags ||
-    left.sequenceIndex !== right.sequenceIndex ||
-    left.completionTick !== right.completionTick
-  ) {
-    return false
-  }
-  const leftPoints = left.trajectoryPoints ?? []
-  const rightPoints = right.trajectoryPoints ?? []
-  return (
-    leftPoints.length === rightPoints.length &&
-    leftPoints.every(
-      (point, index) =>
-        point.lateralPosition === rightPoints[index]?.lateralPosition &&
-        point.longitudinalPosition === rightPoints[index]?.longitudinalPosition
-    )
-  )
+  return sameMomentumEventSemanticContent(left, right)
 }
 
 function throwIfAborted(signal?: AbortSignal) {

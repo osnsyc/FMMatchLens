@@ -559,6 +559,11 @@ internal sealed class GameMatchTickHook : IDisposable
             }
 
             var reset = state.Source != source || state.Begin != begin || eventCount < state.EventCount;
+            if (state.Source != source || eventCount < state.EventCount)
+            {
+                state.TailChangeCount = 0;
+                state.MaxBackfillDepth = 0;
+            }
             var start = eventCount;
             if (reset)
             {
@@ -596,6 +601,11 @@ internal sealed class GameMatchTickHook : IDisposable
             }
 
             var processedEventCount = eventCount;
+            if (!reset && start < state.EventCount)
+            {
+                state.TailChangeCount++;
+                state.MaxBackfillDepth = Math.Max(state.MaxBackfillDepth, state.EventCount - start);
+            }
             if (start < eventCount)
             {
                 processedEventCount = start;
@@ -632,6 +642,8 @@ internal sealed class GameMatchTickHook : IDisposable
             state.Begin = begin;
             state.EventCount = processedEventCount;
             state.UpdateSignatures(begin, processedEventCount);
+            frame.MomentumNativeTailChanges = state.TailChangeCount;
+            frame.MomentumMaxBackfillDepth = state.MaxBackfillDepth;
         }
     }
 
@@ -2406,6 +2418,8 @@ internal sealed class GameMatchTickHook : IDisposable
         public int EventCount;
         public int SignatureStart;
         public int SignatureCount;
+        public long TailChangeCount;
+        public int MaxBackfillDepth;
 
         public bool TryGetSignature(int eventIndex, out ulong signature)
         {

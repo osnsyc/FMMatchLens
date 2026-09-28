@@ -70,7 +70,7 @@ describe("ReplaySession", () => {
 
     const afterBufferRotation = session.advanceTo(4)
     expect(afterBufferRotation.tacticalEvents.map((event) => event.id)).toEqual(
-      ["fixture-native-momentum-7", "fixture-native-momentum-8"]
+      ["fixture-native-momentum-1", "fixture-native-momentum-2"]
     )
     expect(afterBufferRotation.momentum).toHaveLength(5)
     expect(afterBufferRotation.rollingMomentum).toHaveLength(5)
