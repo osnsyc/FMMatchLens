@@ -39,14 +39,16 @@ type StatRow = {
 }
 
 // Every raw row below maps directly to TeamTickData/Offsets.TeamBase, except
-// shotsOffTarget which is derived from reliable player counters while +0x172
-// remains unknown. Percentage rows are derived only when both inputs are known.
+// shotsOffTarget which is derived from reliable player counters. Percentage
+// rows are derived only when both inputs are known.
 const allRows: StatRow[] = [
   { label: "stats.possession", source: "possession", suffix: "%" },
   { label: "stats.goals", source: "goals" },
   { label: "stats.expectedGoals", source: "xg", precision: 2 },
   { label: "stats.shots", source: "shots" },
   { label: "stats.shotsOnTarget", source: "shotsOnTarget" },
+  { label: "stats.firstHalfShots", source: "firstHalfShots" },
+  { label: "stats.secondHalfShots", source: "secondHalfShots" },
   { label: "stats.shotsOffTarget", source: "shotsOffTarget" },
   { label: "stats.blockedShots", source: "blockedShots" },
   { label: "stats.clearCutChances", source: "clearCutChances" },
@@ -75,6 +77,8 @@ const attackRows: StatRow[] = [
   { label: "stats.expectedGoals", source: "xg", precision: 2 },
   { label: "stats.shots", source: "shots" },
   { label: "stats.shotsOnTarget", source: "shotsOnTarget" },
+  { label: "stats.firstHalfShots", source: "firstHalfShots" },
+  { label: "stats.secondHalfShots", source: "secondHalfShots" },
   { label: "stats.shotsOffTarget", source: "shotsOffTarget" },
   { label: "stats.blockedShots", source: "blockedShots" },
   { label: "stats.clearCutChances", source: "clearCutChances" },

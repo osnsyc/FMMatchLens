@@ -26,7 +26,8 @@ const metadataDeltaRecord = 5
 const blockMagic = 0x324b4c42
 const maxRecordBytes = 4 * 1024 * 1024
 const maxChunkBytes = 16 * 1024 * 1024
-const allTeamFields = (1n << 23n) - 1n
+const legacyTeamFields = (1n << 23n) - 1n
+const allTeamFields = (1n << 25n) - 1n
 const legacyPlayerFields = (1n << 39n) - 1n
 const allPlayerFields = (1n << 42n) - 1n
 
@@ -239,6 +240,7 @@ function readFrames(
   structureMinor: number,
 ) {
   const reader = new ArchiveBufferReader(payload)
+  const supportedTeamFields = structureMinor >= 6 ? allTeamFields : legacyTeamFields
   const supportedPlayerFields = structureMinor >= 6 ? allPlayerFields : legacyPlayerFields
   if (structureMinor === 1 && reader.readByte() !== legacy21FramePayloadMarker) {
     throw new ArchiveError("2.1 帧载荷标记无效")
@@ -266,8 +268,8 @@ function readFrames(
       halfPitchLength = reader.readFloat32()
       validatePitch(halfPitchWidth, halfPitchLength)
     }
-    const home = readTeamDelta(reader, previous?.home)
-    const away = readTeamDelta(reader, previous?.away)
+    const home = readTeamDelta(reader, previous?.home, supportedTeamFields)
+    const away = readTeamDelta(reader, previous?.away, supportedTeamFields)
     let players: RealtimePlayer[]
     if (rosterReset) {
       const count = reader.readVarUint()
@@ -304,11 +306,12 @@ function readFrames(
   return frames
 }
 
-function readTeamDelta(reader: ArchiveBufferReader, previous?: RealtimeTeam): RealtimeTeam {
+function readTeamDelta(reader: ArchiveBufferReader, previous: RealtimeTeam | undefined, supportedTeamFields: bigint): RealtimeTeam {
   const mask = reader.readVarUintBig()
-  if ((mask & ~allTeamFields) !== 0n) throw new ArchiveError("球队状态包含未知字段")
+  if ((mask & ~supportedTeamFields) !== 0n) throw new ArchiveError("球队状态包含未知字段")
   const prior: RealtimeTeam = previous ?? {
-    goals: 0, xg: 0, possessionTime: 0, shots: 0, shotsOnTarget: 0, shotsOffTarget: 0, blockedShots: 0,
+    goals: 0, xg: 0, possessionTime: 0, shots: 0, shotsOnTarget: 0, firstHalfShots: 0, secondHalfShots: 0,
+    shotsOffTarget: 0, blockedShots: 0,
     clearCutChances: 0, passes: 0, passesCompleted: 0, crosses: 0, crossesCompleted: 0, aerials: 0,
     aerialsWon: 0, progressivePasses: 0, finalThirdPasses: 0, tacklesAttempted: 0, tacklesWon: 0,
     fouls: 0, corners: 0, offsides: 0, yellowCards: 0, redCards: 0,
@@ -324,6 +327,7 @@ function readTeamDelta(reader: ArchiveBufferReader, previous?: RealtimeTeam): Re
     finalThirdPasses: integer(15, prior.finalThirdPasses), tacklesAttempted: integer(16, prior.tacklesAttempted), tacklesWon: integer(17, prior.tacklesWon),
     fouls: integer(18, prior.fouls), corners: integer(19, prior.corners), offsides: integer(20, prior.offsides),
     yellowCards: integer(21, prior.yellowCards), redCards: integer(22, prior.redCards),
+    firstHalfShots: integer(23, prior.firstHalfShots), secondHalfShots: integer(24, prior.secondHalfShots),
   }
 }
 

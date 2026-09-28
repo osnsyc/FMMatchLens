@@ -256,7 +256,10 @@ internal static class Offsets
         public const int Goals = 0x160;
         public const int Shots = 0x16F;
         public const int ShotsOnTarget = 0x170;
-        public const int Unknown172 = 0x172;
+        public const int FirstHalfShots = 0x171;
+        public const int SecondHalfShots = 0x172;
+        public const int ExtraTimeFirstHalfShotsCandidate = 0x173;
+        public const int ExtraTimeSecondHalfShotsCandidate = 0x174;
         public const int BlockedShots = 0x175;
         public const int ClearCutChances = 0x176;
         public const int FinalThirdPasses = 0x188;

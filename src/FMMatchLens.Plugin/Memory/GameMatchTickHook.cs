@@ -861,9 +861,11 @@ internal sealed class GameMatchTickHook : IDisposable
             PossessionTime: Marshal.ReadInt32(teamBase + Offsets.TeamBase.PossessionTime),
             Shots: ReadByteDirect(teamBase + Offsets.TeamBase.Shots),
             ShotsOnTarget: ReadByteDirect(teamBase + Offsets.TeamBase.ShotsOnTarget),
+            FirstHalfShots: ReadByteDirect(teamBase + Offsets.TeamBase.FirstHalfShots),
+            SecondHalfShots: ReadByteDirect(teamBase + Offsets.TeamBase.SecondHalfShots),
             // +0x172 does not equal the native missed-target event count in the
-            // validated 3-1 match. Keep the API field neutral until it is
-            // reconciled from reliable player/native-event data.
+            // validated 3-1 match because it stores second-half shots. Keep the
+            // API field derived from reliable player/native-event data.
             ShotsOffTarget: 0,
             BlockedShots: ReadByteDirect(teamBase + Offsets.TeamBase.BlockedShots),
             ClearCutChances: ReadByteDirect(teamBase + Offsets.TeamBase.ClearCutChances),

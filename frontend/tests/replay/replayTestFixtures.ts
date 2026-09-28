@@ -211,6 +211,8 @@ function team(goals: number, xg: number): RealtimeTeam {
     possessionTime: 0,
     shots: 0,
     shotsOnTarget: 0,
+    firstHalfShots: 0,
+    secondHalfShots: 0,
     shotsOffTarget: 0,
     blockedShots: 0,
     clearCutChances: 0,

@@ -227,6 +227,8 @@ export type TeamStats = {
   possessionTime: number
   shots: number
   shotsOnTarget: number
+  firstHalfShots: number
+  secondHalfShots: number
   shotsOffTarget: number
   blockedShots: number
   clearCutChances: number

@@ -7,7 +7,8 @@ internal static class ArchiveFrameCodec
 {
     private const byte RosterResetFlag = 1;
     private const byte PitchChangedFlag = 2;
-    private const ulong AllTeamFields = (1UL << 23) - 1;
+    private const ulong LegacyTeamFields = (1UL << 23) - 1;
+    private const ulong AllTeamFields = (1UL << 25) - 1;
     private const ulong LegacyPlayerFields = (1UL << 39) - 1;
     private const ulong AllPlayerFields = (1UL << 42) - 1;
     private const int MaxFramesPerChunk = 4_096;
@@ -127,8 +128,9 @@ internal static class ArchiveFrameCodec
                 halfLength = reader.ReadSingle();
                 ValidatePitch(halfWidth, halfLength);
             }
-            var home = ReadTeamDelta(reader, previous?.Home);
-            var away = ReadTeamDelta(reader, previous?.Away);
+            var supportedTeamFields = structureMinor >= 6 ? AllTeamFields : LegacyTeamFields;
+            var home = ReadTeamDelta(reader, previous?.Home, supportedTeamFields);
+            var away = ReadTeamDelta(reader, previous?.Away, supportedTeamFields);
             PlayerTickData[] players;
             if (rosterReset)
             {
@@ -211,14 +213,15 @@ internal static class ArchiveFrameCodec
         WriteInt(15, current.FinalThirdPasses, prior.FinalThirdPasses); WriteInt(16, current.TacklesAttempted, prior.TacklesAttempted); WriteInt(17, current.TacklesWon, prior.TacklesWon);
         WriteInt(18, current.Fouls, prior.Fouls); WriteInt(19, current.Corners, prior.Corners); WriteInt(20, current.Offsides, prior.Offsides);
         WriteInt(21, current.YellowCards, prior.YellowCards); WriteInt(22, current.RedCards, prior.RedCards);
+        WriteInt(23, current.FirstHalfShots, prior.FirstHalfShots); WriteInt(24, current.SecondHalfShots, prior.SecondHalfShots);
         void WriteInt(int bit, int value, int oldValue) { if ((mask & (1UL << bit)) != 0) ArchiveBinary.WriteVarInt64(writer, previous.HasValue ? value - oldValue : value); }
         void WriteFloat(int bit, float value) { if ((mask & (1UL << bit)) != 0) WriteFloatXor(writer, value, previous.HasValue ? prior.Xg : 0f); }
     }
 
-    private static TeamTickData ReadTeamDelta(BinaryReader reader, TeamTickData? previous)
+    private static TeamTickData ReadTeamDelta(BinaryReader reader, TeamTickData? previous, ulong supportedTeamFields)
     {
         var mask = ArchiveBinary.ReadVarUInt64(reader);
-        if ((mask & ~AllTeamFields) != 0) throw new ArchiveFormatException("unknown_team_field", "Team delta contains unknown fields.");
+        if ((mask & ~supportedTeamFields) != 0) throw new ArchiveFormatException("unknown_team_field", "Team delta contains unknown fields.");
         var prior = previous.GetValueOrDefault();
         int Int(int bit, int oldValue) => (mask & (1UL << bit)) == 0 ? oldValue : checked((previous.HasValue ? oldValue : 0) + (int)ArchiveBinary.ReadVarInt64(reader));
         float Float(int bit, float oldValue) => (mask & (1UL << bit)) == 0 ? oldValue : ReadFloatXor(reader, oldValue);
@@ -227,7 +230,7 @@ internal static class ArchiveFrameCodec
             Int(5, prior.ShotsOffTarget), Int(6, prior.BlockedShots), Int(7, prior.ClearCutChances), Int(8, prior.Passes), Int(9, prior.PassesCompleted),
             Int(10, prior.Crosses), Int(11, prior.CrossesCompleted), Int(12, prior.Aerials), Int(13, prior.AerialsWon), Int(14, prior.ProgressivePasses),
             Int(15, prior.FinalThirdPasses), Int(16, prior.TacklesAttempted), Int(17, prior.TacklesWon), Int(18, prior.Fouls), Int(19, prior.Corners),
-            Int(20, prior.Offsides), Int(21, prior.YellowCards), Int(22, prior.RedCards));
+            Int(20, prior.Offsides), Int(21, prior.YellowCards), Int(22, prior.RedCards), Int(23, prior.FirstHalfShots), Int(24, prior.SecondHalfShots));
     }
 
     private static ulong TeamMask(TeamTickData left, TeamTickData right)
@@ -241,6 +244,7 @@ internal static class ArchiveFrameCodec
         Mark(15, left.FinalThirdPasses != right.FinalThirdPasses); Mark(16, left.TacklesAttempted != right.TacklesAttempted); Mark(17, left.TacklesWon != right.TacklesWon);
         Mark(18, left.Fouls != right.Fouls); Mark(19, left.Corners != right.Corners); Mark(20, left.Offsides != right.Offsides);
         Mark(21, left.YellowCards != right.YellowCards); Mark(22, left.RedCards != right.RedCards);
+        Mark(23, left.FirstHalfShots != right.FirstHalfShots); Mark(24, left.SecondHalfShots != right.SecondHalfShots);
         return mask;
         void Mark(int bit, bool changed) { if (changed) mask |= 1UL << bit; }
     }

@@ -109,7 +109,9 @@ internal readonly record struct TeamTickData(
     int Corners,
     int Offsides,
     int YellowCards,
-    int RedCards);
+    int RedCards,
+    int FirstHalfShots,
+    int SecondHalfShots);
 
 internal readonly record struct PlayerTickData(
     int Slot,
