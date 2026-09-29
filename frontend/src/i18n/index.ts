@@ -19,6 +19,17 @@ const getInitialLanguage = (): SupportedLanguage => {
 const resources = {
   "zh-CN": {
     translation: {
+      xg: {
+        timeline: "时间线",
+        map: "xG分布",
+        noShots: "暂无 xG 射门",
+        shotXg: "xG",
+        confidence: {
+          exact: "精确匹配",
+          matched: "事件匹配",
+          estimated: "估算",
+        },
+      },
       common: {
         language: "语言",
         switchToLightTheme: "切换到亮色主题",
@@ -621,6 +632,17 @@ const resources = {
   },
   en: {
     translation: {
+      xg: {
+        timeline: "Timeline",
+        map: "xG Map",
+        noShots: "No xG shots yet",
+        shotXg: "xG",
+        confidence: {
+          exact: "Exact match",
+          matched: "Event match",
+          estimated: "Estimated",
+        },
+      },
       common: {
         language: "Language",
         switchToLightTheme: "Switch to light theme",

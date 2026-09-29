@@ -170,6 +170,7 @@ describe("ReplaySession", () => {
     expect(unchanged.players).toBe(first.players)
     expect(unchanged.xgTimeline).toBe(first.xgTimeline)
     expect(unchanged.events).toBe(first.events)
+    expect(unchanged.xgShots).toBe(first.xgShots)
     expect(unchanged.heatmaps).not.toBe(first.heatmaps)
     expect(unchanged.heatmaps.revision).toBe(first.heatmaps.revision + 1)
 
@@ -178,5 +179,217 @@ describe("ReplaySession", () => {
     expect(changed.home).not.toBe(unchanged.home)
     expect(changed.players).toBe(unchanged.players)
     expect(changed.events).toBe(unchanged.events)
+  })
+
+  it("matches a shot event to team and player xG deltas", async () => {
+    const fixture = replayFixture()
+    const shot = {
+      ...fixture.frames[1].momentumEvents[0],
+      eventIndex: 42,
+      sequenceIndex: 42,
+      eventType: 4,
+      tick: 40,
+      playerId: 101,
+      playerSlot: 1,
+    }
+    fixture.frames = [
+      frame(0),
+      frame(40, { homeXg: 0.36, momentumEvents: [shot] }),
+    ]
+    fixture.frames[1].home.shots = 1
+    fixture.frames[1].players[0].shots = 1
+    fixture.frames[1].players[0].xg = 0.36
+    fixture.summary = {
+      ...fixture.summary,
+      frameCount: fixture.frames.length,
+      lastTick: 40,
+    }
+
+    const archive = await preprocessReplayArchive(fixture)
+    const snapshot = new ReplaySession(archive).advanceTo(1)
+
+    expect(snapshot.xgShots).toEqual([
+      expect.objectContaining({
+        id: "fixture-native-momentum-42",
+        eventIndex: 42,
+        team: "home",
+        playerId: 101,
+        xg: 0.36,
+        metricId: "shotsOnTarget",
+        confidence: "exact",
+      }),
+    ])
+  })
+
+  it("keeps one shot when its native buffer eventIndex relocates", async () => {
+    const fixture = replayFixture()
+    const shot = {
+      ...fixture.frames[1].momentumEvents[0],
+      eventIndex: 50,
+      sequenceIndex: 100,
+      eventType: 4,
+      tick: 40,
+      playerId: 101,
+      playerSlot: 1,
+    }
+    const relocated = { ...shot, eventIndex: 51 }
+    const revised = { ...relocated, eventType: 1 }
+    fixture.frames = [
+      frame(0),
+      frame(40, { homeXg: 0.2, momentumEvents: [shot] }),
+      frame(60, { homeXg: 0.2, momentumEvents: [relocated] }),
+      frame(80, { homeXg: 0.2, momentumEvents: [revised] }),
+    ]
+    for (const current of fixture.frames.slice(1)) {
+      current.home.shots = 1
+      current.players[0].shots = 1
+      current.players[0].xg = 0.2
+    }
+    fixture.summary = {
+      ...fixture.summary,
+      frameCount: fixture.frames.length,
+      lastTick: 80,
+    }
+
+    const archive = await preprocessReplayArchive(fixture)
+    const snapshot = new ReplaySession(archive).advanceTo(3)
+
+    expect(snapshot.xgShots).toEqual([
+      expect.objectContaining({
+        id: "fixture-native-momentum-100",
+        eventIndex: 51,
+        xg: 0.2,
+        metricId: "goals",
+      }),
+    ])
+  })
+
+  it("keeps distinct shots when a native eventIndex is reused", async () => {
+    const fixture = replayFixture()
+    const firstShot = {
+      ...fixture.frames[1].momentumEvents[0],
+      eventIndex: 50,
+      sequenceIndex: 100,
+      eventType: 4,
+      tick: 40,
+      playerId: 101,
+      playerSlot: 1,
+    }
+    const secondShot = {
+      ...firstShot,
+      sequenceIndex: 101,
+      eventType: 5,
+      tick: 200,
+    }
+    fixture.frames = [
+      frame(0),
+      frame(40, { homeXg: 0.2, momentumEvents: [firstShot] }),
+      frame(200, { homeXg: 0.5, momentumEvents: [secondShot] }),
+    ]
+    fixture.frames[1].home.shots = 1
+    fixture.frames[1].players[0].shots = 1
+    fixture.frames[1].players[0].xg = 0.2
+    fixture.frames[2].home.shots = 2
+    fixture.frames[2].players[0].shots = 2
+    fixture.frames[2].players[0].xg = 0.5
+    fixture.summary = {
+      ...fixture.summary,
+      frameCount: fixture.frames.length,
+      lastTick: 200,
+    }
+
+    const archive = await preprocessReplayArchive(fixture)
+    const snapshot = new ReplaySession(archive).advanceTo(2)
+
+    expect(snapshot.xgShots).toEqual([
+      expect.objectContaining({
+        id: "fixture-native-momentum-100",
+        eventIndex: 50,
+        xg: 0.2,
+      }),
+      expect.objectContaining({
+        id: "fixture-native-momentum-101",
+        eventIndex: 50,
+        xg: 0.3,
+      }),
+    ])
+  })
+
+  it("resolves a delayed shot event without scanning by eventIndex", async () => {
+    const fixture = replayFixture()
+    const shot = {
+      ...fixture.frames[1].momentumEvents[0],
+      eventIndex: 60,
+      sequenceIndex: 120,
+      eventType: 2,
+      tick: 40,
+      playerId: 101,
+      playerSlot: 1,
+    }
+    fixture.frames = [
+      frame(0),
+      frame(40, { homeXg: 0.24 }),
+      frame(80, { homeXg: 0.24, momentumEvents: [shot] }),
+    ]
+    for (const current of fixture.frames.slice(1)) {
+      current.home.shots = 1
+      current.players[0].shots = 1
+      current.players[0].xg = 0.24
+    }
+    fixture.summary = {
+      ...fixture.summary,
+      frameCount: fixture.frames.length,
+      lastTick: 80,
+    }
+
+    const archive = await preprocessReplayArchive(fixture)
+    const snapshot = new ReplaySession(archive).advanceTo(2)
+
+    expect(snapshot.xgShots).toEqual([
+      expect.objectContaining({
+        id: "fixture-native-momentum-120",
+        eventIndex: 60,
+        xg: 0.24,
+      }),
+    ])
+  })
+
+  it("restores xG shots without duplicates after backward seeks", async () => {
+    const fixture = replayFixture()
+    const shot = {
+      ...fixture.frames[1].momentumEvents[0],
+      eventIndex: 43,
+      sequenceIndex: 43,
+      eventType: 2,
+      tick: 40,
+      playerId: 101,
+      playerSlot: 1,
+    }
+    fixture.frames = [
+      frame(0),
+      frame(40, { homeXg: 0.2, momentumEvents: [shot] }),
+      frame(80, { homeXg: 0.2, momentumEvents: [shot] }),
+    ]
+    for (const current of fixture.frames.slice(1)) {
+      current.home.shots = 1
+      current.players[0].shots = 1
+      current.players[0].xg = 0.2
+    }
+    fixture.summary = {
+      ...fixture.summary,
+      frameCount: fixture.frames.length,
+      lastTick: 80,
+    }
+    const archive = await preprocessReplayArchive(fixture)
+    const session = new ReplaySession(archive, {
+      checkpointInterval: 1,
+      maxCheckpoints: 3,
+    })
+
+    const original = session.advanceTo(2).xgShots
+    session.seek(0)
+    const replayed = session.advanceTo(2).xgShots
+    expect(replayed).toEqual(original)
+    expect(replayed).toHaveLength(1)
   })
 })

@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react"
+import { memo, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   CartesianGrid,
@@ -26,6 +26,8 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card"
+import { NativeTabs } from "@/components/uitripled/native-tabs-shadcnui"
+import { XgMap } from "@/components/XgMap"
 import { samePlayerLabels } from "@/lib/matchRenderEquality"
 import type {
   MatchSnapshot,
@@ -37,6 +39,8 @@ import { useTheme } from "@/components/theme-provider"
 type XgTimelineProps = {
   match: MatchSnapshot
 }
+
+type XgViewMode = "timeline" | "map"
 
 type GoalMarker = {
   id: string
@@ -52,6 +56,7 @@ export const XgTimeline = memo(function XgTimeline({
 }: XgTimelineProps) {
   const { t } = useTranslation()
   const { settings } = useTheme()
+  const [mode, setMode] = useState<XgViewMode>("timeline")
   const colorblind = settings.colorVision === "colorblind"
 
   const homeColor =
@@ -104,49 +109,42 @@ export const XgTimeline = memo(function XgTimeline({
           {t("stats.expectedGoals")}
         </CardTitle>
 
-        {/* Teams + current xG */}
-        <div className="ml-auto flex min-w-0 items-center gap-3">
-          {/* Home */}
-          <div className="flex min-w-0 items-baseline gap-1.5">
-            <span className="max-w-24 truncate text-[10px] font-medium text-muted-foreground @max-[180px]/card-header:hidden">
-              {match.home.name}
-            </span>
-
-            <span
-              className="text-sm font-semibold leading-none tabular-nums"
-              style={{
-                color: homeColor,
-              }}
-            >
-              {match.home.stats.xg.toFixed(2)}
-            </span>
-          </div>
-
-          {/* Divider */}
+        {/* Current xG */}
+        <div className="flex shrink-0 items-center gap-2">
+          <span
+            className="text-sm font-semibold leading-none tabular-nums"
+            style={{ color: homeColor }}
+          >
+            {match.home.stats.xg.toFixed(2)}
+          </span>
           <span className="text-[10px] text-muted-foreground/40">
             /
           </span>
-
-          {/* Away */}
-          <div className="flex min-w-0 items-baseline gap-1.5">
-            <span
-              className="text-sm font-semibold leading-none tabular-nums"
-              style={{
-                color: awayColor,
-              }}
-            >
-              {match.away.stats.xg.toFixed(2)}
-            </span>
-
-            <span className="max-w-24 truncate text-[10px] font-medium text-muted-foreground @max-[180px]/card-header:hidden">
-              {match.away.name}
-            </span>
-          </div>
+          <span
+            className="text-sm font-semibold leading-none tabular-nums"
+            style={{ color: awayColor }}
+          >
+            {match.away.stats.xg.toFixed(2)}
+          </span>
         </div>
+
+        <NativeTabs
+          items={[
+            { id: "timeline", label: t("xg.timeline"), content: null },
+            { id: "map", label: t("xg.map"), content: null },
+          ]}
+          value={mode}
+          onValueChange={(value) => setMode(value as XgViewMode)}
+          renderContent={false}
+          className="ml-auto w-auto min-w-28 max-w-40 flex-1"
+        />
       </CardHeader>
 
-      {/* Chart */}
+      {/* Chart / xG map */}
       <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+        {mode === "map" ? (
+          <XgMap match={match} homeColor={homeColor} awayColor={awayColor} />
+        ) : (
         <ChartContainer
           config={chartConfig}
           className="min-h-0 flex-1 px-2 py-2"
@@ -297,6 +295,7 @@ export const XgTimeline = memo(function XgTimeline({
             )}
           </ComposedChart>
         </ChartContainer>
+        )}
       </CardContent>
     </section>
   )
@@ -343,7 +342,7 @@ function GoalMarkerLabel({
             <button
               type="button"
               aria-label={title.replaceAll("\n", " · ")}
-              className="flex size-3.5 cursor-help items-center justify-center rounded-full border bg-background shadow-sm outline-none transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex size-3.5 cursor-pointer items-center justify-center rounded-full border bg-background shadow-sm outline-none transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring"
               style={{ borderColor: color }}
             />
           )}
@@ -460,7 +459,10 @@ function sameXgTimelineProps(previous: XgTimelineProps, next: XgTimelineProps) {
     && left.away.stats.xg === right.away.stats.xg
     && left.clock.minute === right.clock.minute
     && left.xgTimeline === right.xgTimeline
+    && left.xgShots === right.xgShots
     && left.events === right.events
+    && left.pitchDimensions?.length === right.pitchDimensions?.length
+    && left.pitchDimensions?.width === right.pitchDimensions?.width
     && samePlayerLabels(left.players, right.players)
 }
 

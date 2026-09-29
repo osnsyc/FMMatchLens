@@ -219,6 +219,7 @@ function replaySnapshot(
     historical.events,
     historical.heatmaps,
     historical.tacticalEvents,
+    historical.xgShots,
     historical.momentum,
     historical.rollingMomentum,
     undefined,

@@ -41,6 +41,32 @@ export type XgTimelinePoint = {
   away: number
 }
 
+export type XgShotConfidence = "exact" | "matched" | "estimated"
+
+export type XgShotPoint = {
+  id: string
+  eventIndex: number
+  team: TeamSide
+  playerId?: number
+  tick: number
+  displayTick: number
+  minute: number
+  x: number
+  y: number
+  xg: number
+  metricId: Extract<
+    TacticalEventMetricId,
+    | "goals"
+    | "shotsOnTarget"
+    | "shotsOffTarget"
+    | "hitWoodwork"
+    | "blockedShots"
+  >
+  nativeEventType: number
+  annotations?: TacticalEventAnnotation[]
+  confidence: XgShotConfidence
+}
+
 export type MatchMomentumPoint = {
   value: number
   timeTicks: number
@@ -369,6 +395,7 @@ export type MatchSnapshot = {
   xgTimeline: XgTimelinePoint[]
   heatmaps: HeatmapSnapshot
   tacticalEvents: TacticalEventPoint[]
+  xgShots: XgShotPoint[]
   momentum: MatchMomentumPoint[]
   rollingMomentum: MatchMomentumPoint[]
   formationSnapshots?: FormationSnapshot[]

@@ -10,6 +10,7 @@ import type {
   MatchEvent,
   MatchMomentumPoint,
   TacticalEventPoint,
+  XgShotPoint,
   XgTimelinePoint,
 } from "@/types/match"
 
@@ -44,6 +45,7 @@ export type HistoricalDerivationSnapshot = {
   xgTimeline: XgTimelinePoint[]
   events: MatchEvent[]
   tacticalEvents: TacticalEventPoint[]
+  xgShots: XgShotPoint[]
   heatmaps: HeatmapSnapshot
   momentum: MatchMomentumPoint[]
   rollingMomentum: MatchMomentumPoint[]

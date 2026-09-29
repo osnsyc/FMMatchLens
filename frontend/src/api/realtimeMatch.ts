@@ -25,6 +25,7 @@ import type {
   TeamSide,
   TeamStats,
   TacticalEventPoint,
+  XgShotPoint,
   XgTimelinePoint,
 } from "@/types/match"
 
@@ -542,6 +543,7 @@ export function useRealtimeMatch(enabled = true): MatchSnapshot | null {
           historical.events,
           historical.heatmaps,
           historical.tacticalEvents,
+          historical.xgShots,
           historical.momentum,
           historical.rollingMomentum,
           formationSnapshots,
@@ -802,6 +804,7 @@ export function toMatchSnapshot(
   events: MatchEvent[] = [],
   heatmaps: HeatmapSnapshot = { grids: new Map(), revision: 0 },
   tacticalEvents: TacticalEventPoint[] = [],
+  xgShots: XgShotPoint[] = [],
   momentum: MatchMomentumPoint[] = [],
   rollingMomentum: MatchMomentumPoint[] = [],
   formationSnapshots?: FormationSnapshot[],
@@ -868,6 +871,7 @@ export function toMatchSnapshot(
     events,
     heatmaps,
     tacticalEvents,
+    xgShots,
     momentum,
     rollingMomentum,
     formationSnapshots,

@@ -26,14 +26,43 @@ import type {
   MatchMomentumPoint,
   TacticalEventPoint,
   TeamSide,
+  XgShotConfidence,
+  XgShotPoint,
   XgTimelinePoint,
 } from "@/types/match"
+
+type PendingShotCandidate = {
+  sequenceIndex: number
+  firstSeenFrameTick: number
+  lastSeenFrameTick: number
+}
+
+type PlayerXgDelta = {
+  playerId: number
+  shotDelta: number
+  xgDelta: number
+}
+
+type PendingXgChange = {
+  team: TeamSide
+  frameTick: number
+  displayTick: number
+  teamShotDelta: number
+  teamXgDelta: number
+  players: PlayerXgDelta[]
+}
+
+const XG_EPSILON = 1e-5
+const SHOT_MATCH_WINDOW_TICKS = 96
 
 export type HistoricalDerivationsState = {
   previous?: RealtimeFrame
   xg: XgTimelinePoint[]
   events: MatchEvent[]
   tactical: Array<[number, TacticalEventPoint]>
+  xgShots: Array<[number, XgShotPoint]>
+  pendingShotCandidates: Array<[number, PendingShotCandidate]>
+  pendingXgChanges: PendingXgChange[]
   momentum: Array<[number, MatchMomentumPoint]>
   rollingMomentum: Array<[number, MatchMomentumPoint]>
   nativeEvents: Array<
@@ -50,6 +79,9 @@ export class HistoricalDerivations {
   private xg: XgTimelinePoint[] = [{ minute: 0, home: 0, away: 0 }]
   private events: MatchEvent[] = []
   private tactical = new Map<number, TacticalEventPoint>()
+  private xgShots = new Map<number, XgShotPoint>()
+  private pendingShotCandidates = new Map<number, PendingShotCandidate>()
+  private pendingXgChanges: PendingXgChange[] = []
   private momentum = new Map<number, MatchMomentumPoint>()
   private rollingMomentum = new Map<number, MatchMomentumPoint>()
   private nativeEvents = new Map<
@@ -61,11 +93,13 @@ export class HistoricalDerivations {
   private rollingStream: RealtimeMomentumPoint[] = []
   private heatmaps = new HeatmapDerivations()
   private tacticalOutput: TacticalEventPoint[] = []
+  private xgShotOutput: XgShotPoint[] = []
   private momentumOutput: MatchMomentumPoint[] = []
   private rollingOutput: MatchMomentumPoint[] = []
   private xgOutput: XgTimelinePoint[] = this.xg.slice()
   private eventsOutput: MatchEvent[] = []
   private tacticalDirty = true
+  private xgShotsDirty = true
   private momentumDirty = true
   private rollingDirty = true
   private xgDirty = true
@@ -77,6 +111,9 @@ export class HistoricalDerivations {
     this.xg = [{ minute: 0, home: 0, away: 0 }]
     this.events = []
     this.tactical.clear()
+    this.xgShots.clear()
+    this.pendingShotCandidates.clear()
+    this.pendingXgChanges = []
     this.momentum.clear()
     this.rollingMomentum.clear()
     this.nativeEvents.clear()
@@ -127,7 +164,13 @@ export class HistoricalDerivations {
     this.applyMomentumRevision(streams.momentum, false)
     this.applyMomentumRevision(streams.rollingMomentum, true)
     this.applyNativeRevision(frame, streams.momentumEvents)
-    if (this.previous) this.appendMatchEvents(this.previous, frame)
+    this.ingestShotCandidates(frame, streams.momentumEvents.tail)
+    if (this.previous) {
+      this.appendMatchEvents(this.previous, frame)
+      this.appendXgChanges(this.previous, frame)
+    }
+    this.resolvePendingXg(frame.tick)
+    this.expirePendingXg(frame.tick)
     this.heatmaps.appendFrame(frame)
     this.previous = frame
   }
@@ -148,6 +191,13 @@ export class HistoricalDerivations {
           (left.sequenceIndex ?? 0) - (right.sequenceIndex ?? 0)
       )
       this.tacticalDirty = false
+    }
+    if (this.xgShotsDirty) {
+      this.xgShotOutput = [...this.xgShots.values()].sort(
+        (left, right) =>
+          left.tick - right.tick || left.eventIndex - right.eventIndex
+      )
+      this.xgShotsDirty = false
     }
     if (this.momentumDirty || currentTick >= this.momentumNextChangeTick) {
       const points = [...this.momentum.values()].sort(
@@ -171,6 +221,7 @@ export class HistoricalDerivations {
       xgTimeline: this.xgOutput,
       events: this.eventsOutput,
       tacticalEvents: this.tacticalOutput,
+      xgShots: this.xgShotOutput,
       heatmaps: this.heatmaps.snapshot(),
       momentum: this.momentumOutput,
       rollingMomentum: this.rollingOutput,
@@ -183,6 +234,14 @@ export class HistoricalDerivations {
       xg: this.xg.slice(),
       events: this.events.slice(),
       tactical: [...this.tactical],
+      xgShots: [...this.xgShots],
+      pendingShotCandidates: [...this.pendingShotCandidates].map(
+        ([key, value]) => [key, { ...value }]
+      ),
+      pendingXgChanges: this.pendingXgChanges.map((change) => ({
+        ...change,
+        players: change.players.map((player) => ({ ...player })),
+      })),
       momentum: [...this.momentum],
       rollingMomentum: [...this.rollingMomentum],
       nativeEvents: [...this.nativeEvents].map(([key, value]) => [
@@ -200,6 +259,14 @@ export class HistoricalDerivations {
     this.xg = state.xg.slice()
     this.events = state.events.slice()
     this.tactical = new Map(state.tactical)
+    this.xgShots = new Map(state.xgShots)
+    this.pendingShotCandidates = new Map(
+      state.pendingShotCandidates.map(([key, value]) => [key, { ...value }])
+    )
+    this.pendingXgChanges = state.pendingXgChanges.map((change) => ({
+      ...change,
+      players: change.players.map((player) => ({ ...player })),
+    }))
     this.momentum = new Map(state.momentum)
     this.rollingMomentum = new Map(state.rollingMomentum)
     this.nativeEvents = new Map(state.nativeEvents)
@@ -211,6 +278,7 @@ export class HistoricalDerivations {
 
   private markAllDirty() {
     this.tacticalDirty = true
+    this.xgShotsDirty = true
     this.momentumDirty = true
     this.rollingDirty = true
     this.xgDirty = true
@@ -400,6 +468,356 @@ export class HistoricalDerivations {
     )
     if (this.events.length !== previousEventCount) this.eventsDirty = true
   }
+
+  private ingestShotCandidates(
+    frame: RealtimeFrame,
+    updates: readonly RealtimeMomentumEventUpdate[]
+  ) {
+    for (const { event, sequenceIndex } of updates) {
+      if (!isShotEvent(event.eventType)) continue
+      const existingShot = this.xgShots.get(sequenceIndex)
+      const point = this.tactical.get(sequenceIndex)
+      if (existingShot) {
+        if (!point || !validShotCoordinates(event)) continue
+        const refreshed = toXgShotPoint(
+          point,
+          event.eventIndex,
+          existingShot.xg,
+          existingShot.confidence
+        )
+        if (sameXgShotPoint(existingShot, refreshed)) continue
+        this.xgShots.set(sequenceIndex, refreshed)
+        this.xgShotsDirty = true
+        continue
+      }
+
+      const candidate = this.pendingShotCandidates.get(sequenceIndex)
+      this.pendingShotCandidates.set(sequenceIndex, {
+        sequenceIndex,
+        firstSeenFrameTick: candidate?.firstSeenFrameTick ?? frame.tick,
+        lastSeenFrameTick: frame.tick,
+      })
+    }
+    if (
+      updates.some(
+        ({ event }) => event.eventType === 22 || event.eventType === 35
+      )
+    ) {
+      this.refreshXgShotDetails()
+    }
+  }
+
+  private appendXgChanges(previous: RealtimeFrame, frame: RealtimeFrame) {
+    const previousPlayers = new Map(
+      previous.players.map((player) => [player.playerId, player])
+    )
+    const playersByTeam: Record<TeamSide, PlayerXgDelta[]> = {
+      home: [],
+      away: [],
+    }
+    for (const player of frame.players) {
+      const old = previousPlayers.get(player.playerId)
+      if (!old) continue
+      const delta = {
+        playerId: player.playerId,
+        shotDelta: (player.shots ?? 0) - (old.shots ?? 0),
+        xgDelta: (player.xg ?? 0) - (old.xg ?? 0),
+      }
+      if (Math.abs(delta.xgDelta) > XG_EPSILON || delta.shotDelta !== 0) {
+        playersByTeam[player.team].push(delta)
+      }
+    }
+
+    for (const team of ["home", "away"] as const) {
+      const teamXgDelta = frame[team].xg - previous[team].xg
+      const teamShotDelta = frame[team].shots - previous[team].shots
+      const players = playersByTeam[team]
+      if (
+        teamXgDelta < -XG_EPSILON ||
+        players.some((player) => player.xgDelta < -XG_EPSILON)
+      ) {
+        this.applyNegativeXgCorrection(team, frame.tick, teamXgDelta, players)
+      }
+      if (
+        teamXgDelta > XG_EPSILON ||
+        teamShotDelta > 0 ||
+        players.some(
+          (player) => player.xgDelta > XG_EPSILON || player.shotDelta > 0
+        )
+      ) {
+        this.pendingXgChanges.push({
+          team,
+          frameTick: frame.tick,
+          displayTick: frame.displayTick,
+          teamShotDelta: Math.max(0, teamShotDelta),
+          teamXgDelta: Math.max(0, teamXgDelta),
+          players: players.filter(
+            (player) => player.xgDelta > XG_EPSILON || player.shotDelta > 0
+          ),
+        })
+      }
+    }
+  }
+
+  private resolvePendingXg(currentTick: number) {
+    for (let changeIndex = 0; changeIndex < this.pendingXgChanges.length;) {
+      const change = this.pendingXgChanges[changeIndex]
+      const expectedShots = Math.max(
+        1,
+        change.teamShotDelta,
+        change.players.reduce(
+          (total, player) => total + Math.max(0, player.shotDelta),
+          0
+        )
+      )
+      const matchingPlayerIds = new Set(
+        change.players
+          .filter(
+            (player) =>
+              player.shotDelta > 0 || player.xgDelta > XG_EPSILON
+          )
+          .map((player) => player.playerId)
+      )
+      const candidates = [...this.pendingShotCandidates.values()]
+        .map((candidate) => ({
+          candidate,
+          point: this.tactical.get(candidate.sequenceIndex),
+          event: this.nativeEvents.get(candidate.sequenceIndex)?.event,
+        }))
+        .filter(
+          (
+            entry
+          ): entry is {
+            candidate: PendingShotCandidate
+            point: TacticalEventPoint
+            event: RealtimeMomentumEvent
+          } =>
+            entry.point != null &&
+            entry.event != null &&
+            entry.point.team === change.team &&
+            validShotCoordinates(entry.event) &&
+            (Math.abs(change.frameTick - entry.candidate.firstSeenFrameTick) <=
+              SHOT_MATCH_WINDOW_TICKS ||
+              Math.abs(change.frameTick - entry.point.tick) <=
+                SHOT_MATCH_WINDOW_TICKS)
+        )
+        .sort((left, right) =>
+          compareShotCandidates(left, right, change, matchingPlayerIds)
+        )
+
+      if (candidates.length < expectedShots) {
+        changeIndex += 1
+        continue
+      }
+
+      const selected = candidates.slice(0, expectedShots)
+      const playerXgTotal = selected.reduce((total, entry) => {
+        const player = change.players.find(
+          (candidate) => candidate.playerId === entry.point.playerId
+        )
+        return total + Math.max(0, player?.xgDelta ?? 0)
+      }, 0)
+      const totalXg =
+        change.teamXgDelta > XG_EPSILON ? change.teamXgDelta : playerXgTotal
+
+      for (const entry of selected) {
+        const player = change.players.find(
+          (candidate) => candidate.playerId === entry.point.playerId
+        )
+        const playerMatches =
+          player != null &&
+          (player.shotDelta > 0 || player.xgDelta > XG_EPSILON)
+        const xg =
+          selected.length === 1
+            ? totalXg
+            : playerXgTotal > XG_EPSILON
+              ? totalXg * (Math.max(0, player?.xgDelta ?? 0) / playerXgTotal)
+              : totalXg / selected.length
+        const exact =
+          selected.length === 1 &&
+          change.teamShotDelta === 1 &&
+          player?.shotDelta === 1 &&
+          (player.xgDelta ?? 0) > XG_EPSILON &&
+          candidates.filter(
+            (candidate) => candidate.point.playerId === entry.point.playerId
+          ).length === 1
+        const confidence: XgShotConfidence = exact
+          ? "exact"
+          : playerMatches
+            ? "matched"
+            : "estimated"
+        this.xgShots.set(
+          entry.candidate.sequenceIndex,
+          toXgShotPoint(
+            entry.point,
+            entry.event.eventIndex,
+            Math.max(0, xg),
+            confidence
+          )
+        )
+        this.pendingShotCandidates.delete(entry.candidate.sequenceIndex)
+      }
+      this.xgShotsDirty = true
+      this.pendingXgChanges.splice(changeIndex, 1)
+    }
+
+    // A change from a future frame can only happen after restoring malformed
+    // data; keep it pending rather than matching it across an unbounded range.
+    void currentTick
+  }
+
+  private expirePendingXg(currentTick: number) {
+    for (const [sequenceIndex, candidate] of this.pendingShotCandidates) {
+      if (currentTick - candidate.lastSeenFrameTick > SHOT_MATCH_WINDOW_TICKS)
+        this.pendingShotCandidates.delete(sequenceIndex)
+    }
+    this.pendingXgChanges = this.pendingXgChanges.filter(
+      (change) => currentTick - change.frameTick <= SHOT_MATCH_WINDOW_TICKS
+    )
+  }
+
+  private applyNegativeXgCorrection(
+    team: TeamSide,
+    frameTick: number,
+    teamXgDelta: number,
+    players: readonly PlayerXgDelta[]
+  ) {
+    const playerId = players.find(
+      (player) => player.xgDelta < -XG_EPSILON
+    )?.playerId
+    const entry = [...this.xgShots.entries()]
+      .filter(
+        ([, candidate]) =>
+          candidate.team === team &&
+          Math.abs(candidate.tick - frameTick) <= SHOT_MATCH_WINDOW_TICKS &&
+          (playerId == null || candidate.playerId === playerId)
+      )
+      .sort(
+        ([, left], [, right]) =>
+          Math.abs(left.tick - frameTick) - Math.abs(right.tick - frameTick) ||
+          right.eventIndex - left.eventIndex
+      )[0]
+    if (!entry) return
+    const [sequenceIndex, shot] = entry
+    const playerDelta = players.find(
+      (player) => player.playerId === shot.playerId
+    )?.xgDelta
+    const correction =
+      teamXgDelta < -XG_EPSILON ? teamXgDelta : (playerDelta ?? 0)
+    if (correction >= -XG_EPSILON) return
+    this.xgShots.set(sequenceIndex, {
+      ...shot,
+      xg: Math.max(0, shot.xg + correction),
+    })
+    this.xgShotsDirty = true
+  }
+
+  private refreshXgShotDetails() {
+    for (const [sequenceIndex, shot] of this.xgShots) {
+      const point = this.tactical.get(sequenceIndex)
+      const event = this.nativeEvents.get(sequenceIndex)?.event
+      if (!point || !event || !validShotCoordinates(event)) continue
+      const refreshed = toXgShotPoint(
+        point,
+        event.eventIndex,
+        shot.xg,
+        shot.confidence
+      )
+      if (sameXgShotPoint(shot, refreshed)) continue
+      this.xgShots.set(sequenceIndex, refreshed)
+      this.xgShotsDirty = true
+    }
+  }
+}
+
+function isShotEvent(eventType: number) {
+  return eventType >= 1 && eventType <= 5
+}
+
+function validShotCoordinates(event: RealtimeMomentumEvent) {
+  return (
+    Number.isFinite(event.lateralPosition) &&
+    Number.isFinite(event.longitudinalPosition)
+  )
+}
+
+function compareShotCandidates(
+  left: {
+    candidate: PendingShotCandidate
+    point: TacticalEventPoint
+  },
+  right: {
+    candidate: PendingShotCandidate
+    point: TacticalEventPoint
+  },
+  change: PendingXgChange,
+  matchingPlayerIds: ReadonlySet<number>
+) {
+  const leftPlayerRank = matchingPlayerIds.has(left.point.playerId) ? 0 : 1
+  const rightPlayerRank = matchingPlayerIds.has(right.point.playerId) ? 0 : 1
+  return (
+    leftPlayerRank - rightPlayerRank ||
+    Number(left.candidate.firstSeenFrameTick !== change.frameTick) -
+      Number(right.candidate.firstSeenFrameTick !== change.frameTick) ||
+    Math.abs(left.candidate.firstSeenFrameTick - change.frameTick) -
+      Math.abs(right.candidate.firstSeenFrameTick - change.frameTick) ||
+    Math.abs(left.point.tick - change.frameTick) -
+      Math.abs(right.point.tick - change.frameTick) ||
+    left.candidate.sequenceIndex - right.candidate.sequenceIndex
+  )
+}
+
+function toXgShotPoint(
+  point: TacticalEventPoint,
+  eventIndex: number,
+  xg: number,
+  confidence: XgShotConfidence
+): XgShotPoint {
+  return {
+    id: point.id,
+    eventIndex,
+    team: point.team,
+    playerId: point.playerId || undefined,
+    tick: point.tick,
+    displayTick: point.displayTick,
+    minute: point.minute,
+    x: point.x,
+    y: point.y,
+    xg,
+    metricId: point.metricId as XgShotPoint["metricId"],
+    nativeEventType: point.nativeEventType,
+    annotations: point.annotations,
+    confidence,
+  }
+}
+
+function sameXgShotPoint(left: XgShotPoint, right: XgShotPoint) {
+  return (
+    left.id === right.id &&
+    left.eventIndex === right.eventIndex &&
+    left.team === right.team &&
+    left.playerId === right.playerId &&
+    left.tick === right.tick &&
+    left.displayTick === right.displayTick &&
+    left.minute === right.minute &&
+    left.x === right.x &&
+    left.y === right.y &&
+    left.metricId === right.metricId &&
+    left.nativeEventType === right.nativeEventType &&
+    left.confidence === right.confidence &&
+    sameAnnotations(left.annotations, right.annotations)
+  )
+}
+
+function sameAnnotations(
+  left: XgShotPoint["annotations"],
+  right: XgShotPoint["annotations"]
+) {
+  return (
+    left === right ||
+    (left?.length === right?.length &&
+      left?.every((annotation, index) => annotation === right?.[index]))
+  )
 }
 
 export function nativeMomentumEventToTacticalPoint(

@@ -990,4 +990,74 @@
     font-family: "FMUniverse", var(--font-sans);
     font-weight: 400;
   }
+
+  .xg-map-viewport {
+    container-type: size;
+  }
+
+  .xg-map-pitch {
+    width: 100%;
+    max-width: 100%;
+    aspect-ratio: var(--xg-pitch-aspect, 1.5441);
+    --pitch-frame-aspect: var(--xg-pitch-aspect, 1.5441);
+  }
+
+  @supports (width: 1cqw) {
+    .xg-map-pitch {
+      width: min(100cqw, calc(100cqh * var(--xg-pitch-aspect, 1.5441)));
+      height: min(100cqh, calc(100cqw / var(--xg-pitch-aspect, 1.5441)));
+    }
+  }
+
+  .xg-map-hit-target {
+    position: absolute;
+    z-index: 1;
+    display: flex;
+    width: 32px;
+    height: 32px;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+  }
+
+  .xg-map-hit-target:hover,
+  .xg-map-hit-target:focus-visible {
+    z-index: 10;
+    outline: none;
+  }
+
+  .xg-map-hit-target:focus-visible {
+    box-shadow: 0 0 0 2px var(--ring);
+  }
+
+  .xg-map-dot {
+    display: block;
+    flex: none;
+    border: 2px solid;
+    border-radius: 999px;
+    animation: xg-map-dot-reveal 280ms cubic-bezier(0.33, 1, 0.68, 1) both;
+    transform-origin: center;
+  }
+
+  @keyframes xg-map-dot-reveal {
+    from {
+      scale: 0;
+      opacity: 0;
+    }
+    to {
+      scale: 1;
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .xg-map-dot {
+      animation: none;
+    }
+  }
 }
