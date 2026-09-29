@@ -65,6 +65,7 @@ export default defineConfig(({ mode }) => {
       __GITHUB_PROJECT_URL__: JSON.stringify(githubProjectUrl),
       __DEMO_ARCHIVE_URL__: JSON.stringify(demoArchiveUrl),
       __ONLINE_DEMO_ENABLED__: isPagesBuild,
+      __EXPLORE_TOUR_HINT_ENABLED__: isPagesBuild,
       __KOFI_URL__: JSON.stringify(koFiUrl),
       __KOFI_LABEL__: JSON.stringify(koFiLabel),
     },

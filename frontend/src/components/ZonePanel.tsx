@@ -9,6 +9,7 @@ import {
 import { PixiHeatmap } from "@/components/heatmap/PixiHeatmap"
 import { PitchMarkings } from "@/components/pitch/PitchMarkings"
 import { PitchPlayerBadge } from "@/components/pitch/PitchPlayerBadge"
+import { emitExploreTourInteraction } from "@/features/explore-tour/exploreTourEvents"
 import { resolvePitchDimensions } from "@/components/pitch/pitchGeometry"
 import {
   CardAction,
@@ -230,8 +231,13 @@ export function ZonePanel({ match, isFocusMode }: ZonePanelProps) {
         </CardTitle>
         <CardAction className="flex min-w-0 flex-nowrap items-center justify-end gap-1.5">
           <MultiStateButton
+            data-tour="heatmap-range"
+            data-tour-state={selectedRange}
             value={selectedRange}
-            onValueChange={setSelectedRange}
+            onValueChange={(value) => {
+              setSelectedRange(value)
+              emitExploreTourInteraction({ id: "heatmap-range-change", value })
+            }}
             variant="outline"
             size="sm"
             className="min-w-14 px-2 text-[11px]"
@@ -261,8 +267,13 @@ export function ZonePanel({ match, isFocusMode }: ZonePanelProps) {
             }
           />
           <MultiStateButton
+            data-tour="heatmap-phase"
+            data-tour-state={selectedPhase}
             value={selectedPhase}
-            onValueChange={setSelectedPhase}
+            onValueChange={(value) => {
+              setSelectedPhase(value)
+              emitExploreTourInteraction({ id: "heatmap-phase-change", value })
+            }}
             disabled={isFocusMode}
             variant="outline"
             size="sm"
@@ -344,6 +355,7 @@ export function ZonePanel({ match, isFocusMode }: ZonePanelProps) {
                   <div className="pointer-events-none absolute inset-0">
                     {view.labels.map((label) => (
                       <button
+                        data-tour="heatmap-player"
                         type="button"
                         key={`heat-player-${label.player.id}`}
                         className="pointer-events-auto absolute z-10 flex -translate-x-1/2 -translate-y-1/2 cursor-pointer flex-col items-center rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
@@ -359,6 +371,10 @@ export function ZonePanel({ match, isFocusMode }: ZonePanelProps) {
                             ...current,
                             [selectedTeam]: label.player.id,
                           }))
+                          emitExploreTourInteraction({
+                            id: "heatmap-player-select",
+                            playerId: label.player.id,
+                          })
                         }}
                       >
                         <PitchPlayerBadge

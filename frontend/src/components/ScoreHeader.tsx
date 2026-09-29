@@ -17,7 +17,17 @@ function initials(name: string) {
     .toUpperCase()
 }
 
-export function ScoreHeader({ match }: { match: MatchSnapshot }) {
+export function ScoreHeader({
+  match,
+  onStartExploreTour,
+  showExploreTourHint,
+  exploreTourActive,
+}: {
+  match: MatchSnapshot
+  onStartExploreTour: () => void
+  showExploreTourHint: boolean
+  exploreTourActive: boolean
+}) {
   const homeColor = match.home.color ?? "var(--team-home-fallback)"
   const awayColor = match.away.color ?? "var(--team-away-fallback)"
 
@@ -94,7 +104,11 @@ export function ScoreHeader({ match }: { match: MatchSnapshot }) {
           />
         </div>
 
-        <ScoreboardToolbar />
+        <ScoreboardToolbar
+          onStartExploreTour={onStartExploreTour}
+          showExploreTourHint={showExploreTourHint}
+          exploreTourActive={exploreTourActive}
+        />
       </header>
     </TooltipProvider>
   )

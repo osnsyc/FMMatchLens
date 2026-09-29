@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, type CSSProperties } from "react"
+import { memo, useEffect, useMemo, useState, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import {
@@ -34,6 +34,10 @@ import {
   type TacticalHit,
 } from "@/components/tactical/PixiTacticalRenderer"
 import { PitchMarkings } from "@/components/pitch/PitchMarkings"
+import {
+  emitExploreTourInteraction,
+  exploreTourTacticalMetricsEventName,
+} from "@/features/explore-tour/exploreTourEvents"
 import { resolvePitchDimensions } from "@/components/pitch/pitchGeometry"
 import { samePlayerLabels } from "@/lib/matchRenderEquality"
 import { shortPlayerName } from "@/lib/player-name"
@@ -105,6 +109,19 @@ export const TacticalBoard = memo(function TacticalBoard({
     Record<string, boolean>
   >(initialSelectedMetrics)
   const [hovered, setHovered] = useState<HoveredTacticalPoint | null>(null)
+
+  useEffect(() => {
+    const selectTourMetricGroup = (event: Event) => {
+      const group = (event as CustomEvent<{ group: "shots" | "distribution" }>).detail.group
+      setSelectedMetrics(
+        Object.fromEntries(metrics.map((metric) => [metric.id, metric.group === group]))
+      )
+      setSelectedShotId(null)
+    }
+    window.addEventListener(exploreTourTacticalMetricsEventName, selectTourMetricGroup)
+    return () =>
+      window.removeEventListener(exploreTourTacticalMetricsEventName, selectTourMetricGroup)
+  }, [])
 
   const groupLabel = (group: (typeof groups)[number]) =>
     t(`dataMap.groups.${group.id}`, { defaultValue: group.label })
@@ -209,8 +226,13 @@ export const TacticalBoard = memo(function TacticalBoard({
 
         {isFocusMode && (
           <MultiStateButton
+            data-tour="tactical-event-filter"
+            data-tour-state={eventFilterMode}
             value={eventFilterMode}
-            onValueChange={onEventFilterModeChange}
+            onValueChange={(value) => {
+              onEventFilterModeChange(value)
+              emitExploreTourInteraction({ id: "tactical-filter-change", value })
+            }}
             variant="outline"
             size="sm"
             className="min-w-14 px-2 text-[10px]"
@@ -373,7 +395,7 @@ export const TacticalBoard = memo(function TacticalBoard({
             )}
           </aside>
 
-          <div className="tactical-pitch-viewport flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden">
+          <div data-tour="tactical-pitch" className="tactical-pitch-viewport flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden">
             <div
               className="tactical-pitch pitch-frame relative shrink-0 text-[var(--pitch-line)]"
               style={pitchStyle}
@@ -407,9 +429,16 @@ export const TacticalBoard = memo(function TacticalBoard({
                   onPointClick={(hit: TacticalHit) => {
                     if (!hit.historical && hit.point.group === "shots") {
                       setSelectedShotId(hit.point.id)
+                      emitExploreTourInteraction({
+                        id: "tactical-shot-select",
+                        eventId: hit.point.id,
+                      })
                     }
                   }}
-                  onEmptyClick={() => setSelectedShotId(null)}
+                  onEmptyClick={() => {
+                    setSelectedShotId(null)
+                    emitExploreTourInteraction({ id: "tactical-empty-click" })
+                  }}
                 />
 
                 {(selectedMetricList.length === 0 ||

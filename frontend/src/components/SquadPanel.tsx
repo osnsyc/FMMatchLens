@@ -43,6 +43,7 @@ import { shortPlayerName } from "@/lib/player-name"
 import { findNearestPositionPlayerIds } from "@/lib/playerPositionMatch"
 import { decodePlayerTraits } from "@/lib/playerTraits"
 import { sameSquadPlayers } from "@/lib/matchRenderEquality"
+import { exploreTourCloseOverlaysEventName } from "@/features/explore-tour/exploreTourEvents"
 
 type SquadPanelProps = {
   title: string
@@ -242,6 +243,16 @@ export const SquadPanel = memo(function SquadPanel({
   const panelRef = useRef<HTMLElement | null>(null)
   const [isStatsDrawerOpen, setIsStatsDrawerOpen] = useState(false)
   const [drawerRect, setDrawerRect] = useState<DOMRect | null>(null)
+  const [profileResetVersion, setProfileResetVersion] = useState(0)
+
+  useEffect(() => {
+    const close = () => {
+      setIsStatsDrawerOpen(false)
+      setProfileResetVersion((current) => current + 1)
+    }
+    window.addEventListener(exploreTourCloseOverlaysEventName, close)
+    return () => window.removeEventListener(exploreTourCloseOverlaysEventName, close)
+  }, [])
 
   const openStatsDrawer = () => {
     const panel = panelRef.current
@@ -483,6 +494,7 @@ export const SquadPanel = memo(function SquadPanel({
     return (
       <li
         key={player.id}
+        data-tour="squad-player"
         data-formation-nearest={isFormationNearest || undefined}
         data-matchup-nearest={isMatchupNearest || undefined}
         data-tactical-selected={isTacticalSelected || undefined}
@@ -554,6 +566,7 @@ export const SquadPanel = memo(function SquadPanel({
 
         {/* Avatar */}
         <PlayerProfileHover
+          key={`${player.id}-${profileResetVersion}`}
           player={player}
           side={side}
           teamColor={resolvedTeamColor}
@@ -749,6 +762,7 @@ export const SquadPanel = memo(function SquadPanel({
           </div>
 
           <Button
+            data-tour="player-data-button"
             type="button"
             variant="ghost"
             size="icon"
@@ -1957,6 +1971,7 @@ function TeamStatsDrawer({
       swipeDirection={side === "home" ? "left" : "right"}
     >
       <DrawerContent
+        data-tour="player-data-drawer"
         className="scrollbar-hidden !bottom-auto !m-0 gap-0 overflow-hidden !rounded-lg border-0 bg-card py-0 text-card-foreground shadow-none ring-1 ring-foreground/10 [--drawer-inset:0px]"
         style={{
           top: rect.top,

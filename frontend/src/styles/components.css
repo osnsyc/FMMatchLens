@@ -212,6 +212,16 @@
     transition: filter 160ms ease, opacity 160ms ease;
   }
 
+  /* During the comparison tour step, blank squad rows must not dismiss the
+     pinned home player. Keep the avatar pins as the only squad interactions. */
+  html[data-explore-tour-step="squad-pin-comparison"] [data-tour="squad-panel"] {
+    pointer-events: none;
+  }
+
+  html[data-explore-tour-step="squad-pin-comparison"] [data-player-profile-pin] {
+    pointer-events: auto;
+  }
+
   [data-slot="card"] {
     position: relative;
 

@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -48,6 +49,7 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card"
 import { cn } from "@/lib/utils"
+import { exploreTourCloseOverlaysEventName } from "@/features/explore-tour/exploreTourEvents"
 
 type ArchivePickerProps = {
   archives: ArchiveSummary[]
@@ -100,6 +102,12 @@ export function ArchivePicker({
   const [open, setOpen] = useState(false)
   const [dragging, setDragging] = useState(false)
   const wheelPageChangedAtRef = useRef(0)
+
+  useEffect(() => {
+    const close = () => setOpen(false)
+    window.addEventListener(exploreTourCloseOverlaysEventName, close)
+    return () => window.removeEventListener(exploreTourCloseOverlaysEventName, close)
+  }, [])
 
   const selectedPresentation = useMemo(() => {
     if (!selectedId) return undefined
@@ -169,6 +177,8 @@ export function ArchivePicker({
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger
+        data-tour="archive-picker"
+        data-tour-state={open ? "open" : "closed"}
         type="button"
         className={cn(
           "group flex h-8 w-full min-w-0 items-center gap-2 rounded-md border border-border bg-background px-2 text-xs shadow-xs transition-colors outline-none hover:bg-input/50 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30",
@@ -217,6 +227,7 @@ export function ArchivePicker({
       </PopoverTrigger>
 
       <PopoverContent
+        data-tour="archive-popover"
         side="top"
         align="start"
         sideOffset={8}

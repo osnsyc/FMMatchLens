@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import {
   ArrowShrinkIcon,
   CommandIcon,
+  BinocularsIcon,
   FullScreenIcon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
@@ -27,7 +28,15 @@ import {
 import { changeLanguage, type SupportedLanguage } from "@/i18n"
 import { appShortcuts } from "@/lib/appShortcuts"
 
-export function ScoreboardToolbar() {
+export function ScoreboardToolbar({
+  onStartExploreTour,
+  showExploreTourHint,
+  exploreTourActive,
+}: {
+  onStartExploreTour: () => void
+  showExploreTourHint: boolean
+  exploreTourActive: boolean
+}) {
   const { t, i18n } = useTranslation()
   const currentLanguage: SupportedLanguage =
     i18n.language === "en" ? "en" : "zh-CN"
@@ -65,6 +74,28 @@ export function ScoreboardToolbar() {
 
   return (
     <div className="flex min-w-0 items-center justify-end gap-2 justify-self-end">
+      <Button
+        type="button"
+        variant={exploreTourActive ? "default" : "outline"}
+        size="icon"
+        className="relative size-8 active:translate-y-px"
+        aria-label={t("exploreTour.start")}
+        title={t("exploreTour.start")}
+        aria-pressed={exploreTourActive}
+        onClick={onStartExploreTour}
+      >
+        <HugeiconsIcon icon={BinocularsIcon} strokeWidth={1.7} />
+        {showExploreTourHint && !exploreTourActive && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-1 -top-1 flex size-3"
+          >
+            <span className="absolute inset-0 animate-ping rounded-full bg-primary/70 motion-reduce:animate-none" />
+            <span className="relative m-auto size-2 rounded-full bg-primary ring-2 ring-background" />
+          </span>
+        )}
+      </Button>
+
       <Button
         type="button"
         variant="outline"

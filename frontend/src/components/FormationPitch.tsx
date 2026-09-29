@@ -28,6 +28,7 @@ import {
 import { NativeTabs } from "@/components/uitripled/native-tabs-shadcnui"
 import { PitchMarkings } from "@/components/pitch/PitchMarkings"
 import { PitchPlayerBadge } from "@/components/pitch/PitchPlayerBadge"
+import { emitExploreTourInteraction } from "@/features/explore-tour/exploreTourEvents"
 import { resolvePitchDimensions } from "@/components/pitch/pitchGeometry"
 import { sameFormationPlayers } from "@/lib/matchRenderEquality"
 import {
@@ -304,15 +305,20 @@ export const FormationPitch = memo(function FormationPitch({
         </CardTitle>
         {!isFocusMode && (
           <CardAction>
-            <NativeTabs
-              value={view}
-              onValueChange={(value) => setView(value as FormationView)}
-              renderContent={false}
-              className="w-64 max-w-none"
-              listClassName="h-6"
-              triggerClassName="h-5 px-1.5 text-[9px]"
-              items={viewItems.map((item) => ({ ...item, content: null }))}
-            />
+            <div data-tour="formation-tabs" data-tour-state={view}>
+              <NativeTabs
+                value={view}
+                onValueChange={(value) => {
+                  setView(value as FormationView)
+                  emitExploreTourInteraction({ id: "formation-view-change", value })
+                }}
+                renderContent={false}
+                className="w-64 max-w-none"
+                listClassName="h-6"
+                triggerClassName="h-5 px-1.5 text-[9px]"
+                items={viewItems.map((item) => ({ ...item, content: null }))}
+              />
+            </div>
           </CardAction>
         )}
       </CardHeader>
@@ -469,6 +475,8 @@ function FormationViewPane({
                   >
                     <TimelineHeader>
                       <TimelineTime
+                        data-tour="formation-history-time"
+                        data-tour-latest={index === viewHistory.length - 1 ? "true" : undefined}
                         onClick={() => onPlayback(animationSourceIndex, index)}
                         aria-label={`${entry.time} ${description}`}
                         className={
@@ -484,6 +492,7 @@ function FormationViewPane({
                       <HoverCardTrigger
                         render={
                           <TimelineIndicator
+                            data-tour="formation-history-pin"
                             aria-label={t(
                               index === pinnedIndex
                                 ? "formationHistory.unpinStart"

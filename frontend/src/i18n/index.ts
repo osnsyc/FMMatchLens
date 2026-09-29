@@ -44,6 +44,123 @@ const resources = {
         position: "位置",
         status: "状态",
       },
+      exploreTour: {
+        start: "开启功能导览",
+        controls: {
+          back: "返回",
+          exit: "退出",
+          next: "下一步",
+          finish: "完成",
+          close: "关闭",
+          start: "开始探索",
+        },
+        steps: {
+          "dashboard-overview": {
+            title: "功能全览",
+            body: "用点击、悬浮和快捷键探索FMMatchLens",
+            action: "",
+          },
+          "timeline-drag": {
+            title: "拖动时间轴",
+            body: "拖动查看任意时刻；完成后自动定位到 80 分钟。",
+            action: "请拖动一次时间轴滑块。",
+          },
+          "squad-hover": {
+            title: "悬浮阵容球员",
+            body: "鼠标指向头像即可查看球员档案。",
+            action: "请指向一名球员的头像，然后查看属性。",
+          },
+          "squad-pin-comparison": {
+            title: "球员对比",
+            body: "主客队各选一名球员进行比较。",
+            action: "请左键单击一名球员头像。",
+          },
+          "player-match-data": {
+            title: "球员数据",
+            body: "查看可排序的本场球员指标。",
+            action: "请打开一个球队数据抽屉。",
+          },
+          "formation-possession": {
+            title: "阵型阶段与变化",
+            body: "切换攻防阵型，对比历史跑位变化。",
+            action: "请选择另一个攻防阶段。",
+          },
+          "heatmap-explore": {
+            title: "探索热图",
+            body: "设置时段、攻防阶段和球员，再用 H 查看专注模式。",
+            action: "请选择最近 15 分钟。",
+          },
+          "tactical-explore": {
+            title: "探索战术事件",
+            body: "查看射门、组织链、专注模式与球员筛选。",
+            action: "请点击一个射门标记。",
+          },
+          "archive-browser": {
+            title: "比赛存档浏览器",
+            body: "查看实时、本地和已保存比赛。",
+            action: "请打开存档浏览器。",
+          },
+          "theme-preset": {
+            title: "主题预设",
+            body: "选择适合你的主题。",
+            action: "打开外观菜单并选择另一个预设。",
+          },
+          "zen-mode": {
+            title: "Zen 模式",
+            body: "隐藏界面控件，专注比赛分析。",
+            action: "请按键盘 Z 键",
+          },
+          "tour-complete": {
+            title: "探索完成",
+            body: "恭喜你已完成 FMMatchLens 功能导览。",
+            action: "点击关闭。",
+          },
+        },
+        prompts: {
+          squadHoverReady: { action: "查看球员档案后，点击下一步。" },
+          squadComparisonReady: {
+            body: "多球员属性比较窗口已打开。",
+            action: "查看比较结果，然后点击下一步。",
+          },
+          selectAwayPlayer: { action: "请左键单击一名客队球员头像。" },
+          selectHomePlayer: { action: "请左键单击一名主队球员头像。" },
+          playerDataClose: { action: "查看统计数据后，请关闭统计窗口。" },
+          formationPin: { action: "现在请点击一个阵型历史钉选点。" },
+          tacticalPlayersReady: {
+            body: "可以继续选择更多球员，战术板会组合显示他们的事件。",
+            action: "继续选择，或按 T／点击下一步复原。",
+          },
+          archiveOpen: { action: "浏览存档后，点击任意空白区域退出。" },
+          themeOpen: { action: "在主题配置中选择一个预设。" },
+          heatmapFocused: {
+            body: "现在可以并排查看各阶段热图。",
+            action: "再次按 H 复原。",
+          },
+          tacticalFocused: {
+            body: "战术板已进入专注模式，并只保留传球大类。",
+            action: "将事件筛选切换为个人模式。",
+          },
+          tacticalFocus: {
+            body: "射门组织链体验完成。",
+            action: "请按 T 进入战术专注模式。",
+          },
+          heatmapPossession: { action: "切换有球或无球阶段。" },
+          heatmapPlayer: { action: "点击一个球员标记。" },
+          heatmapEnterFocus: { action: "按 H 进入热图专注模式。" },
+          shotChainOpen: {
+            body: "射门组织链已经展开。",
+            action: "点击球场空白区域退出。",
+          },
+          individualMode: {
+            body: "个人模式已开启，现在从任一阵容选择球员。",
+            action: "点击一名或多名阵容球员。",
+          },
+          formationPinned: {
+            body: "历史阵型已钉选。",
+            action: "点击最新时间文本，播放阵型变化动画。",
+          },
+        },
+      },
       shortcuts: {
         open: "快捷键",
         title: "快捷键",
@@ -656,6 +773,123 @@ const resources = {
         player: "Player",
         position: "Position",
         status: "Status",
+      },
+      exploreTour: {
+        start: "Start explore tour",
+        controls: {
+          back: "Back",
+          exit: "Exit",
+          next: "Next",
+          finish: "Finish",
+          close: "Close",
+          start: "Start exploring",
+        },
+        steps: {
+          "dashboard-overview": {
+            title: "Dashboard overview",
+            body: "Click, hover and use shortcuts to explore FMMatchLens.",
+            action: "",
+          },
+          "timeline-drag": {
+            title: "Timeline drag",
+            body: "Scrub to any moment; the tour then moves to 80'.",
+            action: "Drag the timeline thumb once.",
+          },
+          "squad-hover": {
+            title: "Squad hover",
+            body: "Hover an avatar to inspect a player profile.",
+            action: "Hover a player avatar, then inspect the profile.",
+          },
+          "squad-pin-comparison": {
+            title: "Squad pin comparison",
+            body: "Select one player from each team to compare them.",
+            action: "Left-click a home player avatar.",
+          },
+          "player-match-data": {
+            title: "Player data in this match",
+            body: "Inspect sortable player metrics from this match.",
+            action: "Open a team data drawer.",
+          },
+          "formation-possession": {
+            title: "Formation phases & movement",
+            body: "Switch phases, then compare historical movement.",
+            action: "Choose another possession view.",
+          },
+          "heatmap-explore": {
+            title: "Explore the heatmap",
+            body: "Set the range, phase and player, then press H for focus mode.",
+            action: "Select Recent 15.",
+          },
+          "tactical-explore": {
+            title: "Explore tactical events",
+            body: "Explore a shot, its buildup, focus mode and player filters.",
+            action: "Click a shot marker.",
+          },
+          "archive-browser": {
+            title: "Archive browser",
+            body: "View live, local and saved matches.",
+            action: "Open the archive browser.",
+          },
+          "theme-preset": {
+            title: "Theme preset",
+            body: "Choose your preferred visual style.",
+            action: "Open appearance and select another preset.",
+          },
+          "zen-mode": {
+            title: "Zen mode",
+            body: "Hide the controls and focus on match analysis.",
+            action: "Press Z.",
+          },
+          "tour-complete": {
+            title: "Exploration complete",
+            body: "Congratulations—you have completed the FMMatchLens feature tour.",
+            action: "Click Close to finish the tour.",
+          },
+        },
+        prompts: {
+          squadHoverReady: { action: "Inspect the player profile, then click Next." },
+          squadComparisonReady: {
+            body: "The multi-player attribute comparison is open.",
+            action: "Inspect the comparison, then click Next.",
+          },
+          selectAwayPlayer: { action: "Left-click an away player avatar." },
+          selectHomePlayer: { action: "Left-click a home player avatar." },
+          playerDataClose: { action: "Review the match data, then close the stats window." },
+          formationPin: { action: "Now click a formation-history pin." },
+          tacticalPlayersReady: {
+            body: "You can select more players and combine their events on the board.",
+            action: "Select more, or press T / click Next to restore the layout.",
+          },
+          archiveOpen: { action: "Browse the archives, then click any blank area to close." },
+          themeOpen: { action: "Choose a preset in the appearance panel." },
+          heatmapFocused: {
+            body: "All heatmap phases are now visible side by side.",
+            action: "Press H again to restore.",
+          },
+          tacticalFocused: {
+            body: "The tactical board is focused with only distribution events selected.",
+            action: "Switch the event filter to Individual.",
+          },
+          tacticalFocus: {
+            body: "You have explored the shot buildup chain.",
+            action: "Press T to enter tactical focus mode.",
+          },
+          heatmapPossession: { action: "Switch the possession phase." },
+          heatmapPlayer: { action: "Click a player marker." },
+          heatmapEnterFocus: { action: "Press H to enter heatmap focus mode." },
+          shotChainOpen: {
+            body: "The shot buildup chain is now expanded.",
+            action: "Click an empty area of the pitch to close it.",
+          },
+          individualMode: {
+            body: "Individual mode is active. Now choose players from either squad.",
+            action: "Click one or more squad players.",
+          },
+          formationPinned: {
+            body: "The historical formation is pinned.",
+            action: "Click the latest time text to play the formation animation.",
+          },
+        },
       },
       shortcuts: {
         open: "Shortcuts",

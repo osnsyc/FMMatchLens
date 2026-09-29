@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import {
   ContrastIcon,
@@ -27,9 +27,14 @@ import type {
   ContrastMode,
   SchemePreference,
 } from "@/theme/types"
+import {
+  emitExploreTourInteraction,
+  exploreTourCloseOverlaysEventName,
+} from "@/features/explore-tour/exploreTourEvents"
 
 export function ThemeToggle() {
   const { t } = useTranslation()
+  const [menuOpen, setMenuOpen] = useState(false)
   const {
     settings,
     resolvedScheme,
@@ -46,6 +51,12 @@ export function ThemeToggle() {
   }
   const currentSchemeLabel = t(`appearance.scheme.${resolvedScheme}`)
 
+  useEffect(() => {
+    const close = () => setMenuOpen(false)
+    window.addEventListener(exploreTourCloseOverlaysEventName, close)
+    return () => window.removeEventListener(exploreTourCloseOverlaysEventName, close)
+  }, [])
+
   return (
     <div className="inline-flex items-center gap-2">
       <Button
@@ -59,10 +70,11 @@ export function ThemeToggle() {
       >
         {resolvedScheme === "dark" ? <MoonIcon /> : <SunIcon />}
       </Button>
-      <DropdownMenu>
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger
           render={
             <Button
+              data-tour="theme-settings"
               type="button"
               variant="outline"
               size="icon"
@@ -74,7 +86,11 @@ export function ThemeToggle() {
         >
           <HugeiconsIcon icon={PaletteIcon} strokeWidth={1.8} />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="z-[110] w-80 p-2">
+        <DropdownMenuContent
+          data-tour="theme-popover"
+          align="end"
+          className="z-[110] w-80 p-2"
+        >
           <div className="px-1.5 py-1 text-xs font-semibold text-foreground">
             {t("appearance.title")}
           </div>
@@ -82,10 +98,14 @@ export function ThemeToggle() {
             <DropdownMenuLabel>{t("appearance.preset")}</DropdownMenuLabel>
             <DropdownMenuRadioGroup
               value={settings.presetId}
-              onValueChange={setPreset}
+              onValueChange={(value) => {
+                setPreset(value)
+                emitExploreTourInteraction({ id: "theme-preset-change", value })
+              }}
             >
               {themePresets.map((candidate) => (
                 <DropdownMenuRadioItem
+                  data-tour="theme-preset-option"
                   key={candidate.id}
                   value={candidate.id}
                   closeOnClick={false}

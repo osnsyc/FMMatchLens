@@ -38,6 +38,10 @@ import {
 } from "@/components/ui/tooltip"
 import type { MatchEventType, MatchSnapshot, TeamSide } from "@/types/match"
 import { playbackToggleEventName } from "@/lib/appShortcuts"
+import {
+  emitExploreTourInteraction,
+  exploreTourTimelineSeekEventName,
+} from "@/features/explore-tour/exploreTourEvents"
 
 const apiBase = `http://127.0.0.1:${__API_PORT__}`
 const pageSize = 2_400
@@ -370,6 +374,25 @@ export function MatchTimeline({
     setFrameIndex(replayFrameIndex(percent, frames))
   }
 
+  useEffect(() => {
+    const seekToMinute = (event: Event) => {
+      if (!replaying || busy || frames.length === 0) return
+      const minute = (event as CustomEvent<{ minute: number }>).detail.minute
+      const targetTick = minute * 60 * 4
+      const targetIndex = frames.findIndex(
+        (frame) =>
+          (Number.isFinite(frame.displayTick) ? frame.displayTick : frame.tick) >=
+          targetTick
+      )
+      setPlaying(false)
+      setDraftSliderPercent(undefined)
+      setFrameIndex(targetIndex >= 0 ? targetIndex : frames.length - 1)
+    }
+    window.addEventListener(exploreTourTimelineSeekEventName, seekToMinute)
+    return () =>
+      window.removeEventListener(exploreTourTimelineSeekEventName, seekToMinute)
+  }, [busy, frames, replaying])
+
   const selectSource = (matchId: string) => {
     localArchiveRequestRef.current += 1
     if (localArchive && matchId === localArchiveId(localArchive)) {
@@ -541,7 +564,10 @@ export function MatchTimeline({
           </div>
         </div>
 
-        <div className="flex min-w-0 flex-1 items-center gap-2 md:col-span-2">
+        <div
+          data-tour="timeline-interaction-region"
+          className="flex h-full min-w-0 flex-1 items-center gap-2 md:col-span-2"
+        >
           <div className="flex w-14 shrink-0 items-center justify-center">
             <Button
               type="button"
@@ -599,8 +625,10 @@ export function MatchTimeline({
                 }}
                 onValueCommitted={(value) => {
                   const next = Array.isArray(value) ? value[0] : value
-                  if (typeof next === "number" && replaying)
+                  if (typeof next === "number" && replaying) {
                     commitSliderSeek(next)
+                    emitExploreTourInteraction({ id: "timeline-drag-committed" })
+                  }
                 }}
                 className="[&_[data-slot=slider-range]]:bg-primary/80 [&_[data-slot=slider-thumb]]:size-5 [&_[data-slot=slider-thumb]]:rounded-full [&_[data-slot=slider-thumb]]:border-2 [&_[data-slot=slider-thumb]]:bg-background [&_[data-slot=slider-track]]:h-2 [&_[data-slot=slider-track]]:rounded-full"
               />

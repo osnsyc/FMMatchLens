@@ -55,6 +55,7 @@ import {
   playbackToggleEventName,
   type DashboardFocusPanel,
 } from "@/lib/appShortcuts"
+import { useExploreTour } from "@/features/explore-tour/useExploreTour"
 
 const FormationPitch = lazy(() =>
   import("@/components/FormationPitch").then((module) => ({
@@ -327,10 +328,25 @@ export function App() {
       return next
     })
   }, [])
+  const clearPinnedPlayers = useCallback(() => setPinnedPlayers({ ids: {} }), [])
+  const exploreTourAdapter = useMemo(
+    () => ({
+      setFocusedPanel,
+      setChromeHidden: setIsChromeHidden,
+      clearPinnedPlayers,
+    }),
+    [clearPinnedPlayers]
+  )
+  const exploreTour = useExploreTour(exploreTourAdapter)
 
   useEffect(() => {
     if (pinnedPlayers.ids.home == null && pinnedPlayers.ids.away == null) return
     const closePinnedProfiles = (event: PointerEvent) => {
+      if (
+        document.documentElement.dataset.exploreTourStep ===
+        "squad-pin-comparison"
+      )
+        return
       const target = event.target
       if (
         target instanceof Element &&
@@ -580,6 +596,9 @@ export function App() {
 
   return (
     <main className="scrollbar-hidden h-svh w-full overflow-auto bg-background p-4 sm:p-6">
+      {exploreTour.Tour}
+      {exploreTour.spotlightLayer}
+      {exploreTour.cueLayer}
       <Suspense
         fallback={
           <div className="grid h-full place-items-center text-sm text-muted-foreground">
@@ -589,6 +608,7 @@ export function App() {
       >
         <MotionConfig reducedMotion="user" transition={layoutTransition}>
           <motion.div
+            data-tour="dashboard"
             data-player-profile-blur-scope
             data-chrome-hidden={isChromeHidden || undefined}
             className={`relative grid h-full min-h-0 w-full min-w-0 grid-cols-1 gap-x-2 md:min-w-[1360px] ${
@@ -612,12 +632,19 @@ export function App() {
               className={`${isChromeHidden ? "pointer-events-none absolute inset-x-0 top-0 h-16" : "relative min-h-0"} overflow-hidden`}
             >
               <Card className="h-full min-h-0 border-transparent bg-transparent p-0 shadow-none">
-                <ScoreHeader match={match} />
+                <ScoreHeader
+                  match={match}
+                  onStartExploreTour={exploreTour.start}
+                  showExploreTourHint={exploreTour.showHint}
+                  exploreTourActive={exploreTour.active}
+                />
               </Card>
             </motion.div>
 
             {/* Main layout: home squad | central dashboard | away squad */}
             <motion.div
+              data-tour="squads"
+              data-tour-tactical-focus={isTacticalFocusMode || undefined}
               layout
               transition={layoutTransition}
               className="grid min-h-0 min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(260px,1fr)_minmax(0,6fr)_minmax(260px,1fr)]"
@@ -625,6 +652,8 @@ export function App() {
               {/* Home squad */}
               <Card
                 data-squad-panel
+                data-tour="squad-panel"
+                data-side="home"
                 className="min-h-0 min-w-0 overflow-hidden p-0"
               >
                 <SquadPanel
@@ -654,6 +683,7 @@ export function App() {
 
               {/* Central dashboard */}
               <motion.div
+                data-tour="dashboard-main"
                 data-dashboard-focus={focusedPanel ?? "none"}
                 layout
                 transition={layoutTransition}
@@ -702,10 +732,12 @@ export function App() {
                   </AnimatedDashboardCard>
 
                   <AnimatedDashboardCard>
-                    <FormationPitch
-                      match={match}
-                      isFocusMode={focusedPanel === "formation"}
-                    />
+                    <div data-tour="formation-panel" className="h-full min-h-0">
+                      <FormationPitch
+                        match={match}
+                        isFocusMode={focusedPanel === "formation"}
+                      />
+                    </div>
                   </AnimatedDashboardCard>
                 </motion.div>
 
@@ -741,22 +773,26 @@ export function App() {
                     active={focusedPanel == null || focusedPanel === "tactical"}
                     tacticalBoard
                   >
-                    <TacticalBoard
-                      match={match}
-                      isFocusMode={isTacticalFocusMode}
-                      eventFilterMode={tacticalEventFilterMode}
-                      selectedPlayerIds={tacticalPlayerIds}
-                      onEventFilterModeChange={setTacticalEventFilterMode}
-                    />
+                    <div data-tour="tactical-panel" className="h-full min-h-0">
+                      <TacticalBoard
+                        match={match}
+                        isFocusMode={isTacticalFocusMode}
+                        eventFilterMode={tacticalEventFilterMode}
+                        selectedPlayerIds={tacticalPlayerIds}
+                        onEventFilterModeChange={setTacticalEventFilterMode}
+                      />
+                    </div>
                   </AnimatedDashboardCard>
 
                   <AnimatedDashboardCard
                     active={focusedPanel == null || focusedPanel === "heatmap"}
                   >
-                    <ZonePanel
-                      match={match}
-                      isFocusMode={focusedPanel === "heatmap"}
-                    />
+                    <div data-tour="heatmap-panel" className="h-full min-h-0">
+                      <ZonePanel
+                        match={match}
+                        isFocusMode={focusedPanel === "heatmap"}
+                      />
+                    </div>
                   </AnimatedDashboardCard>
                 </motion.div>
                 {comparisonOpen && (
@@ -772,6 +808,8 @@ export function App() {
               {/* Away squad */}
               <Card
                 data-squad-panel
+                data-tour="squad-panel"
+                data-side="away"
                 className="min-h-0 min-w-0 overflow-hidden p-0"
               >
                 <SquadPanel
