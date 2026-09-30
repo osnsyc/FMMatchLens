@@ -139,8 +139,11 @@ internal sealed class GraphicsAssetIndex
 
     public bool TryResolve(string entityType, uint uid, string imageType, out string path)
     {
-        var key = BuildTargetKey(entityType, uid.ToString(CultureInfo.InvariantCulture), imageType);
-        if (!_assets.TryGetValue(key, out var cachedPath))
+        var resourceId = uid.ToString(CultureInfo.InvariantCulture);
+        var key = BuildTargetKey(entityType, resourceId, imageType);
+        if (!_assets.TryGetValue(key, out var cachedPath)
+            && (!entityType.Trim().Equals("person", StringComparison.OrdinalIgnoreCase)
+                || !_assets.TryGetValue(BuildTargetKey(entityType, $"r-{resourceId}", imageType), out cachedPath)))
         {
             path = string.Empty;
             return false;
@@ -256,13 +259,24 @@ internal sealed class GraphicsAssetIndex
         if (segments.Length < 5
             || !segments[0].Equals("graphics", StringComparison.OrdinalIgnoreCase)
             || !segments[1].Equals("pictures", StringComparison.OrdinalIgnoreCase)
-            || !uint.TryParse(segments[3], NumberStyles.None, CultureInfo.InvariantCulture, out _))
+            || !IsSupportedResourceId(segments[3]))
         {
             return false;
         }
 
         target = BuildTargetKey(segments[2], segments[3], string.Join('/', segments.Skip(4)));
         return true;
+    }
+
+    private static bool IsSupportedResourceId(string value)
+    {
+        if (uint.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out _))
+        {
+            return true;
+        }
+
+        return value.StartsWith("r-", StringComparison.OrdinalIgnoreCase)
+            && uint.TryParse(value[2..], NumberStyles.None, CultureInfo.InvariantCulture, out _);
     }
 
     private static string BuildTargetKey(string entityType, string uid, string imageType)
