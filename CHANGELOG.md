@@ -3,6 +3,37 @@
 
 This file records the project's important changes. Version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-09-30
+
+### Added
+
+- Added an interactive, bilingual Explore Tour covering timeline navigation, player comparison, formations, heatmaps, Tactical Board analysis, archives, appearance settings, and immersive mode.
+- Added dedicated focus layouts for Match Statistics, Formation, and Heatmap, animated dashboard layout transitions, and a unified scoreboard toolbar for fullscreen, immersive mode, feature discovery, and keyboard shortcuts.
+- Added pinnable player profiles and a side-by-side comparison view with position-aware opponent suggestions, aligned attributes, foot ability, and localized player traits.
+- Added an xG Map with pitch-positioned shots and shared live and replay derivation, plus first- and second-half shot totals in Match Statistics.
+- Added team and individual-player event filters, clearer Tactical Board event markers, animated marker reveals, refined hover details, and grouped map legends.
+- Added native semantics for passes, crosses, saves, fouls, key tackles, penalties, own goals, and cards, including yellow- and red-card presentation on the timeline and in squad status.
+- Added competition metadata, goalkeeper saves held, parried, and tipped, 64-bit player traits, and half-specific team shots to `.fmlens` archive format 2.6 while retaining read compatibility with earlier 2.x archives.
+- Added a persisted, configurable backend address so the dashboard can connect to FMMatchLens from another device on the local network, allowing laptops, tablets, and secondary computers to serve as dedicated analysis displays.
+- Added support for newgen portraits referenced by facepacks through `graphics/pictures/person/r-{UID}/portrait` resource paths.
+
+### Changed
+
+- Improved heatmap detail and performance with a higher-resolution density field, bilinear sample placement, percentile-based scaling, configurable gamma and LUT thresholds, theme-aware low-density colors, and fewer recent-window allocations.
+- Reconciled Momentum events by logical sequence identity and revision so memory relocation does not create duplicates while semantic, flag, and trajectory updates remain visible.
+- Built match rosters from each team's own player table, preserving stable home/away ordering and aligning player identity resolution with Momentum events.
+- Refreshed tactical player metadata throughout a match so formation history and archive deltas capture position and role changes even when the on-pitch roster is unchanged.
+- Expanded archive and timeline presentation with competition identity, logos, and colors, and refined squad attribute, foot, radar, and comparison styling.
+- Centralized dashboard shortcuts for panel focus, replay playback and seeking, fullscreen, immersive mode, and dismissing temporary views.
+
+### Fixed
+
+- Prevented hosted dashboard modules from contacting a local or configured backend until the user explicitly enables the live connection.
+- Prevented logical Momentum events from disappearing or being duplicated when their temporary event index changes, including relocation, backfill, collision, and tail-revision cases.
+- Improved match-roster reliability by no longer depending on the combined match player table for team membership.
+- Supported minified three- and four-digit hexadecimal theme colors in heatmap rendering.
+- Kept tactical assignment changes in formation history and archive metadata when no substitution occurs.
+
 ## [0.4.0] - 2026-09-18
 
 ### Added
@@ -126,7 +157,8 @@ This file records the project's important changes. Version numbers follow [Seman
 - Two plugin logging modes: release and debug.
 - Centralized project metadata, CI checks, and an automated tag-based release pipeline.
 
-[Unreleased]: https://github.com/osnsyc/FMMatchLens/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/osnsyc/FMMatchLens/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/osnsyc/FMMatchLens/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/osnsyc/FMMatchLens/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/osnsyc/FMMatchLens/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/osnsyc/FMMatchLens/compare/v0.2.1...v0.2.2
