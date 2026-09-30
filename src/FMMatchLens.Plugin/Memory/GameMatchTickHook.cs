@@ -1534,6 +1534,17 @@ internal sealed class GameMatchTickHook : IDisposable
             Volatile.Write(ref _drainStage, (int)DrainStage.RealtimeFrames);
             DrainRealtimeFrames();
 
+            // Tactical assignments can change without changing the on-pitch
+            // roster. Refresh the selected match's metadata throughout the
+            // match so formation history and archive metadata deltas capture
+            // position and role changes as well as substitutions. The capture
+            // method applies its own one-second throttle.
+            var selectedAnimated = (nint)Interlocked.Read(ref _selectedAnimated);
+            if (selectedAnimated != default)
+            {
+                TryCapturePlayerMetadata(selectedAnimated);
+            }
+
             Volatile.Write(ref _drainStage, (int)DrainStage.MatchEnd);
             for (var i = 0; i < count; i++)
             {
