@@ -43,7 +43,6 @@ import {
   exploreTourTimelineSeekEventName,
 } from "@/features/explore-tour/exploreTourEvents"
 
-const apiBase = `http://127.0.0.1:${__API_PORT__}`
 const pageSize = 2_400
 
 type ArchiveSlice = {
@@ -57,6 +56,7 @@ type MatchTimelineProps = {
   match: MatchSnapshot
   initialLocalArchive?: ReplayArchive
   localConnectionEnabled: boolean
+  backendUrl: string
   onReplayFrame: (snapshot: MatchSnapshot) => void
   onLive: () => void
 }
@@ -79,6 +79,7 @@ export function MatchTimeline({
   match,
   initialLocalArchive,
   localConnectionEnabled,
+  backendUrl: apiBase,
   onReplayFrame,
   onLive,
 }: MatchTimelineProps) {
@@ -176,14 +177,14 @@ export function MatchTimeline({
         if (requestId === archivePageRequestRef.current) setRefreshing(false)
       }
     },
-    [localConnectionEnabled]
+    [apiBase, localConnectionEnabled]
   )
 
   useEffect(() => {
     if (!localConnectionEnabled) return
     const timer = window.setTimeout(() => void refresh(0), 0)
     return () => window.clearTimeout(timer)
-  }, [localConnectionEnabled, refresh])
+  }, [apiBase, localConnectionEnabled, refresh])
 
   useEffect(() => {
     if (!initialLocalArchive) return
@@ -280,6 +281,7 @@ export function MatchTimeline({
     }
   }, [
     activateReplay,
+    apiBase,
     localConnectionEnabled,
     pendingSourceId,
     prepareReplay,

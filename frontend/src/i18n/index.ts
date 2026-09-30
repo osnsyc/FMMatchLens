@@ -252,6 +252,8 @@ const resources = {
         experimentalBadge: "实验性",
         enableLiveConnection: "请启用按钮以连接比赛",
         waitingForConnection: "正在等待比赛连接",
+        applyBackendUrl: "应用",
+        invalidBackendUrl: "请输入有效的 HTTP 或 HTTPS 地址",
         dropArchive: "将 .fmlens 存档拖放到这里",
       },
       squad: {
@@ -986,6 +988,8 @@ const resources = {
         experimentalBadge: "Experimental",
         enableLiveConnection: "Enable button to try local connection",
         waitingForConnection: "Waiting for match connection",
+        applyBackendUrl: "Apply",
+        invalidBackendUrl: "Enter a valid HTTP or HTTPS URL",
         dropArchive: "Drop a .fmlens archive here",
       },
       squad: {

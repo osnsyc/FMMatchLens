@@ -21,6 +21,12 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { BrandIcon } from "@/components/BrandIcon"
 import {
   Select,
@@ -34,6 +40,11 @@ import { PlayerComparisonPopup, SquadPanel } from "@/components/SquadPanel"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useTheme } from "@/components/theme-provider"
 import { useRealtimeMatch } from "@/api/realtimeMatch"
+import {
+  defaultBackendUrl,
+  loadBackendUrl,
+  saveBackendUrl,
+} from "@/api/backend"
 import { parseLocalArchive } from "@/api/localArchive"
 import { preprocessReplayArchive } from "@/api/replay/replayPreprocessor"
 import { buildInitialReplaySnapshot } from "@/api/replay/replaySession"
@@ -94,7 +105,7 @@ const ZonePanel = lazy(() =>
 )
 
 const layoutTransition = {
-  duration: 0.20,
+  duration: 0.2,
   ease: [0.2, 0, 0, 1],
 } as const
 
@@ -143,10 +154,14 @@ export function App() {
   } = useTheme()
   const [replayMatch, setReplayMatch] = useState<MatchSnapshot | null>(null)
   const [experimentalLiveEnabled, setExperimentalLiveEnabled] = useState(false)
+  const [backendUrl, setBackendUrl] = useState(loadBackendUrl)
+  const [backendUrlDraft, setBackendUrlDraft] = useState(loadBackendUrl)
+  const [backendUrlError, setBackendUrlError] = useState("")
   const liveConnectionEnabled =
     !__ONLINE_DEMO_ENABLED__ || experimentalLiveEnabled
   const realtimeMatch = useRealtimeMatch(
-    replayMatch === null && liveConnectionEnabled
+    replayMatch === null && liveConnectionEnabled,
+    backendUrl
   )
   const [startupArchive, setStartupArchive] = useState<ReplayArchive>()
   const [archiveError, setArchiveError] = useState("")
@@ -256,6 +271,16 @@ export function App() {
       document.documentElement.lang = value
     }
   }
+  const applyBackendUrl = () => {
+    try {
+      const normalized = saveBackendUrl(backendUrlDraft)
+      setBackendUrlDraft(normalized)
+      setBackendUrl(normalized)
+      setBackendUrlError("")
+    } catch {
+      setBackendUrlError(t("timeline.invalidBackendUrl"))
+    }
+  }
   const sourceMatch = replayMatch ?? realtimeMatch
   const pinnedPlayerMatchScope = pinnedPlayerMatchScopeKey(sourceMatch)
   const pinnedPlayerMatchScopeRef = useRef(pinnedPlayerMatchScope)
@@ -328,7 +353,10 @@ export function App() {
       return next
     })
   }, [])
-  const clearPinnedPlayers = useCallback(() => setPinnedPlayers({ ids: {} }), [])
+  const clearPinnedPlayers = useCallback(
+    () => setPinnedPlayers({ ids: {} }),
+    []
+  )
   const exploreTourAdapter = useMemo(
     () => ({
       setFocusedPanel,
@@ -420,21 +448,71 @@ export function App() {
                   </Badge>
                 </label>
               )}
-              <div
-                className={`${__ONLINE_DEMO_ENABLED__ ? "mt-3" : "mt-6"} flex items-center gap-2 text-sm font-medium text-foreground`}
+              <Accordion
+                className={`${__ONLINE_DEMO_ENABLED__ ? "mt-3" : "mt-6"} w-full max-w-xs rounded-none border-0 bg-transparent`}
               >
-                <span className="relative flex size-2.5">
-                  {liveConnectionEnabled && (
-                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60" />
-                  )}
-                  <span
-                    className={`relative inline-flex size-2.5 rounded-full ${liveConnectionEnabled ? "bg-primary" : "bg-muted-foreground/40"}`}
-                  />
-                </span>
-                {liveConnectionEnabled
-                  ? t("timeline.waitingForConnection")
-                  : t("timeline.enableLiveConnection")}
-              </div>
+                <AccordionItem
+                  value="backend"
+                  className="border-0 data-open:bg-transparent"
+                >
+                  <AccordionTrigger className="items-center justify-center px-5 py-1 text-center text-xs font-normal text-muted-foreground hover:text-foreground hover:no-underline [&_[data-slot=accordion-trigger-icon]]:absolute [&_[data-slot=accordion-trigger-icon]]:right-0">
+                    <span className="flex min-w-0 items-center justify-center gap-2">
+                      <span className="relative flex size-2 shrink-0">
+                        {liveConnectionEnabled && (
+                          <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60" />
+                        )}
+                        <span
+                          className={`relative inline-flex size-2 rounded-full ${liveConnectionEnabled ? "bg-primary" : "bg-muted-foreground/40"}`}
+                        />
+                      </span>
+                      <span className="truncate">
+                        {liveConnectionEnabled
+                          ? t("timeline.waitingForConnection")
+                          : t("timeline.enableLiveConnection")}
+                      </span>
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-0 pb-0">
+                    <form
+                      className="px-2 pt-1 pb-1 text-left"
+                      onSubmit={(event) => {
+                        event.preventDefault()
+                        applyBackendUrl()
+                      }}
+                    >
+                      <div className="mx-auto flex max-w-64 items-end gap-1">
+                        <input
+                          id="backend-url"
+                          type="text"
+                          inputMode="url"
+                          value={backendUrlDraft}
+                          placeholder={defaultBackendUrl}
+                          spellCheck={false}
+                          aria-label={t("timeline.backendUrl")}
+                          className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2.5 text-center font-mono text-[11px] text-foreground shadow-xs transition-colors outline-none placeholder:text-center placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                          onChange={(event) =>
+                            setBackendUrlDraft(event.target.value)
+                          }
+                          aria-invalid={backendUrlError ? true : undefined}
+                        />
+                        <Button
+                          type="submit"
+                          size="sm"
+                          variant="ghost"
+                          className="px-2 text-muted-foreground"
+                        >
+                          {t("timeline.applyBackendUrl")}
+                        </Button>
+                      </div>
+                      {backendUrlError && (
+                        <p className="mt-1.5 text-[11px] text-destructive">
+                          {backendUrlError}
+                        </p>
+                      )}
+                    </form>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -857,6 +935,7 @@ export function App() {
                   match={match}
                   initialLocalArchive={startupArchive}
                   localConnectionEnabled={liveConnectionEnabled}
+                  backendUrl={backendUrl}
                   onReplayFrame={showReplayFrame}
                   onLive={returnToLive}
                 />

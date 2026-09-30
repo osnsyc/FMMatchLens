@@ -9,6 +9,11 @@ import {
 } from "@/api/momentumEventSemantics"
 import { HistoricalDerivations } from "@/api/replay/replayDerivations"
 import { reuseMatchSnapshot } from "@/lib/matchSnapshotReuse"
+import {
+  backendWebSocketUrl,
+  defaultBackendUrl,
+  loadBackendUrl,
+} from "@/api/backend"
 
 import type {
   FormationSnapshot,
@@ -29,8 +34,6 @@ import type {
   XgTimelinePoint,
 } from "@/types/match"
 
-const apiBase = `http://127.0.0.1:${__API_PORT__}`
-const webSocketUrl = `ws://127.0.0.1:${__API_PORT__}/ws`
 const liveFramePageSize = 2_400
 
 export type RealtimeTeam = {
@@ -485,7 +488,10 @@ export class LegacyLiveDerivations {
   }
 }
 
-export function useRealtimeMatch(enabled = true): MatchSnapshot | null {
+export function useRealtimeMatch(
+  enabled = true,
+  backendUrl = defaultBackendUrl
+): MatchSnapshot | null {
   const [match, setMatch] = useState<MatchSnapshot | null>(null)
   const metadata = useRef<RealtimeMatchMetadata | null>(null)
   const enabledRef = useRef(enabled)
@@ -498,6 +504,9 @@ export function useRealtimeMatch(enabled = true): MatchSnapshot | null {
     // Do not even create the localhost WebSocket or issue an API request until
     // the caller explicitly enables live connectivity.
     if (!enabled) return
+
+    const apiBase = backendUrl
+    const webSocketUrl = backendWebSocketUrl(backendUrl)
 
     let disposed = false
     let socket: WebSocket | null = null
@@ -792,7 +801,7 @@ export function useRealtimeMatch(enabled = true): MatchSnapshot | null {
       window.clearInterval(syncTimer)
       socket?.close()
     }
-  }, [enabled])
+  }, [backendUrl, enabled])
 
   return enabled ? match : null
 }
@@ -1537,7 +1546,7 @@ export function graphicsAssetUrl(
   uid: number,
   imageType: string
 ): string {
-  return `${apiBase}/api/assets/${encodeURIComponent(entityType)}/${uid}/${encodeURIComponent(imageType)}`
+  return `${loadBackendUrl()}/api/assets/${encodeURIComponent(entityType)}/${uid}/${encodeURIComponent(imageType)}`
 }
 
 export function archivedAssetUrl(path: string | undefined) {
