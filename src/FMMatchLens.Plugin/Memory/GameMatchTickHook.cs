@@ -350,7 +350,8 @@ internal sealed class GameMatchTickHook : IDisposable
 
         var homeTeamRead = _memoryReader.TryReadPointer(match + Offsets.GameMatch.HomeTeam, out var homeTeam);
         var awayTeamRead = _memoryReader.TryReadPointer(match + Offsets.GameMatch.AwayTeam, out var awayTeam);
-        _memoryReader.TryReadByte(match + Offsets.GameMatch.MatchPlayersCount, out var playerCount);
+        var homePlayerCountRead = TryReadTeamPlayerCount(homeTeam, out var homePlayerCount);
+        var awayPlayerCountRead = TryReadTeamPlayerCount(awayTeam, out var awayPlayerCount);
         _memoryReader.TryReadInt32(match + Offsets.GameMatch.DisplayTick, out var displayTick);
         _memoryReader.TryReadByte(match + Offsets.GameMatch.Period, out var period);
         _memoryReader.TryReadByte(match + Offsets.GameMatch.LifecycleStateA, out var state142F8);
@@ -360,8 +361,11 @@ internal sealed class GameMatchTickHook : IDisposable
         _memoryReader.TryReadPointer(match + Offsets.GameMatch.PossessionTeam, out var possessionTeam);
         _memoryReader.TryReadPointer(match + Offsets.GameMatch.CurrentBallHolder, out var currentBallHolder);
 
+        var totalPlayerCount = homePlayerCount + awayPlayerCount;
         var isActive = homeTeam != default && awayTeam != default && homeTeam != awayTeam &&
-                       playerCount is > 0 and <= 64;
+                       homePlayerCountRead && awayPlayerCountRead &&
+                       homePlayerCount > 0 && awayPlayerCount > 0 &&
+                       totalPlayerCount <= RawRealtimeTickFrame.MaxPlayers;
         // At full time the GAME_MATCH object remains readable, but both runtime
         // team pointers are cleared. Require successful slot reads so an invalid
         // or already-freed GAME_MATCH address cannot masquerade as full time.
@@ -401,7 +405,8 @@ internal sealed class GameMatchTickHook : IDisposable
             State142F9: state142F9,
             State142FA: state142FA,
             State142FB: state142FB,
-            PlayerCount: playerCount,
+            HomePlayerCount: homePlayerCount,
+            AwayPlayerCount: awayPlayerCount,
             HomeTeam: homeTeam,
             AwayTeam: awayTeam,
             PossessionTeam: possessionTeam,
@@ -413,6 +418,14 @@ internal sealed class GameMatchTickHook : IDisposable
             HomeShots: homeShots,
             AwayShots: awayShots);
         return true;
+    }
+
+    private bool TryReadTeamPlayerCount(nint team, out byte playerCount)
+    {
+        playerCount = 0;
+        return team != default &&
+               _memoryReader.TryReadByte(team + Offsets.Team.PlayerCount, out playerCount) &&
+               playerCount <= RawRealtimeTickFrame.MaxPlayers;
     }
 
     private void ReadTeamTickValues(nint team, out byte goals, out float xg, out byte shots)
@@ -473,27 +486,28 @@ internal sealed class GameMatchTickHook : IDisposable
                 out frame.RollingMomentumCount);
             CaptureNativeMomentumEvents(record.MatchAddress, frame);
 
-            var playerCount = Math.Min(record.PlayerCount, (byte)RawRealtimeTickFrame.MaxPlayers);
-            for (var slot = 0; slot < playerCount; slot++)
-            {
-                // Confirmed layout: the pointer slots live directly in GAME_MATCH.
-                var pointerSlot = record.MatchAddress + Offsets.GameMatch.FirstMatchPlayer + slot * IntPtr.Size;
-                if (!_memoryReader.TryReadPointer(pointerSlot, out var matchPlayer) ||
-                    matchPlayer == default ||
-                    !TryReadPlayerFrame(matchPlayer, slot, record.CurrentBallHolder, out var player))
-                {
-                    continue;
-                }
-
-                frame.Players[frame.PlayerCount++] = player;
-                if (player.IsBallHolder)
-                {
-                    frame.BallHolderPlayerId = player.PlayerId;
-                }
-            }
+            CaptureTeamPlayerFrames(
+                frame,
+                record.HomeTeam,
+                record.HomePlayerCount,
+                TeamSide.Home,
+                slotOffset: 0,
+                record.CurrentBallHolder);
+            CaptureTeamPlayerFrames(
+                frame,
+                record.AwayTeam,
+                record.AwayPlayerCount,
+                TeamSide.Away,
+                slotOffset: record.HomePlayerCount,
+                record.CurrentBallHolder);
 
             ResolveDerivedTeamStats(frame);
-            ResolveMomentumEventPlayerIds(frame, record.HomeTeam, record.AwayTeam);
+            ResolveMomentumEventPlayerIds(
+                frame,
+                record.HomeTeam,
+                record.HomePlayerCount,
+                record.AwayTeam,
+                record.AwayPlayerCount);
 
             _realtimeFrames.Publish(frame);
             published = true;
@@ -503,6 +517,33 @@ internal sealed class GameMatchTickHook : IDisposable
             if (!published)
             {
                 _realtimeFrames.ReleaseUnpublished(frame);
+            }
+        }
+    }
+
+    private void CaptureTeamPlayerFrames(
+        RawRealtimeTickFrame frame,
+        nint team,
+        int playerCount,
+        TeamSide teamSide,
+        int slotOffset,
+        nint ballHolder)
+    {
+        for (var teamSlot = 0; teamSlot < playerCount && frame.PlayerCount < RawRealtimeTickFrame.MaxPlayers; teamSlot++)
+        {
+            var pointerSlot = team + Offsets.Team.PlayerTable + teamSlot * IntPtr.Size;
+            var apiSlot = slotOffset + teamSlot;
+            if (!_memoryReader.TryReadPointer(pointerSlot, out var matchPlayer) ||
+                matchPlayer == default ||
+                !TryReadPlayerFrame(matchPlayer, apiSlot, teamSide, ballHolder, out var player))
+            {
+                continue;
+            }
+
+            frame.Players[frame.PlayerCount++] = player;
+            if (player.IsBallHolder)
+            {
+                frame.BallHolderPlayerId = player.PlayerId;
             }
         }
     }
@@ -710,17 +751,24 @@ internal sealed class GameMatchTickHook : IDisposable
     private void ResolveMomentumEventPlayerIds(
         RawRealtimeTickFrame frame,
         nint homeTeam,
-        nint awayTeam)
+        int homePlayerCount,
+        nint awayTeam,
+        int awayPlayerCount)
     {
         for (var eventIndex = 0; eventIndex < frame.MomentumEventCount; eventIndex++)
         {
             var item = frame.MomentumEvents[eventIndex];
             var team = item.Team == TeamSide.Home ? homeTeam : awayTeam;
-            var playerId = TryResolveMomentumEventPlayerId(team, item.PlayerSlot, out var actorId)
+            var playerCount = item.Team == TeamSide.Home ? homePlayerCount : awayPlayerCount;
+            var playerId = TryResolveMomentumEventPlayerId(team, playerCount, item.PlayerSlot, out var actorId)
                 ? actorId
                 : 0;
             var receiverPlayerId = item.ReceiverPlayerSlot != byte.MaxValue &&
-                                   TryResolveMomentumEventPlayerId(team, item.ReceiverPlayerSlot, out var receiverId)
+                                   TryResolveMomentumEventPlayerId(
+                                       team,
+                                       playerCount,
+                                       item.ReceiverPlayerSlot,
+                                       out var receiverId)
                 ? receiverId
                 : 0;
 
@@ -732,11 +780,10 @@ internal sealed class GameMatchTickHook : IDisposable
         }
     }
 
-    private bool TryResolveMomentumEventPlayerId(nint team, int slot, out long playerId)
+    private bool TryResolveMomentumEventPlayerId(nint team, int playerCount, int slot, out long playerId)
     {
         playerId = 0;
         if (team == default || slot is < 0 or >= RawRealtimeTickFrame.MaxPlayers ||
-            !_memoryReader.TryReadByte(team + Offsets.Team.PlayerCount, out var playerCount) ||
             slot >= playerCount ||
             !_memoryReader.TryReadPointer(team + Offsets.Team.PlayerTable + slot * IntPtr.Size, out var matchPlayer) ||
             matchPlayer == default ||
@@ -771,7 +818,12 @@ internal sealed class GameMatchTickHook : IDisposable
         return hash;
     }
 
-    private bool TryReadPlayerFrame(nint matchPlayer, int slot, nint ballHolder, out PlayerTickData player)
+    private bool TryReadPlayerFrame(
+        nint matchPlayer,
+        int slot,
+        TeamSide team,
+        nint ballHolder,
+        out PlayerTickData player)
     {
         player = default;
         if (!VirtualMemory.IsReadable(matchPlayer, Offsets.MatchPlayer.Stats + IntPtr.Size))
@@ -789,7 +841,6 @@ internal sealed class GameMatchTickHook : IDisposable
 
         var playerUid = TryReadPlayerUid(matchPlayer, out var uid) ? uid : (uint?)null;
         var playerId = playerUid.HasValue ? playerUid.Value : FallbackPlayerIdentity(slot);
-        var team = ReadByteDirect(stats + Offsets.PlayerStats.TeamSideUnconfirmed) == 1 ? TeamSide.Away : TeamSide.Home;
         var starterFlag = ReadByteDirect(stats + Offsets.PlayerStats.StarterSubstituteFlag);
         var subbedOn = ReadByteDirect(stats + Offsets.PlayerStats.SubbedOnMinute);
         var subbedOff = ReadByteDirect(stats + Offsets.PlayerStats.SubbedOffMinute);
@@ -931,16 +982,48 @@ internal sealed class GameMatchTickHook : IDisposable
         var source = state.LastActiveRecord;
         state.MatchDate ??= ReadTemporaryMatchDate(match);
         var metadata = new List<RealtimePlayerMetadata>(source.PlayerCount);
-        for (var slot = 0; slot < Math.Min(source.PlayerCount, (byte)RawRealtimeTickFrame.MaxPlayers); slot++)
+        CaptureTeamPlayerMetadata(
+            metadata,
+            source.HomeTeam,
+            source.HomePlayerCount,
+            TeamSide.Home,
+            slotOffset: 0);
+        CaptureTeamPlayerMetadata(
+            metadata,
+            source.AwayTeam,
+            source.AwayPlayerCount,
+            TeamSide.Away,
+            slotOffset: source.HomePlayerCount);
+
+        if (metadata.Count > 0)
         {
-            var pointerSlot = match + Offsets.GameMatch.FirstMatchPlayer + slot * IntPtr.Size;
+            _timeline.SetMetadata(
+                ReadTeamMetadata(source.HomeTeam, "Home"),
+                ReadTeamMetadata(source.AwayTeam, "Away"),
+                metadata,
+                state.MatchDate,
+                ReadCompetitionMetadata(match));
+        }
+    }
+
+    private void CaptureTeamPlayerMetadata(
+        List<RealtimePlayerMetadata> metadata,
+        nint team,
+        int playerCount,
+        TeamSide teamSide,
+        int slotOffset)
+    {
+        for (var teamSlot = 0; teamSlot < playerCount; teamSlot++)
+        {
+            var pointerSlot = team + Offsets.Team.PlayerTable + teamSlot * IntPtr.Size;
             if (!_memoryReader.TryReadPointer(pointerSlot, out var matchPlayer) || matchPlayer == default)
             {
                 continue;
             }
 
+            var slot = slotOffset + teamSlot;
+
             _memoryReader.TryReadPointer(matchPlayer + Offsets.MatchPlayer.Person, out var person);
-            _memoryReader.TryReadPointer(matchPlayer + Offsets.MatchPlayer.Stats, out var stats);
             _memoryReader.TryReadPointer(person + Offsets.Person.FullContract, out var fullContract);
             var playerUid = ReadUid(person + Offsets.Person.Uid);
             var playerId = playerUid.HasValue ? playerUid.Value : FallbackPlayerIdentity(slot);
@@ -948,10 +1031,6 @@ internal sealed class GameMatchTickHook : IDisposable
                 _memoryReader.TryReadByte(fullContract + Offsets.FullContract.SquadNumber, out var number) && number > 0
                     ? number
                     : (byte?)null;
-            var team = stats != default && _memoryReader.TryReadByte(stats + Offsets.PlayerStats.TeamSideUnconfirmed, out var side) && side == 1
-                ? TeamSide.Away
-                : TeamSide.Home;
-
             var firstName = ReadPersonName(person, Offsets.Person.FirstName);
             var secondName = ReadPersonName(person, Offsets.Person.SecondName);
             var commonName = ReadPersonName(person, Offsets.Person.CommonName);
@@ -969,7 +1048,7 @@ internal sealed class GameMatchTickHook : IDisposable
                 slot,
                 playerId,
                 playerUid,
-                team,
+                teamSide,
                 shirtNumber,
                 FormatPlayerPosition(positionFamiliarities),
                 firstName,
@@ -984,17 +1063,6 @@ internal sealed class GameMatchTickHook : IDisposable
                 positionFamiliarities));
         }
 
-        if (metadata.Count > 0)
-        {
-            _memoryReader.TryReadPointer(match + Offsets.GameMatch.HomeTeam, out var homeTeam);
-            _memoryReader.TryReadPointer(match + Offsets.GameMatch.AwayTeam, out var awayTeam);
-            _timeline.SetMetadata(
-                ReadTeamMetadata(homeTeam, "Home"),
-                ReadTeamMetadata(awayTeam, "Away"),
-                metadata,
-                state.MatchDate,
-                ReadCompetitionMetadata(match));
-        }
     }
 
     private RealtimeCompetitionMetadata? ReadCompetitionMetadata(nint match)
@@ -1644,17 +1712,17 @@ internal sealed class GameMatchTickHook : IDisposable
 
         var homeRead = _memoryReader.TryReadPointer(address + Offsets.GameMatch.HomeTeam, out var homeTeam);
         var awayRead = _memoryReader.TryReadPointer(address + Offsets.GameMatch.AwayTeam, out var awayTeam);
-        var playerCountRead = _memoryReader.TryReadByte(
-            address + Offsets.GameMatch.MatchPlayersCount,
-            out var playerCount);
-        if (!homeRead || !awayRead || !playerCountRead)
+        var homePlayerCountRead = TryReadTeamPlayerCount(homeTeam, out var homePlayerCount);
+        var awayPlayerCountRead = TryReadTeamPlayerCount(awayTeam, out var awayPlayerCount);
+        if (!homeRead || !awayRead || !homePlayerCountRead || !awayPlayerCountRead)
         {
             // A transient read failure is not enough evidence to discard early data.
             return true;
         }
 
         return homeTeam != default && awayTeam != default && homeTeam != awayTeam &&
-               playerCount is > 0 and <= 64 &&
+               homePlayerCount > 0 && awayPlayerCount > 0 &&
+               homePlayerCount + awayPlayerCount <= RawRealtimeTickFrame.MaxPlayers &&
                (candidate.ProbedHomeTeam == default || candidate.ProbedHomeTeam == homeTeam) &&
                (candidate.ProbedAwayTeam == default || candidate.ProbedAwayTeam == awayTeam);
     }
@@ -2091,7 +2159,8 @@ internal sealed class GameMatchTickHook : IDisposable
                 $"GAME_MATCH candidate evidence: address={FormatPointer(pair.Key)}, tick={state.LastTick}, " +
                 $"ageMs={Math.Max(0, now - state.LastSeenTimestamp) * 1_000 / Stopwatch.Frequency}, " +
                 $"rate={CalculateTickRate(state, now):0.0}, homeTeam={FormatPointer(record.HomeTeam)}, " +
-                $"awayTeam={FormatPointer(record.AwayTeam)}, players={record.PlayerCount}, " +
+                $"awayTeam={FormatPointer(record.AwayTeam)}, players={record.PlayerCount} " +
+                $"(home={record.HomePlayerCount},away={record.AwayPlayerCount}), " +
                 $"homeUid={FormatUid(state.HomeTeamUidReadable, state.HomeDbTeamUid)}, " +
                 $"awayUid={FormatUid(state.AwayTeamUidReadable, state.AwayDbTeamUid)}, " +
                 $"homeManagerRtti={FormatManagerRtti(state.HomeManagerReadable, state.HomeManagerRttiOffset)}, " +

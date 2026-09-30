@@ -9,8 +9,8 @@ internal static class Offsets
         public const int CompetitionPrimaryColour = 0x68C;
         public const int CompetitionSecondaryColour = 0x690;
         public const int CompetitionTertiaryColour = 0x694;
-        public const int MatchPlayersCount = 0x13A20;
-        public const int FirstMatchPlayer = 0x13A28;
+        // public const int MatchPlayersCount = 0x13A20; //deprecated
+        // public const int FirstMatchPlayer = 0x13A28;  //deprecated
         public const int MomentumEventSource = 0x139F0;
         public const int WaitingReceiver = 0x13D10;
         public const int HomeTeam = 0x14100;
@@ -170,7 +170,10 @@ internal static class Offsets
         // Pointer to the team's manager wrapper. Manager.Person resolves to the
         // shared Person subobject for both human managers and AI staff.
         public const int Manager = 0x528;
+        // Inline table of MATCH_PLAYER pointers. MomentumEvent player slots are
+        // zero-based indexes into this table.
         public const int PlayerTable = 0x130;
+        // One-byte count of valid entries in PlayerTable.
         public const int PlayerCount = 0x632;
         public const int UniqueId = 0x2C;
         public const int BackgroundColour = 0x30;
@@ -553,7 +556,7 @@ internal static class Offsets
         public const int DistanceM = 0x68;
         public const int EventTimestamp = 0x78;
         public const int RatingTimes100 = 0x82;
-        public const int TeamSideUnconfirmed = 0x87;
+        // public const int TeamSideUnconfirmed = 0x87;
         // 255 health, 13 slight injury, 10 knee injury, 8 5w-6w injury, 11 foot injury
         // public const int InjuryStateOrSeverityCandidate = 0x88;
         public const int OverallPhysicalCondition = 0x89;

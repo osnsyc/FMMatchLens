@@ -13,7 +13,8 @@ internal readonly record struct GameMatchTickRecord(
     byte State142F9,
     byte State142FA,
     byte State142FB,
-    byte PlayerCount,
+    byte HomePlayerCount,
+    byte AwayPlayerCount,
     nint HomeTeam,
     nint AwayTeam,
     nint PossessionTeam,
@@ -23,7 +24,10 @@ internal readonly record struct GameMatchTickRecord(
     float HomeXg,
     float AwayXg,
     byte HomeShots,
-    byte AwayShots);
+    byte AwayShots)
+{
+    public int PlayerCount => HomePlayerCount + AwayPlayerCount;
+}
 
 /// <summary>
 /// A fixed-size, allocation-free buffer on the hook producer path. MatchUpdate
