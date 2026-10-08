@@ -33,6 +33,7 @@ import {
   TACTICAL_EVENT_OVERSCAN_PX,
   type TacticalHit,
 } from "@/components/tactical/PixiTacticalRenderer"
+import { PitchGoals } from "@/components/pitch/PitchGoals"
 import { PitchMarkings } from "@/components/pitch/PitchMarkings"
 import {
   emitExploreTourInteraction,
@@ -403,6 +404,7 @@ export const TacticalBoard = memo(function TacticalBoard({
               <div className="relative size-full bg-[var(--tactical-pitch-surface)]">
                 <div className="pointer-events-none absolute inset-0 bg-primary/[0.025]" />
                 <PitchMarkings dimensions={pitchDimensions} />
+                <PitchGoals dimensions={pitchDimensions} />
 
                 {showAttackFocus && activeSelectedShotId == null && (
                   <AttackFocus laneShares={momentumLaneShares} />

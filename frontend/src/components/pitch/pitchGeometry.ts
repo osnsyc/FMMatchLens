@@ -29,7 +29,7 @@ const LENGTH_RANGE = { minimum: 90, maximum: 120 }
 const WIDTH_RANGE = { minimum: 45, maximum: 90 }
 
 // IFAB Law 1 measurements, in metres.
-const GOAL_WIDTH = 7.32
+export const GOAL_WIDTH = 7.32
 const PENALTY_AREA_OFFSET = 16.5
 const GOAL_AREA_OFFSET = 5.5
 const PENALTY_MARK_DISTANCE = 11
