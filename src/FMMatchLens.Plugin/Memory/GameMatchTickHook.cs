@@ -103,7 +103,6 @@ internal sealed class GameMatchTickHook : IDisposable
     private int _isLoggingDiagnostics;
     private int _instructionOffset;
     private bool _started;
-    private bool _unsupportedBuild;
 
     public GameMatchTickHook(RealtimeMatchTimeline timeline)
     {
@@ -112,18 +111,13 @@ internal sealed class GameMatchTickHook : IDisposable
     }
 
     public bool IsStarted => _started;
-    public bool ShouldRetry => !_unsupportedBuild;
+    public bool ShouldRetry => true;
 
     public bool Start(bool logModuleNotLoaded = true)
     {
         if (_started)
         {
             return true;
-        }
-
-        if (_unsupportedBuild)
-        {
-            return false;
         }
 
         if (IntPtr.Size != 8)
@@ -148,13 +142,18 @@ internal sealed class GameMatchTickHook : IDisposable
         string sha256;
         try
         {
-            if (!GamePluginBuildCatalog.TryResolve(moduleBase, out build, out modulePath, out sha256))
+            var isSupportedBuild = GamePluginBuildCatalog.TryResolve(
+                moduleBase,
+                out build,
+                out modulePath,
+                out sha256);
+            PluginLogger.Info($"Detected game_plugin.dll: sha256={sha256}, path={modulePath}.");
+
+            if (!isSupportedBuild)
             {
-                _unsupportedBuild = true;
                 PluginLogger.Warning(
-                    $"Unsupported game_plugin.dll build; GAME_MATCH hook was not installed. " +
-                    $"sha256={sha256}, path={modulePath}");
-                return false;
+                    $"Unsupported game_plugin.dll build; using fallback GAME_MATCH hook RVA " +
+                    $"0x{build.MatchTickHookRva:X} for sha256={sha256}.");
             }
         }
         catch (Exception ex)

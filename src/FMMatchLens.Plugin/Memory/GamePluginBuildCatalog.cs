@@ -8,13 +8,18 @@ namespace FMMatchLens.Plugin.Memory;
 internal static class GamePluginBuildCatalog
 {
     private const int MaximumWindowsPathLength = 32_768;
+    private const int DefaultMatchTickHookRva = 0x3E08AD0;
 
     private static readonly GamePluginBuild[] SupportedBuilds =
     [
         new(
             "Steam",
             "eb6c86fab56e051fe41482c7b93d8cb0af716a1cc2c6197ce1babbff68372bb8",
-            0x3E08AD0),
+            DefaultMatchTickHookRva),
+        new(
+            "Epic",
+            "d86f511cec5a8de871ceedebf3eab05cec057bf2f82ee9ee0ef2e923e1a60944",
+            DefaultMatchTickHookRva),
         new(
             "XGP",
             "5de88e91e8c63f7ca1502b44313891d1eed85336c90316b900f8df7a37ad9091",
@@ -47,7 +52,7 @@ internal static class GamePluginBuildCatalog
             }
         }
 
-        build = default;
+        build = new GamePluginBuild("Fallback", sha256, DefaultMatchTickHookRva);
         return false;
     }
 
