@@ -21,7 +21,8 @@ internal sealed record PlayerProfile(
     int? InternationalApps = null,
     int? InternationalGoals = null,
     int? YouthApps = null,
-    int? YouthGoals = null);
+    int? YouthGoals = null,
+    int? MatchSharpness = null);
 
 internal sealed record PlayerAttributes(
     IReadOnlyDictionary<string, int> Technical,

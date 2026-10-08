@@ -633,7 +633,8 @@ internal sealed class RealtimeMatchTimeline
             incoming.InternationalApps ?? current.InternationalApps,
             incoming.InternationalGoals ?? current.InternationalGoals,
             incoming.YouthApps ?? current.YouthApps,
-            incoming.YouthGoals ?? current.YouthGoals);
+            incoming.YouthGoals ?? current.YouthGoals,
+            incoming.MatchSharpness ?? current.MatchSharpness);
     }
 
     private static PlayerAttributes? MergeAttributes(PlayerAttributes? current, PlayerAttributes? incoming)

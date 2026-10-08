@@ -31,11 +31,13 @@ internal static class ArchiveWireFormat
     // type, and guide value define 2.4. Pitch dimensions in metadata define 2.5.
     // Goalkeeper save breakdown fields, competition metadata, the fixed
     // 64-bit player-traits field, and first/second-half team shots define 2.6.
+    // Static pre-match player match sharpness, stored alongside condition in
+    // player profile metadata, defines 2.7.
     // The file-header version is the sole authority for payload decoding; do not
     // add an independent version byte inside ArchiveFrameCodec payloads.
     internal const ushort StructureMajor = 2;
     internal const ushort FirstSupportedStructureMinor = 1;
-    internal const ushort StructureMinor = 6;
+    internal const ushort StructureMinor = 7;
     internal const byte Legacy21BlockStructure = 1;
     internal const byte Legacy21FramePayloadMarker = 1;
 }

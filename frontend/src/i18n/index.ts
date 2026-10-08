@@ -414,6 +414,7 @@ const resources = {
         height: "身高",
         overallPhysicalCondition: "体力",
         matchSharpness: "比赛状态",
+        morale: "士气",
         internationalRecordValue: "{{apps}} 场 · {{goals}} 球",
         youthInternationalRecordValue: "国青 · {{apps}} 场 · {{goals}} 球",
         noInternationalRecord: "无国家队出场记录",
@@ -1150,6 +1151,7 @@ const resources = {
         height: "Height",
         overallPhysicalCondition: "Overall Physical Condition",
         matchSharpness: "Match Sharpness",
+        morale: "Morale",
         internationalRecordValue: "{{apps}} apps · {{goals}} goals",
         youthInternationalRecordValue:
           "Youth · {{apps}} apps · {{goals}} goals",

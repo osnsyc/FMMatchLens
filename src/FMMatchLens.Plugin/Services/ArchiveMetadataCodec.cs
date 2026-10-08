@@ -631,6 +631,10 @@ internal static class ArchiveMetadataCodec
             WriteNullableInt(writer, profile.YouthApps);
             WriteNullableInt(writer, profile.YouthGoals);
         }
+        if (structureMinor >= 7)
+        {
+            WriteNullableInt(writer, profile.MatchSharpness);
+        }
     }
 
     private static PlayerProfile? ReadProfile(BinaryReader reader, ushort structureMinor)
@@ -639,8 +643,9 @@ internal static class ArchiveMetadataCodec
         var profile = new PlayerProfile(
             ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader),
             ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader));
-        return structureMinor >= 4
-            ? profile with
+        if (structureMinor >= 4)
+        {
+            profile = profile with
             {
                 DateOfBirth = NullIfEmpty(ArchiveBinary.ReadString(reader)),
                 NationUid = ReadNullableUInt(reader),
@@ -650,8 +655,13 @@ internal static class ArchiveMetadataCodec
                 InternationalGoals = ReadNullableInt(reader),
                 YouthApps = ReadNullableInt(reader),
                 YouthGoals = ReadNullableInt(reader)
-            }
-            : profile;
+            };
+        }
+        if (structureMinor >= 7)
+        {
+            profile = profile with { MatchSharpness = ReadNullableInt(reader) };
+        }
+        return profile;
     }
 
     private static string? NullIfEmpty(string value) => string.IsNullOrEmpty(value) ? null : value;

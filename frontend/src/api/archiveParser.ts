@@ -15,7 +15,7 @@ import { playerPositionLabels } from "@/types/match"
 const magic = "FMLENS2\0"
 const archiveStructureMajor = 2
 const firstSupportedStructureMinor = 1
-const archiveStructureMinor = 6
+const archiveStructureMinor = 7
 const legacy21FramePayloadMarker = 1
 const legacy21BlockStructure = 1
 const metadataRecord = 1
@@ -634,6 +634,7 @@ function readProfile(reader: ArchiveBufferReader, structureMinor: number): Playe
     profile.youthApps = readNullableInt(reader)
     profile.youthGoals = readNullableInt(reader)
   }
+  if (structureMinor >= 7) profile.matchSharpness = readNullableInt(reader)
   return profile
 }
 

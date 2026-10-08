@@ -536,11 +536,13 @@ internal static class Offsets
         public const int BodyType = 0x230;
         public const int GuideValueGbp = 0x234; //u32
         public const int TransferValue = 0x238; //u32
-        public const int Condition = 0x258;
+        public const int MatchSharpness = 0x258; //u16, init
+        public const int Fatigue = 0x25A; //u16, init
+        public const int Condition = 0x25C; //u16, init
         public const int CurrentReputation = 0x260;
         public const int CurrentAbility = 0x264;
         public const int PotentialAbility = 0x266;
-        public const int Morale = 0x26C;
+        public const int Morale = 0x26C; //u8
     }
 
     public static class PlayerStats

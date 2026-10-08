@@ -237,6 +237,7 @@ export type PlayerProfile = {
   internationalGoals?: number
   youthApps?: number
   youthGoals?: number
+  matchSharpness?: number
 }
 
 export type PlayerAttributes = {

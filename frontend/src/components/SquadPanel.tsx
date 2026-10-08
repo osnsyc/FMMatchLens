@@ -979,12 +979,13 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-5 content-center gap-x-3 border-t border-border/60 px-3 py-1.5 text-[10px]">
+              <div className="grid grid-cols-6 content-center gap-x-3 border-t border-border/60 px-3 py-1.5 text-[10px]">
                 <ProfileFact label={t("playerProfile.age")} value={formatAgeAndBirthDate(player.age, player.profile?.dateOfBirth)} />
                 <ProfileFact label={t("playerProfile.bodyType")} value={formatBodyType(player.profile?.bodyType, t)} />
                 <ProfileFact label={t("playerProfile.height")} value={player.profile?.heightCm ? `${player.profile.heightCm} cm` : "-"} />
-                <ProfileFact label={t("playerProfile.overallPhysicalCondition")} value={formatProfileLevel(player.stats.overallPhysicalCondition)} />
-                <ProfileFact label={t("playerProfile.matchSharpness")} value={formatProfileLevel(player.stats.matchSharpness)} />
+                <ProfileFact label={t("playerProfile.overallPhysicalCondition")} value={formatProfileLevel(player.profile?.condition)} />
+                <ProfileFact label={t("playerProfile.matchSharpness")} value={formatProfileLevel(player.profile?.matchSharpness)} />
+                <ProfileFact label={t("playerProfile.morale")} value={formatMorale(player.profile?.morale)} />
               </div>
             </div>
           </CardHeader>
@@ -1048,9 +1049,7 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   previous.player.inPossession === next.player.inPossession &&
   previous.player.portraitUrl === next.player.portraitUrl &&
   previous.player.profile === next.player.profile &&
-  previous.player.attributes === next.player.attributes &&
-  previous.player.stats.overallPhysicalCondition === next.player.stats.overallPhysicalCondition &&
-  previous.player.stats.matchSharpness === next.player.stats.matchSharpness
+  previous.player.attributes === next.player.attributes
 )
 
 export function PlayerComparisonPopup({
@@ -1238,18 +1237,23 @@ function ComparisonProfileFacts({
     },
     {
       label: t("playerProfile.overallPhysicalCondition"),
-      left: formatProfileLevel(leftPlayer.stats.overallPhysicalCondition),
-      right: formatProfileLevel(rightPlayer.stats.overallPhysicalCondition),
+      left: formatProfileLevel(leftPlayer.profile?.condition),
+      right: formatProfileLevel(rightPlayer.profile?.condition),
     },
     {
       label: t("playerProfile.matchSharpness"),
-      left: formatProfileLevel(leftPlayer.stats.matchSharpness),
-      right: formatProfileLevel(rightPlayer.stats.matchSharpness),
+      left: formatProfileLevel(leftPlayer.profile?.matchSharpness),
+      right: formatProfileLevel(rightPlayer.profile?.matchSharpness),
+    },
+    {
+      label: t("playerProfile.morale"),
+      left: formatMorale(leftPlayer.profile?.morale),
+      right: formatMorale(rightPlayer.profile?.morale),
     },
   ]
 
   return (
-    <div className="absolute inset-x-28 bottom-0 grid grid-cols-5 gap-x-2 border-t border-border/60 bg-muted/35 px-3 py-1.5 text-[10px]">
+    <div className="absolute inset-x-28 bottom-0 grid grid-cols-6 gap-x-2 border-t border-border/60 bg-muted/35 px-3 py-1.5 text-[10px]">
       {facts.map((fact) => (
         <div key={fact.label} className="min-w-0 text-center leading-tight">
           <div className="truncate text-muted-foreground">{fact.label}</div>
@@ -1361,6 +1365,10 @@ function formatProfileLevel(value?: number) {
   if (!value || value <= 0) return "-"
   const percentage = value > 100 ? value / 100 : value <= 20 ? value * 5 : value
   return `${Math.round(Math.min(100, percentage))}%`
+}
+
+function formatMorale(value?: number) {
+  return value != null ? String(value) : "-"
 }
 
 function attributeValueClass(value: number) {

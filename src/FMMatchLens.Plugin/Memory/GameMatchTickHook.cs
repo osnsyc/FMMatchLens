@@ -1267,7 +1267,7 @@ internal sealed class GameMatchTickHook : IDisposable
             ReadPositiveInt32(fullContract + Offsets.FullContract.WeeklyWage),
             ReadPositiveInt16(actualPlayer + Offsets.ActualPlayer.Height),
             ReadPositiveInt16(actualPlayer + Offsets.ActualPlayer.Condition),
-            ReadPositiveInt16(actualPlayer + Offsets.ActualPlayer.Morale),
+            ReadOptionalByte(actualPlayer + Offsets.ActualPlayer.Morale),
             ReadPositiveInt16(actualPlayer + Offsets.ActualPlayer.CurrentAbility),
             ReadPositiveInt16(actualPlayer + Offsets.ActualPlayer.PotentialAbility),
             ReadPositiveInt16(actualPlayer + Offsets.ActualPlayer.CurrentReputation),
@@ -1278,8 +1278,9 @@ internal sealed class GameMatchTickHook : IDisposable
             ReadOptionalByte(person + Offsets.Person.InternationalApps),
             ReadOptionalByte(person + Offsets.Person.InternationalGoals),
             ReadOptionalByte(person + Offsets.Person.YouthApps),
-            ReadOptionalByte(person + Offsets.Person.YouthGoals));
-        return profile.WeeklyWage.HasValue || profile.HeightCm.HasValue || profile.Condition.HasValue || profile.Morale.HasValue ||
+            ReadOptionalByte(person + Offsets.Person.YouthGoals),
+            ReadPositiveInt16(actualPlayer + Offsets.ActualPlayer.MatchSharpness));
+        return profile.WeeklyWage.HasValue || profile.HeightCm.HasValue || profile.Condition.HasValue || profile.MatchSharpness.HasValue || profile.Morale.HasValue ||
                profile.DateOfBirth is not null || profile.NationUid.HasValue || profile.BodyType.HasValue || profile.GuideValueGbp.HasValue ||
                profile.InternationalApps.HasValue || profile.YouthApps.HasValue
             ? profile
