@@ -238,6 +238,81 @@ export type PlayerProfile = {
   youthApps?: number
   youthGoals?: number
   matchSharpness?: number
+  seasonStats?: PlayerSeasonStats
+}
+
+export type PlayerSeasonStats = {
+  friendly?: PlayerSeasonStatsSlot
+  league?: PlayerSeasonStatsSlot
+  cup?: PlayerSeasonStatsSlot
+  otherCompetition?: PlayerSeasonStatsSlot
+  international?: PlayerSeasonStatsSlot
+  clubTotal?: PlayerSeasonStatsSlot
+  unknown?: PlayerSeasonStatsSlot
+  internationalTotal?: PlayerSeasonStatsSlot
+}
+
+export type PlayerSeasonStatsSlot = {
+  ratingSumTimes10?: number
+  minutes?: number
+  starts?: number
+  substituteAppearances?: number
+  appearances?: number
+  goals?: number
+  assists?: number
+  goalsConceded?: number
+  penaltyAttempts?: number
+  penaltiesScored?: number
+  playerOfMatchAwards?: number
+  redCards?: number
+  yellowCards?: number
+  cleanSheets?: number
+  detailed?: PlayerSeasonDetailedStats
+}
+
+export type PlayerSeasonDetailedStats = {
+  teamGoals?: number
+  teamGoalsConceded?: number
+  wins?: number
+  losses?: number
+  passesAttempted?: number
+  passesCompleted?: number
+  tacklesAttempted?: number
+  tacklesWon?: number
+  headersAttempted?: number
+  headersWon?: number
+  dribbles?: number
+  fouls?: number
+  fouled?: number
+  shots?: number
+  shotsOnTarget?: number
+  errorsLeadingToGoal?: number
+  distanceKmTimes10?: number
+  offsides?: number
+  openPlayCrossesCompleted?: number
+  keyPasses?: number
+  keyTackles?: number
+  interceptions?: number
+  chancesCreated?: number
+  blocks?: number
+  possessionLost?: number
+  possessionWon?: number
+  expectedGoalsTimes100?: number
+  expectedAssistsTimes100?: number
+  clearances?: number
+  goalsOutsideBox?: number
+  openPlayCrossesAttempted?: number
+  shotsOutsideBox?: number
+  goalsPreventedTimes100?: number
+  sprints?: number
+  progressivePasses?: number
+  pressesAttempted?: number
+  pressesWon?: number
+  openPlayKeyPasses?: number
+  nonPenaltyExpectedGoalsTimes100?: number
+  crossesAttempted?: number
+  crossesCompleted?: number
+  headersLost?: number
 }
 
 export type PlayerAttributes = {

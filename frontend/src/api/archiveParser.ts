@@ -9,7 +9,7 @@ import type {
   RealtimeTeamMetadata,
 } from "@/api/realtimeMatch"
 import type { ParsedLocalArchive } from "@/api/localArchive"
-import type { PlayerAttributes, PlayerPositionFamiliarities, PlayerProfile, PlayerTacticalAssignment, TeamSide } from "@/types/match"
+import type { PlayerAttributes, PlayerPositionFamiliarities, PlayerProfile, PlayerSeasonDetailedStats, PlayerSeasonStats, PlayerSeasonStatsSlot, PlayerTacticalAssignment, TeamSide } from "@/types/match"
 import { playerPositionLabels } from "@/types/match"
 
 const magic = "FMLENS2\0"
@@ -634,8 +634,94 @@ function readProfile(reader: ArchiveBufferReader, structureMinor: number): Playe
     profile.youthApps = readNullableInt(reader)
     profile.youthGoals = readNullableInt(reader)
   }
-  if (structureMinor >= 7) profile.matchSharpness = readNullableInt(reader)
+  if (structureMinor >= 7) {
+    profile.matchSharpness = readNullableInt(reader)
+    profile.seasonStats = readSeasonStats(reader)
+  }
   return profile
+}
+
+function readSeasonStats(reader: ArchiveBufferReader): PlayerSeasonStats | undefined {
+  if (!reader.readBoolean()) return undefined
+  return {
+    friendly: readSeasonStatsSlot(reader),
+    league: readSeasonStatsSlot(reader),
+    cup: readSeasonStatsSlot(reader),
+    otherCompetition: readSeasonStatsSlot(reader),
+    international: readSeasonStatsSlot(reader),
+    clubTotal: readSeasonStatsSlot(reader),
+    unknown: readSeasonStatsSlot(reader),
+    internationalTotal: readSeasonStatsSlot(reader),
+  }
+}
+
+function readSeasonStatsSlot(reader: ArchiveBufferReader): PlayerSeasonStatsSlot | undefined {
+  if (!reader.readBoolean()) return undefined
+  return {
+    ratingSumTimes10: readNullableInt(reader),
+    minutes: readNullableInt(reader),
+    starts: readNullableInt(reader),
+    substituteAppearances: readNullableInt(reader),
+    appearances: readNullableInt(reader),
+    goals: readNullableInt(reader),
+    assists: readNullableInt(reader),
+    goalsConceded: readNullableInt(reader),
+    penaltyAttempts: readNullableInt(reader),
+    penaltiesScored: readNullableInt(reader),
+    playerOfMatchAwards: readNullableInt(reader),
+    redCards: readNullableInt(reader),
+    yellowCards: readNullableInt(reader),
+    cleanSheets: readNullableInt(reader),
+    detailed: readSeasonDetailedStats(reader),
+  }
+}
+
+function readSeasonDetailedStats(reader: ArchiveBufferReader): PlayerSeasonDetailedStats | undefined {
+  if (!reader.readBoolean()) return undefined
+  return {
+    teamGoals: readNullableInt(reader),
+    teamGoalsConceded: readNullableInt(reader),
+    wins: readNullableInt(reader),
+    losses: readNullableInt(reader),
+    passesAttempted: readNullableInt(reader),
+    passesCompleted: readNullableInt(reader),
+    tacklesAttempted: readNullableInt(reader),
+    tacklesWon: readNullableInt(reader),
+    headersAttempted: readNullableInt(reader),
+    headersWon: readNullableInt(reader),
+    dribbles: readNullableInt(reader),
+    fouls: readNullableInt(reader),
+    fouled: readNullableInt(reader),
+    shots: readNullableInt(reader),
+    shotsOnTarget: readNullableInt(reader),
+    errorsLeadingToGoal: readNullableInt(reader),
+    distanceKmTimes10: readNullableInt(reader),
+    offsides: readNullableInt(reader),
+    openPlayCrossesCompleted: readNullableInt(reader),
+    keyPasses: readNullableInt(reader),
+    keyTackles: readNullableInt(reader),
+    interceptions: readNullableInt(reader),
+    chancesCreated: readNullableInt(reader),
+    blocks: readNullableInt(reader),
+    possessionLost: readNullableInt(reader),
+    possessionWon: readNullableInt(reader),
+    expectedGoalsTimes100: readNullableInt(reader),
+    expectedAssistsTimes100: readNullableInt(reader),
+    clearances: readNullableInt(reader),
+    goalsOutsideBox: readNullableInt(reader),
+    openPlayCrossesAttempted: readNullableInt(reader),
+    shotsOutsideBox: readNullableInt(reader),
+    goalsPreventedTimes100: readNullableInt(reader),
+    sprints: readNullableInt(reader),
+    progressivePasses: readNullableInt(reader),
+    pressesAttempted: readNullableInt(reader),
+    pressesWon: readNullableInt(reader),
+    openPlayKeyPasses: readNullableInt(reader),
+    nonPenaltyExpectedGoalsTimes100: readNullableInt(reader),
+    crossesAttempted: readNullableInt(reader),
+    crossesCompleted: readNullableInt(reader),
+    headersLost: readNullableInt(reader),
+  }
 }
 
 function readAttributes(

@@ -1279,13 +1279,103 @@ internal sealed class GameMatchTickHook : IDisposable
             ReadOptionalByte(person + Offsets.Person.InternationalGoals),
             ReadOptionalByte(person + Offsets.Person.YouthApps),
             ReadOptionalByte(person + Offsets.Person.YouthGoals),
-            ReadPositiveInt16(actualPlayer + Offsets.ActualPlayer.MatchSharpness));
+            ReadPositiveInt16(actualPlayer + Offsets.ActualPlayer.MatchSharpness),
+            ReadPlayerSeasonStats(actualPlayer));
         return profile.WeeklyWage.HasValue || profile.HeightCm.HasValue || profile.Condition.HasValue || profile.MatchSharpness.HasValue || profile.Morale.HasValue ||
                profile.DateOfBirth is not null || profile.NationUid.HasValue || profile.BodyType.HasValue || profile.GuideValueGbp.HasValue ||
-               profile.InternationalApps.HasValue || profile.YouthApps.HasValue
+               profile.InternationalApps.HasValue || profile.YouthApps.HasValue || profile.SeasonStats is not null
             ? profile
             : null;
     }
+
+    private PlayerSeasonStats? ReadPlayerSeasonStats(nint actualPlayer)
+    {
+        if (!_memoryReader.TryReadPointer(actualPlayer + Offsets.ActualPlayer.SeasonStats, out var seasonStats) ||
+            seasonStats == default)
+        {
+            return null;
+        }
+
+        return new PlayerSeasonStats(
+            Friendly: ReadPlayerSeasonStatsSlot(seasonStats, Offsets.SeasonStats.Friendly),
+            League: ReadPlayerSeasonStatsSlot(seasonStats, Offsets.SeasonStats.League),
+            Cup: ReadPlayerSeasonStatsSlot(seasonStats, Offsets.SeasonStats.Cup),
+            OtherCompetition: ReadPlayerSeasonStatsSlot(seasonStats, Offsets.SeasonStats.OtherCompetition),
+            International: ReadPlayerSeasonStatsSlot(seasonStats, Offsets.SeasonStats.International),
+            ClubTotal: ReadPlayerSeasonStatsSlot(seasonStats, Offsets.SeasonStats.ClubTotal),
+            Unknown: ReadPlayerSeasonStatsSlot(seasonStats, Offsets.SeasonStats.Unknown),
+            InternationalTotal: ReadPlayerSeasonStatsSlot(seasonStats, Offsets.SeasonStats.InternationalTotal));
+    }
+
+    private PlayerSeasonStatsSlot? ReadPlayerSeasonStatsSlot(nint seasonStats, int offset)
+    {
+        if (!_memoryReader.TryReadPointer(seasonStats + offset, out var slot) || slot == default)
+        {
+            return null;
+        }
+
+        _memoryReader.TryReadPointer(slot + Offsets.SeasonStatsSlot.DetailedStats, out var detailed);
+        return new PlayerSeasonStatsSlot(
+            RatingSumTimes10: ReadOptionalUInt16(slot + Offsets.SeasonStatsSlot.RatingSumTimes10),
+            Minutes: ReadOptionalUInt16(slot + Offsets.SeasonStatsSlot.Minutes),
+            Starts: ReadOptionalByte(slot + Offsets.SeasonStatsSlot.Starts),
+            SubstituteAppearances: ReadOptionalByte(slot + Offsets.SeasonStatsSlot.SubstituteAppearances),
+            Appearances: ReadOptionalByte(slot + Offsets.SeasonStatsSlot.Appearances),
+            Goals: ReadOptionalByte(slot + Offsets.SeasonStatsSlot.Goals),
+            Assists: ReadOptionalByte(slot + Offsets.SeasonStatsSlot.Assists),
+            GoalsConceded: ReadOptionalByte(slot + Offsets.SeasonStatsSlot.GoalsConceded),
+            PenaltyAttempts: ReadOptionalByte(slot + Offsets.SeasonStatsSlot.PenaltyAttempts),
+            PenaltiesScored: ReadOptionalByte(slot + Offsets.SeasonStatsSlot.PenaltiesScored),
+            PlayerOfMatchAwards: ReadOptionalByte(slot + Offsets.SeasonStatsSlot.PlayerOfMatchAwards),
+            RedCards: ReadOptionalByte(slot + Offsets.SeasonStatsSlot.RedCards),
+            YellowCards: ReadOptionalByte(slot + Offsets.SeasonStatsSlot.YellowCards),
+            CleanSheets: ReadOptionalByte(slot + Offsets.SeasonStatsSlot.CleanSheets),
+            Detailed: detailed == default ? null : ReadPlayerSeasonDetailedStats(detailed));
+    }
+
+    private PlayerSeasonDetailedStats ReadPlayerSeasonDetailedStats(nint detailed) => new(
+        TeamGoals: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.TeamGoals),
+        TeamGoalsConceded: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.TeamGoalsConceded),
+        Wins: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.Wins),
+        Losses: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.Losses),
+        PassesAttempted: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.PassesAttempted),
+        PassesCompleted: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.PassesCompleted),
+        TacklesAttempted: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.TacklesAttempted),
+        TacklesWon: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.TacklesWon),
+        HeadersAttempted: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.HeadersAttempted),
+        HeadersWon: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.HeadersWon),
+        Dribbles: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.Dribbles),
+        Fouls: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.Fouls),
+        Fouled: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.Fouled),
+        Shots: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.Shots),
+        ShotsOnTarget: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.ShotsOnTarget),
+        ErrorsLeadingToGoal: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.ErrorsLeadingToGoal),
+        DistanceKmTimes10: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.DistanceKmTimes10),
+        Offsides: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.Offsides),
+        OpenPlayCrossesCompleted: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.OpenPlayCrossesCompleted),
+        KeyPasses: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.KeyPasses),
+        KeyTackles: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.KeyTackles),
+        Interceptions: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.Interceptions),
+        ChancesCreated: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.ChancesCreated),
+        Blocks: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.Blocks),
+        PossessionLost: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.PossessionLost),
+        PossessionWon: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.PossessionWon),
+        ExpectedGoalsTimes100: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.ExpectedGoalsTimes100),
+        ExpectedAssistsTimes100: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.ExpectedAssistsTimes100),
+        Clearances: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.Clearances),
+        GoalsOutsideBox: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.GoalsOutsideBox),
+        OpenPlayCrossesAttempted: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.OpenPlayCrossesAttempted),
+        ShotsOutsideBox: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.ShotsOutsideBox),
+        GoalsPreventedTimes100: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.GoalsPreventedTimes100),
+        Sprints: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.Sprints),
+        ProgressivePasses: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.ProgressivePasses),
+        PressesAttempted: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.PressesAttempted),
+        PressesWon: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.PressesWon),
+        OpenPlayKeyPasses: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.OpenPlayKeyPasses),
+        NonPenaltyExpectedGoalsTimes100: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.NonPenaltyExpectedGoalsTimes100),
+        CrossesAttempted: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.CrossesAttempted),
+        CrossesCompleted: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.CrossesCompleted),
+        HeadersLost: ReadOptionalUInt16(detailed + Offsets.SeasonDetailedStats.HeadersLost));
 
     private PlayerAttributes? ReadPlayerAttributes(nint person)
     {
@@ -1401,6 +1491,11 @@ internal sealed class GameMatchTickHook : IDisposable
     private int? ReadOptionalByte(nint address)
     {
         return _memoryReader.TryReadByte(address, out var value) ? value : null;
+    }
+
+    private int? ReadOptionalUInt16(nint address)
+    {
+        return _memoryReader.TryReadUInt16(address, out var value) ? value : null;
     }
 
     private string? ReadPersonName(nint person, int fieldOffset)

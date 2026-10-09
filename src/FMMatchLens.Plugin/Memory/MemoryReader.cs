@@ -28,6 +28,14 @@ internal sealed class MemoryReader
         return true;
     }
 
+    public bool TryReadUInt16(nint address, out ushort value)
+    {
+        value = default;
+        if (!TryReadInt16(address, out var signedValue)) return false;
+        value = unchecked((ushort)signedValue);
+        return true;
+    }
+
     public bool TryReadInt32(nint address, out int value)
     {
         value = default;

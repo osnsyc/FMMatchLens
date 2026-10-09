@@ -580,7 +580,8 @@ internal sealed class RealtimeMatchTimeline
                        InternationalApps: not null,
                        InternationalGoals: not null,
                        YouthApps: not null,
-                       YouthGoals: not null
+                       YouthGoals: not null,
+                       SeasonStats: not null
                    } &&
                    player.Attributes is not null &&
                    !player.DisplayName.StartsWith("Player ", StringComparison.Ordinal));
@@ -634,7 +635,8 @@ internal sealed class RealtimeMatchTimeline
             incoming.InternationalGoals ?? current.InternationalGoals,
             incoming.YouthApps ?? current.YouthApps,
             incoming.YouthGoals ?? current.YouthGoals,
-            incoming.MatchSharpness ?? current.MatchSharpness);
+            incoming.MatchSharpness ?? current.MatchSharpness,
+            current.SeasonStats ?? incoming.SeasonStats);
     }
 
     private static PlayerAttributes? MergeAttributes(PlayerAttributes? current, PlayerAttributes? incoming)

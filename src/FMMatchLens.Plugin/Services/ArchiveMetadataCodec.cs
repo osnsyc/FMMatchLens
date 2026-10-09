@@ -47,7 +47,8 @@ internal static class ArchiveMetadataCodec
                 InternationalApps: not null,
                 InternationalGoals: not null,
                 YouthApps: not null,
-                YouthGoals: not null
+                YouthGoals: not null,
+                SeasonStats: not null
             } &&
             player.Attributes is not null &&
             !string.Equals(player.DisplayName, $"Player {player.PlayerId}", StringComparison.Ordinal));
@@ -634,6 +635,7 @@ internal static class ArchiveMetadataCodec
         if (structureMinor >= 7)
         {
             WriteNullableInt(writer, profile.MatchSharpness);
+            WriteSeasonStats(writer, profile.SeasonStats);
         }
     }
 
@@ -659,9 +661,137 @@ internal static class ArchiveMetadataCodec
         }
         if (structureMinor >= 7)
         {
-            profile = profile with { MatchSharpness = ReadNullableInt(reader) };
+            profile = profile with
+            {
+                MatchSharpness = ReadNullableInt(reader),
+                SeasonStats = ReadSeasonStats(reader)
+            };
         }
         return profile;
+    }
+
+    private static void WriteSeasonStats(BinaryWriter writer, PlayerSeasonStats? stats)
+    {
+        writer.Write(stats is not null);
+        if (stats is null) return;
+        WriteSeasonStatsSlot(writer, stats.Friendly);
+        WriteSeasonStatsSlot(writer, stats.League);
+        WriteSeasonStatsSlot(writer, stats.Cup);
+        WriteSeasonStatsSlot(writer, stats.OtherCompetition);
+        WriteSeasonStatsSlot(writer, stats.International);
+        WriteSeasonStatsSlot(writer, stats.ClubTotal);
+        WriteSeasonStatsSlot(writer, stats.Unknown);
+        WriteSeasonStatsSlot(writer, stats.InternationalTotal);
+    }
+
+    private static PlayerSeasonStats? ReadSeasonStats(BinaryReader reader)
+    {
+        if (!reader.ReadBoolean()) return null;
+        return new PlayerSeasonStats(
+            ReadSeasonStatsSlot(reader),
+            ReadSeasonStatsSlot(reader),
+            ReadSeasonStatsSlot(reader),
+            ReadSeasonStatsSlot(reader),
+            ReadSeasonStatsSlot(reader),
+            ReadSeasonStatsSlot(reader),
+            ReadSeasonStatsSlot(reader),
+            ReadSeasonStatsSlot(reader));
+    }
+
+    private static void WriteSeasonStatsSlot(BinaryWriter writer, PlayerSeasonStatsSlot? stats)
+    {
+        writer.Write(stats is not null);
+        if (stats is null) return;
+        WriteNullableInt(writer, stats.RatingSumTimes10);
+        WriteNullableInt(writer, stats.Minutes);
+        WriteNullableInt(writer, stats.Starts);
+        WriteNullableInt(writer, stats.SubstituteAppearances);
+        WriteNullableInt(writer, stats.Appearances);
+        WriteNullableInt(writer, stats.Goals);
+        WriteNullableInt(writer, stats.Assists);
+        WriteNullableInt(writer, stats.GoalsConceded);
+        WriteNullableInt(writer, stats.PenaltyAttempts);
+        WriteNullableInt(writer, stats.PenaltiesScored);
+        WriteNullableInt(writer, stats.PlayerOfMatchAwards);
+        WriteNullableInt(writer, stats.RedCards);
+        WriteNullableInt(writer, stats.YellowCards);
+        WriteNullableInt(writer, stats.CleanSheets);
+        WriteSeasonDetailedStats(writer, stats.Detailed);
+    }
+
+    private static PlayerSeasonStatsSlot? ReadSeasonStatsSlot(BinaryReader reader)
+    {
+        if (!reader.ReadBoolean()) return null;
+        return new PlayerSeasonStatsSlot(
+            ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader),
+            ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader),
+            ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader),
+            ReadNullableInt(reader), ReadNullableInt(reader), ReadSeasonDetailedStats(reader));
+    }
+
+    private static void WriteSeasonDetailedStats(BinaryWriter writer, PlayerSeasonDetailedStats? stats)
+    {
+        writer.Write(stats is not null);
+        if (stats is null) return;
+        WriteNullableInt(writer, stats.TeamGoals);
+        WriteNullableInt(writer, stats.TeamGoalsConceded);
+        WriteNullableInt(writer, stats.Wins);
+        WriteNullableInt(writer, stats.Losses);
+        WriteNullableInt(writer, stats.PassesAttempted);
+        WriteNullableInt(writer, stats.PassesCompleted);
+        WriteNullableInt(writer, stats.TacklesAttempted);
+        WriteNullableInt(writer, stats.TacklesWon);
+        WriteNullableInt(writer, stats.HeadersAttempted);
+        WriteNullableInt(writer, stats.HeadersWon);
+        WriteNullableInt(writer, stats.Dribbles);
+        WriteNullableInt(writer, stats.Fouls);
+        WriteNullableInt(writer, stats.Fouled);
+        WriteNullableInt(writer, stats.Shots);
+        WriteNullableInt(writer, stats.ShotsOnTarget);
+        WriteNullableInt(writer, stats.ErrorsLeadingToGoal);
+        WriteNullableInt(writer, stats.DistanceKmTimes10);
+        WriteNullableInt(writer, stats.Offsides);
+        WriteNullableInt(writer, stats.OpenPlayCrossesCompleted);
+        WriteNullableInt(writer, stats.KeyPasses);
+        WriteNullableInt(writer, stats.KeyTackles);
+        WriteNullableInt(writer, stats.Interceptions);
+        WriteNullableInt(writer, stats.ChancesCreated);
+        WriteNullableInt(writer, stats.Blocks);
+        WriteNullableInt(writer, stats.PossessionLost);
+        WriteNullableInt(writer, stats.PossessionWon);
+        WriteNullableInt(writer, stats.ExpectedGoalsTimes100);
+        WriteNullableInt(writer, stats.ExpectedAssistsTimes100);
+        WriteNullableInt(writer, stats.Clearances);
+        WriteNullableInt(writer, stats.GoalsOutsideBox);
+        WriteNullableInt(writer, stats.OpenPlayCrossesAttempted);
+        WriteNullableInt(writer, stats.ShotsOutsideBox);
+        WriteNullableInt(writer, stats.GoalsPreventedTimes100);
+        WriteNullableInt(writer, stats.Sprints);
+        WriteNullableInt(writer, stats.ProgressivePasses);
+        WriteNullableInt(writer, stats.PressesAttempted);
+        WriteNullableInt(writer, stats.PressesWon);
+        WriteNullableInt(writer, stats.OpenPlayKeyPasses);
+        WriteNullableInt(writer, stats.NonPenaltyExpectedGoalsTimes100);
+        WriteNullableInt(writer, stats.CrossesAttempted);
+        WriteNullableInt(writer, stats.CrossesCompleted);
+        WriteNullableInt(writer, stats.HeadersLost);
+    }
+
+    private static PlayerSeasonDetailedStats? ReadSeasonDetailedStats(BinaryReader reader)
+    {
+        if (!reader.ReadBoolean()) return null;
+        return new PlayerSeasonDetailedStats(
+            ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader),
+            ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader),
+            ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader),
+            ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader),
+            ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader),
+            ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader),
+            ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader),
+            ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader),
+            ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader),
+            ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader), ReadNullableInt(reader),
+            ReadNullableInt(reader), ReadNullableInt(reader));
     }
 
     private static string? NullIfEmpty(string value) => string.IsNullOrEmpty(value) ? null : value;

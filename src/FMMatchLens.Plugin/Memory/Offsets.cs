@@ -481,6 +481,7 @@ internal static class Offsets
     {
         public const int Id = 0x8;
         public const int ObjDuni = 0xC;
+        public const int SeasonStats = 0x108;
         public const int PositionGk = 0x150;
         public const int Crossing = 0x15F;
         public const int Dribbling = 0x160;
@@ -543,6 +544,87 @@ internal static class Offsets
         public const int CurrentAbility = 0x264;
         public const int PotentialAbility = 0x266;
         public const int Morale = 0x26C; //u8
+    }
+
+    public static class SeasonStats
+    {
+        // Each field points to a SeasonStatsSlot object.
+        public const int Friendly = 0x20;
+        public const int League = 0x28;
+        public const int Cup = 0x30;
+        public const int OtherCompetition = 0x38;
+        public const int International = 0x40;
+        // Club Total = League + Cup + OtherCompetition.
+        public const int ClubTotal = 0x48;
+        public const int Unknown = 0x50;
+        public const int InternationalTotal = 0x58;
+    }
+
+    public static class SeasonStatsSlot
+    {
+        public const int Size = 0x18;
+        public const int DetailedStats = 0x00; // ptr to SeasonDetailedStats
+        public const int RatingSumTimes10 = 0x08; // u16
+        public const int Minutes = 0x0A; // u16
+        public const int Starts = 0x0C; // u8, 
+        public const int SubstituteAppearances = 0x0D; // u8, 
+        public const int Appearances = 0x0E; // u8, 
+        public const int Goals = 0x0F; // u8, 
+        public const int Assists = 0x10; // u8, 
+        public const int GoalsConceded = 0x11; // u8, goalkeeper
+        public const int PenaltyAttempts = 0x12; // u8, 
+        public const int PenaltiesScored = 0x13; // u8, 
+        public const int PlayerOfMatchAwards = 0x14; // u8, 
+        public const int RedCards = 0x15; // u8, 
+        public const int YellowCards = 0x16; // u8, 
+        public const int CleanSheets = 0x17; // u8, 
+    }
+
+    public static class SeasonDetailedStats
+    {
+        public const int Size = 0x78;
+        public const int TeamGoals = 0x00; // u16
+        public const int TeamGoalsConceded = 0x02; // u16
+        public const int Wins = 0x04; // u16
+        public const int Losses = 0x06; // u16
+        public const int PassesAttempted = 0x08; // u16
+        public const int PassesCompleted = 0x0A; // u16
+        public const int TacklesAttempted = 0x0C; // u16
+        public const int TacklesWon = 0x0E; // u16
+        public const int HeadersAttempted = 0x10; // u16
+        public const int HeadersWon = 0x12; // u16
+        public const int Dribbles = 0x14; // u16
+        public const int Fouls = 0x16; // u16
+        public const int Fouled = 0x18; // u16
+        public const int Shots = 0x1A; // u16
+        public const int ShotsOnTarget = 0x1C; // u16
+        public const int ErrorsLeadingToGoal = 0x28; // u16
+        public const int DistanceKmTimes10 = 0x2E; // u16
+        public const int Offsides = 0x30; // u16
+        public const int OpenPlayCrossesCompleted = 0x34; // u16
+        public const int KeyPasses = 0x36; // u16
+        public const int KeyTackles = 0x38; // u16
+        public const int Interceptions = 0x3C; // u16
+        public const int ChancesCreated = 0x3E; // u16
+        public const int Blocks = 0x40; // u16
+        public const int PossessionLost = 0x44; // u16
+        public const int PossessionWon = 0x46; // u16
+        public const int ExpectedGoalsTimes100 = 0x48; // u16
+        public const int ExpectedAssistsTimes100 = 0x4A; // u16
+        public const int Clearances = 0x4C; // u16
+        public const int GoalsOutsideBox = 0x52; // u16
+        public const int OpenPlayCrossesAttempted = 0x5A; // u16
+        public const int ShotsOutsideBox = 0x5C; // u16
+        public const int GoalsPreventedTimes100 = 0x5E; // u16
+        public const int Sprints = 0x60; // u16
+        public const int ProgressivePasses = 0x64; // u16
+        public const int PressesAttempted = 0x66; // u16
+        public const int PressesWon = 0x68; // u16
+        public const int OpenPlayKeyPasses = 0x6A; // u16
+        public const int NonPenaltyExpectedGoalsTimes100 = 0x6C; // u16
+        public const int CrossesAttempted = 0x70; // u16
+        public const int CrossesCompleted = 0x72; // u16
+        public const int HeadersLost = 0x76; // u16
     }
 
     public static class PlayerStats

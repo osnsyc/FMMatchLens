@@ -34,6 +34,9 @@ import type {
   MatchEvent,
   MatchPlayer,
   PlayerPositionFamiliarities,
+  PlayerSeasonDetailedStats,
+  PlayerSeasonStats,
+  PlayerSeasonStatsSlot,
   PlayerStats,
   TeamSide,
 } from "@/types/match"
@@ -1762,6 +1765,7 @@ function buildRadarAxes(
 }
 
 type StatGroupId = "key" | "passing" | "attack" | "defence" | "goalkeeping" | "other"
+type PlayerDataScope = "match" | keyof PlayerSeasonStats
 type SortDirection = "asc" | "desc"
 type PlayerSort =
   | { kind: "initial" }
@@ -1771,6 +1775,7 @@ type PlayerSort =
 type PlayerMetric = {
   id: string
   value: (player: MatchPlayer) => number | undefined
+  seasonValue?: (stats: PlayerSeasonStatsSlot) => number | undefined
   format?: (value: number) => string
 }
 
@@ -1782,61 +1787,79 @@ const ratio = (completed: keyof PlayerStats, attempted: keyof PlayerStats) => (p
   const total = Number(player.stats[attempted] ?? 0)
   return total > 0 ? Number(player.stats[completed] ?? 0) / total * 100 : 0
 }
+const seasonSlotValue = (key: keyof PlayerSeasonStatsSlot) => (stats: PlayerSeasonStatsSlot) => {
+  const value = stats[key]
+  return typeof value === "number" ? value : undefined
+}
+const seasonDetailedValue = (key: keyof PlayerSeasonDetailedStats) => (stats: PlayerSeasonStatsSlot) => stats.detailed?.[key]
+const seasonDetailedRatio = (completed: keyof PlayerSeasonDetailedStats, attempted: keyof PlayerSeasonDetailedStats) =>
+  (stats: PlayerSeasonStatsSlot) => {
+    const completedValue = stats.detailed?.[completed]
+    const attemptedValue = stats.detailed?.[attempted]
+    if (completedValue == null || attemptedValue == null) return undefined
+    return attemptedValue > 0 ? completedValue / attemptedValue * 100 : 0
+  }
+const seasonRating = (stats: PlayerSeasonStatsSlot) => {
+  const appearances = Number(stats.appearances ?? 0)
+  return appearances > 0 && stats.ratingSumTimes10 != null
+    ? stats.ratingSumTimes10 / appearances / 10
+    : undefined
+}
 
 const playerStatGroups: Array<{ id: StatGroupId; fields: PlayerMetric[] }> = [
   {
     id: "key",
     fields: [
-      { id: "distance", value: (player) => Number(player.stats.distanceM ?? 0) / 1000, format: (value) => `${value.toFixed(2)} km` },
-      { id: "passes", value: statValue("passes"), format: integer },
-      { id: "passAccuracy", value: ratio("passesCompleted", "passes"), format: percent },
-      { id: "xg", value: statValue("xg"), format: decimal(2) },
-      { id: "goals", value: statValue("goals"), format: integer },
-      { id: "xa", value: statValue("xa"), format: decimal(2) },
-      { id: "assists", value: statValue("assists"), format: integer },
-      { id: "rating", value: (player) => player.rating, format: decimal(2) },
+      { id: "distance", value: (player) => Number(player.stats.distanceM ?? 0) / 1000, seasonValue: (stats) => stats.detailed?.distanceKmTimes10 == null ? undefined : stats.detailed.distanceKmTimes10 / 10, format: (value) => `${value.toFixed(2)} km` },
+      { id: "passes", value: statValue("passes"), seasonValue: seasonDetailedValue("passesAttempted"), format: integer },
+      { id: "passAccuracy", value: ratio("passesCompleted", "passes"), seasonValue: seasonDetailedRatio("passesCompleted", "passesAttempted"), format: percent },
+      { id: "xg", value: statValue("xg"), seasonValue: (stats) => stats.detailed?.expectedGoalsTimes100 == null ? undefined : stats.detailed.expectedGoalsTimes100 / 100, format: decimal(2) },
+      { id: "goals", value: statValue("goals"), seasonValue: seasonSlotValue("goals"), format: integer },
+      { id: "xa", value: statValue("xa"), seasonValue: (stats) => stats.detailed?.expectedAssistsTimes100 == null ? undefined : stats.detailed.expectedAssistsTimes100 / 100, format: decimal(2) },
+      { id: "assists", value: statValue("assists"), seasonValue: seasonSlotValue("assists"), format: integer },
+      { id: "rating", value: (player) => player.rating, seasonValue: seasonRating, format: decimal(2) },
     ],
   },
   {
     id: "passing",
     fields: [
-      { id: "passes", value: statValue("passes"), format: integer },
-      { id: "passesCompleted", value: statValue("passesCompleted"), format: integer },
-      { id: "passAccuracy", value: ratio("passesCompleted", "passes"), format: percent },
-      { id: "keyPasses", value: statValue("keyPasses"), format: integer },
-      { id: "crosses", value: statValue("crosses"), format: integer },
-      { id: "crossesCompleted", value: statValue("crossesCompleted"), format: integer },
-      { id: "crossAccuracy", value: ratio("crossesCompleted", "crosses"), format: percent },
+      { id: "passes", value: statValue("passes"), seasonValue: seasonDetailedValue("passesAttempted"), format: integer },
+      { id: "passesCompleted", value: statValue("passesCompleted"), seasonValue: seasonDetailedValue("passesCompleted"), format: integer },
+      { id: "passAccuracy", value: ratio("passesCompleted", "passes"), seasonValue: seasonDetailedRatio("passesCompleted", "passesAttempted"), format: percent },
+      { id: "keyPasses", value: statValue("keyPasses"), seasonValue: seasonDetailedValue("keyPasses"), format: integer },
+      { id: "crosses", value: statValue("crosses"), seasonValue: seasonDetailedValue("crossesAttempted"), format: integer },
+      { id: "crossesCompleted", value: statValue("crossesCompleted"), seasonValue: seasonDetailedValue("crossesCompleted"), format: integer },
+      { id: "crossAccuracy", value: ratio("crossesCompleted", "crosses"), seasonValue: seasonDetailedRatio("crossesCompleted", "crossesAttempted"), format: percent },
     ],
   },
   {
     id: "attack",
     fields: [
-      { id: "goals", value: statValue("goals"), format: integer },
-      { id: "penalties", value: statValue("penalties"), format: integer },
-      { id: "assists", value: statValue("assists"), format: integer },
-      { id: "xg", value: statValue("xg"), format: decimal(2) },
-      { id: "xa", value: statValue("xa"), format: decimal(2) },
-      { id: "shots", value: statValue("shots"), format: integer },
-      { id: "shotsOnTarget", value: statValue("shotsOnTarget"), format: integer },
+      { id: "goals", value: statValue("goals"), seasonValue: seasonSlotValue("goals"), format: integer },
+      { id: "penalties", value: statValue("penalties"), seasonValue: seasonSlotValue("penaltiesScored"), format: integer },
+      { id: "assists", value: statValue("assists"), seasonValue: seasonSlotValue("assists"), format: integer },
+      { id: "xg", value: statValue("xg"), seasonValue: (stats) => stats.detailed?.expectedGoalsTimes100 == null ? undefined : stats.detailed.expectedGoalsTimes100 / 100, format: decimal(2) },
+      { id: "xa", value: statValue("xa"), seasonValue: (stats) => stats.detailed?.expectedAssistsTimes100 == null ? undefined : stats.detailed.expectedAssistsTimes100 / 100, format: decimal(2) },
+      { id: "shots", value: statValue("shots"), seasonValue: seasonDetailedValue("shots"), format: integer },
+      { id: "shotsOnTarget", value: statValue("shotsOnTarget"), seasonValue: seasonDetailedValue("shotsOnTarget"), format: integer },
       { id: "blockedShots", value: statValue("blockedShots"), format: integer },
       { id: "clearCutChances", value: statValue("clearCutChances"), format: integer },
       { id: "hitWoodwork", value: statValue("hitWoodwork"), format: integer },
-      { id: "dribbles", value: statValue("dribbles"), format: integer },
+      { id: "dribbles", value: statValue("dribbles"), seasonValue: seasonDetailedValue("dribbles"), format: integer },
     ],
   },
   {
     id: "defence",
     fields: [
-      { id: "tacklesAttempted", value: statValue("tacklesAttempted"), format: integer },
-      { id: "tacklesWon", value: statValue("tacklesWon"), format: integer },
-      { id: "tackleAccuracy", value: ratio("tacklesWon", "tacklesAttempted"), format: percent },
-      { id: "keyTackles", value: statValue("keyTackles"), format: integer },
-      { id: "interceptions", value: statValue("interceptions"), format: integer },
-      { id: "clearances", value: statValue("clearances"), format: integer },
-      { id: "aerials", value: statValue("aerials"), format: integer },
-      { id: "aerialsWon", value: statValue("aerialsWon"), format: integer },
-      { id: "aerialAccuracy", value: ratio("aerialsWon", "aerials"), format: percent },
+      { id: "tacklesAttempted", value: statValue("tacklesAttempted"), seasonValue: seasonDetailedValue("tacklesAttempted"), format: integer },
+      { id: "tacklesWon", value: statValue("tacklesWon"), seasonValue: seasonDetailedValue("tacklesWon"), format: integer },
+      { id: "tackleAccuracy", value: ratio("tacklesWon", "tacklesAttempted"), seasonValue: seasonDetailedRatio("tacklesWon", "tacklesAttempted"), format: percent },
+      { id: "keyTackles", value: statValue("keyTackles"), seasonValue: seasonDetailedValue("keyTackles"), format: integer },
+      { id: "interceptions", value: statValue("interceptions"), seasonValue: seasonDetailedValue("interceptions"), format: integer },
+      { id: "clearances", value: statValue("clearances"), seasonValue: seasonDetailedValue("clearances"), format: integer },
+      { id: "aerials", value: statValue("aerials"), seasonValue: seasonDetailedValue("headersAttempted"), format: integer },
+      { id: "aerialsWon", value: statValue("aerialsWon"), seasonValue: seasonDetailedValue("headersWon"), format: integer },
+      { id: "aerialAccuracy", value: ratio("aerialsWon", "aerials"), seasonValue: seasonDetailedRatio("headersWon", "headersAttempted"), format: percent },
     ],
   },
   {
@@ -1851,10 +1874,10 @@ const playerStatGroups: Array<{ id: StatGroupId; fields: PlayerMetric[] }> = [
   {
     id: "other",
     fields: [
-      { id: "distance", value: (player) => Number(player.stats.distanceM ?? 0) / 1000, format: (value) => `${value.toFixed(2)} km` },
+      { id: "distance", value: (player) => Number(player.stats.distanceM ?? 0) / 1000, seasonValue: (stats) => stats.detailed?.distanceKmTimes10 == null ? undefined : stats.detailed.distanceKmTimes10 / 10, format: (value) => `${value.toFixed(2)} km` },
       { id: "ownGoals", value: statValue("ownGoals"), format: integer },
-      { id: "fouls", value: statValue("fouls"), format: integer },
-      { id: "fouled", value: statValue("fouled"), format: integer },
+      { id: "fouls", value: statValue("fouls"), seasonValue: seasonDetailedValue("fouls"), format: integer },
+      { id: "fouled", value: statValue("fouled"), seasonValue: seasonDetailedValue("fouled"), format: integer },
       { id: "corners", value: statValue("corners"), format: integer },
       { id: "throwIns", value: statValue("throwIns"), format: integer },
       { id: "defensiveFreeKicks", value: statValue("defensiveFreeKicks"), format: integer },
@@ -1906,6 +1929,28 @@ const playerMetricTranslationKeys: Record<string, string> = {
   attackingFreeKicks: "stats.attackingFreeKicks",
 }
 
+const playerDataScopes: PlayerDataScope[] = [
+  "match",
+  "league",
+  "cup",
+  "clubTotal",
+  "international",
+  "internationalTotal",
+  "friendly",
+  "otherCompetition",
+  "unknown",
+]
+
+function playerSeasonStatsSlot(player: MatchPlayer, scope: PlayerDataScope) {
+  return scope === "match" ? undefined : player.profile?.seasonStats?.[scope]
+}
+
+function playerMetricValue(player: MatchPlayer, field: PlayerMetric, scope: PlayerDataScope) {
+  if (scope === "match") return field.value(player)
+  const stats = playerSeasonStatsSlot(player, scope)
+  return stats && field.seasonValue ? field.seasonValue(stats) : undefined
+}
+
 function TeamStatsDrawer({
   open,
   title,
@@ -1927,6 +1972,7 @@ function TeamStatsDrawer({
 }) {
   const { t } = useTranslation()
   const [activeGroup, setActiveGroup] = useState<StatGroupId>("key")
+  const [dataScope, setDataScope] = useState<PlayerDataScope>("match")
   const [sort, setSort] = useState<PlayerSort>({ kind: "initial" })
   const width = window.innerWidth / 2
   const group = playerStatGroups.find((item) => item.id === activeGroup) ?? playerStatGroups[0]
@@ -1941,22 +1987,28 @@ function TeamStatsDrawer({
       .sort((left, right) => {
         const leftValue = sort.kind === "number"
           ? left.player.shirtNumber
-          : sortMetric?.value(left.player)
+          : sortMetric ? playerMetricValue(left.player, sortMetric, dataScope) : undefined
         const rightValue = sort.kind === "number"
           ? right.player.shirtNumber
-          : sortMetric?.value(right.player)
+          : sortMetric ? playerMetricValue(right.player, sortMetric, dataScope) : undefined
         if (leftValue == null && rightValue == null) return left.index - right.index
         if (leftValue == null) return 1
         if (rightValue == null) return -1
         return leftValue === rightValue ? left.index - right.index : (leftValue - rightValue) * direction
       })
       .map(({ player }) => player)
-  }, [players, sort, sortMetric])
+  }, [dataScope, players, sort, sortMetric])
 
   const selectGroup = (value: string | number) => {
     const nextGroup = playerStatGroups.find((item) => item.id === value)
     if (!nextGroup) return
     setActiveGroup(nextGroup.id)
+    setSort({ kind: "initial" })
+  }
+
+  const selectDataScope = (value: string) => {
+    if (!playerDataScopes.includes(value as PlayerDataScope)) return
+    setDataScope(value as PlayerDataScope)
     setSort({ kind: "initial" })
   }
 
@@ -1992,11 +2044,24 @@ function TeamStatsDrawer({
         <DrawerHeader className="relative flex-row items-center gap-3 border-b px-4 py-3">
           <div className="min-w-0 flex-1">
             <DrawerTitle className="truncate text-base font-semibold" style={{ color: teamColor }}>{title}</DrawerTitle>
-            <DrawerDescription className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
-              <span>{t("playerData.summary", { count: players.length })}</span>
-              <span className="inline-flex items-center gap-1"><span className="size-1.5 rounded-full bg-status-positive" />{t("playerData.teamBest")}</span>
-              <span className="inline-flex items-center gap-1"><span className="size-1.5 rounded-full bg-important-event" />{t("playerData.matchBest")}</span>
-            </DrawerDescription>
+            <div className="flex min-w-0 items-center gap-3">
+              <DrawerDescription className="flex shrink-0 items-center gap-x-3 whitespace-nowrap">
+                <span>{t("playerData.summary", { count: players.length })}</span>
+                <span className="inline-flex items-center gap-1"><span className="size-1.5 rounded-full bg-status-positive" />{t("playerData.teamBest")}</span>
+                <span className="inline-flex items-center gap-1"><span className="size-1.5 rounded-full bg-important-event" />{t("playerData.matchBest")}</span>
+              </DrawerDescription>
+              <div className="scrollbar-hidden min-w-0 flex-1 overflow-x-auto">
+                <NativeTabs
+                  items={playerDataScopes.map((scope) => ({ id: scope, label: t(`playerData.scopes.${scope}`), content: null }))}
+                  renderContent={false}
+                  value={dataScope}
+                  onValueChange={selectDataScope}
+                  className="w-max max-w-none"
+                  listClassName="h-6 w-max"
+                  triggerClassName="h-5 px-2 py-0 text-[10px] whitespace-nowrap"
+                />
+              </div>
+            </div>
           </div>
           <DrawerClose render={<Button type="button" variant="ghost" size="icon" className="size-8" aria-label={t("common.close")} />}>
             <span className="text-lg leading-none">×</span>
@@ -2020,6 +2085,7 @@ function TeamStatsDrawer({
             players={sortedPlayers}
             allPlayers={allPlayers}
             fields={group.fields}
+            scope={dataScope}
             sort={sort}
             teamColor={teamColor}
             onResetSort={() => setSort({ kind: "initial" })}
@@ -2036,6 +2102,7 @@ function PlayerStatsTable({
   players,
   allPlayers,
   fields,
+  scope,
   sort,
   teamColor,
   onResetSort,
@@ -2045,6 +2112,7 @@ function PlayerStatsTable({
   players: MatchPlayer[]
   allPlayers: MatchPlayer[]
   fields: PlayerMetric[]
+  scope: PlayerDataScope
   sort: PlayerSort
   teamColor: string
   onResetSort: () => void
@@ -2052,15 +2120,20 @@ function PlayerStatsTable({
   onMetricSort: (metricId: string) => void
 }) {
   const { t } = useTranslation()
+  const availableFields = useMemo(() => new Set(fields
+    .filter((field) => scope === "match" || (
+      field.seasonValue && allPlayers.some((player) => playerMetricValue(player, field, scope) != null)
+    ))
+    .map((field) => field.id)), [allPlayers, fields, scope])
   const maxima = useMemo(() => {
     const team = new Map<string, number>()
     const match = new Map<string, number>()
     for (const field of fields) {
-      team.set(field.id, maxMetricValue(players, field))
-      match.set(field.id, maxMetricValue(allPlayers, field))
+      team.set(field.id, maxMetricValue(players, field, scope))
+      match.set(field.id, maxMetricValue(allPlayers, field, scope))
     }
     return { team, match }
-  }, [allPlayers, fields, players])
+  }, [allPlayers, fields, players, scope])
 
   return (
     <table className="w-full min-w-max border-separate border-spacing-0 text-xs">
@@ -2081,12 +2154,14 @@ function PlayerStatsTable({
           <th className="w-14 border-b border-r bg-card px-1.5 py-2 text-center">{t("common.status")}</th>
           {fields.map((field) => {
             const active = sort.kind === "metric" && sort.metricId === field.id
+            const disabled = !availableFields.has(field.id)
             return (
-              <th key={field.id} className="min-w-16 whitespace-nowrap border-b border-r bg-card p-0 text-center">
+              <th key={field.id} className={`min-w-16 whitespace-nowrap border-b border-r bg-card p-0 text-center ${disabled ? "bg-muted/40" : ""}`}>
                 <SortHeaderButton
                   label={t(playerMetricTranslationKeys[field.id])}
                   active={active}
                   direction={active ? sort.direction : undefined}
+                  disabled={disabled}
                   onClick={() => onMetricSort(field.id)}
                 />
               </th>
@@ -2119,14 +2194,15 @@ function PlayerStatsTable({
               {player.isOnPitch ? t("playerData.onPitch") : player.isStarter ? t("playerData.subbedOff") : t("playerData.substitute")}
             </td>
             {fields.map((field) => {
-              const value = field.value(player)
+              const disabled = !availableFields.has(field.id)
+              const value = disabled ? undefined : playerMetricValue(player, field, scope)
               const highlight = metricHighlightClass(
                 value,
                 maxima.team.get(field.id),
                 maxima.match.get(field.id),
               )
               return (
-                <td key={field.id} className={`border-b border-r px-1.5 py-2 text-center font-medium tabular-nums ${highlight}`}>
+                <td key={field.id} className={`border-b border-r px-1.5 py-2 text-center font-medium tabular-nums ${disabled ? "bg-muted/35 text-muted-foreground/35" : highlight}`}>
                   {value == null ? "-" : (field.format ?? integer)(value)}
                 </td>
               )
@@ -2138,10 +2214,10 @@ function PlayerStatsTable({
   )
 }
 
-function maxMetricValue(players: MatchPlayer[], field: PlayerMetric) {
+function maxMetricValue(players: MatchPlayer[], field: PlayerMetric, scope: PlayerDataScope) {
   let maximum = 0
   for (const player of players) {
-    const value = field.value(player)
+    const value = playerMetricValue(player, field, scope)
     if (value != null && Number.isFinite(value) && value > maximum) maximum = value
   }
   return maximum
@@ -2162,23 +2238,26 @@ function SortHeaderButton({
   label,
   active,
   direction,
+  disabled = false,
   align = "center",
   onClick,
 }: {
   label: string
   active: boolean
   direction?: SortDirection
+  disabled?: boolean
   align?: "left" | "center"
   onClick: () => void
 }) {
   return (
     <button
       type="button"
-      className={`flex w-full items-center gap-1 px-2 py-2 font-medium transition-colors hover:bg-muted/60 hover:text-foreground ${align === "left" ? "justify-start" : "justify-center"} ${active ? "text-foreground" : "text-muted-foreground"}`}
+      disabled={disabled}
+      className={`flex w-full items-center gap-1 px-2 py-2 font-medium transition-colors enabled:hover:bg-muted/60 enabled:hover:text-foreground disabled:cursor-not-allowed disabled:text-muted-foreground/35 ${align === "left" ? "justify-start" : "justify-center"} ${active ? "text-foreground" : "text-muted-foreground"}`}
       onClick={onClick}
     >
       {label}
-      <span className={`text-[9px] ${active ? "opacity-100" : "opacity-25"}`} aria-hidden="true">
+      <span className={`text-[9px] ${disabled ? "opacity-0" : active ? "opacity-100" : "opacity-25"}`} aria-hidden="true">
         {direction === "asc" ? "▲" : direction === "desc" ? "▼" : "↕"}
       </span>
     </button>
