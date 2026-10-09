@@ -42,7 +42,6 @@ import type {
 } from "@/types/match"
 import { playerPositionLabels } from "@/types/match"
 import { nationDisplay } from "@/lib/nations"
-import { shortPlayerName } from "@/lib/player-name"
 import { findNearestPositionPlayerIds } from "@/lib/playerPositionMatch"
 import { decodePlayerTraits } from "@/lib/playerTraits"
 import { sameSquadPlayers } from "@/lib/matchRenderEquality"
@@ -470,7 +469,7 @@ export const SquadPanel = memo(function SquadPanel({
   ) => {
     const statuses =
       statusesFor(player)
-    const displayName = shortPlayerName(player.name)
+    const displayName = player.name
     const positionLabel = squadRole(player)
     const showsFamiliarPosition = !player.isStarter
     const positionDescription = showsFamiliarPosition
@@ -2178,7 +2177,7 @@ function PlayerStatsTable({
             <td className="sticky left-11 z-20 max-w-32 border-b border-r bg-card px-2 py-2 font-medium">
               <HoverCard>
                 <HoverCardTrigger render={<div className="truncate leading-6" />}>
-                  {shortPlayerName(player.name)}
+                  {player.name}
                 </HoverCardTrigger>
                 <HoverCardContent
                   side="top"

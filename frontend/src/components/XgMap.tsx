@@ -8,7 +8,6 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card"
-import { shortPlayerName } from "@/lib/player-name"
 import { samePlayerLabels } from "@/lib/matchRenderEquality"
 import type { MatchSnapshot } from "@/types/match"
 
@@ -54,9 +53,7 @@ export const XgMap = memo(function XgMap({
             const color = shot.team === "home" ? homeColor : awayColor
             const player =
               shot.playerId == null ? undefined : players.get(shot.playerId)
-            const playerName = player
-              ? shortPlayerName(player.name)
-              : t("dataMap.unknownPlayer")
+            const playerName = player?.name ?? t("dataMap.unknownPlayer")
             const time = formatDisplayTick(shot.displayTick)
             const result = t(`dataMap.events.${shot.metricId}`)
             const annotationLabels = (shot.annotations ?? []).map(

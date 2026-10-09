@@ -41,7 +41,6 @@ import {
 } from "@/features/explore-tour/exploreTourEvents"
 import { resolvePitchDimensions } from "@/components/pitch/pitchGeometry"
 import { samePlayerLabels } from "@/lib/matchRenderEquality"
-import { shortPlayerName } from "@/lib/player-name"
 import {
   buildShotChains,
   buildTacticalScene,
@@ -534,10 +533,10 @@ function TacticalPointTooltip({
       ? window.innerWidth / 2
       : Math.min(Math.max(clientX, 104), window.innerWidth - 104)
   const placeBelow = clientY < 128
-  const playerName = player ? shortPlayerName(player.name) : unknownPlayer
-  const receiverName = receiver ? shortPlayerName(receiver.name) : unknownPlayer
+  const playerName = player?.name ?? unknownPlayer
+  const receiverName = receiver?.name ?? unknownPlayer
   const counterpartName = counterpartPlayer
-    ? shortPlayerName(counterpartPlayer.name)
+    ? counterpartPlayer.name
     : unknownPlayer
   const hasReceiver = point.receiverPlayerId != null
   const hasAssociations = Boolean(

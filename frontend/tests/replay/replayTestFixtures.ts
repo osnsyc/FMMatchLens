@@ -273,7 +273,17 @@ function metadataFixture(): RealtimeMatchMetadata {
     home: { name: "Home" },
     away: { name: "Away" },
     players: [
-      { slot: 1, playerId: 101, team: "home", displayName: "Scorer" },
+      {
+        slot: 1,
+        playerId: 101,
+        team: "home",
+        shirtNumber: 9,
+        squadNumber: 255,
+        shirtName: "SCORER",
+        firstName: "Sample",
+        secondName: "Player",
+        displayName: "Sample Player",
+      },
       { slot: 2, playerId: 102, team: "home", displayName: "Receiver" },
       { slot: 3, playerId: 201, team: "away", displayName: "Defender" },
       { slot: 4, playerId: 202, team: "away", displayName: "Substitute" },

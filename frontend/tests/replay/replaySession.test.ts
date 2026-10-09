@@ -130,6 +130,20 @@ describe("ReplaySession", () => {
     })
   })
 
+  it("uses shirt identity for display while retaining full and squad identity", async () => {
+    const fixture = replayFixture()
+    const archive = await preprocessReplayArchive(fixture)
+    const player = new ReplaySession(archive).advanceTo(0).players[0]
+
+    expect(player).toMatchObject({
+      name: "SCORER",
+      shirtName: "SCORER",
+      fullName: "Sample Player",
+      shirtNumber: 9,
+      squadNumber: 255,
+    })
+  })
+
   it("does not expose localhost asset URLs when local access is disabled", async () => {
     const fixture = replayFixture()
     fixture.metadata.home.clubUid = 11

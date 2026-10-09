@@ -277,6 +277,9 @@ internal static class Offsets
     public static class MatchPlayer
     {
         public const int Person = 0x28;
+        // Pointer to an inline FM UTF-8 string instance. The byte length is at
+        // +0x0 and zero-terminated text begins at +0x4.
+        public const int ShirtName = 0x38;
         public const int PositionX = 0x80;
         public const int PositionY = 0x84;
         public const int PositionXAlt = 0x140;
@@ -286,6 +289,7 @@ internal static class Offsets
         public const int TimerStartTick = 0x200;
         public const int TimerEndTick = 0x208;
         public const int MatchTick = 0x2A8;
+        public const int ShirtNumber = 0xC9C;
         public const int InPossessionPosition = 0xD50;
         public const int InPossessionRoleDuty = 0xD90;
         public const int OutOfPossessionPosition = 0xDE0;

@@ -659,7 +659,7 @@ function FormationViewPane({
                                 className="mx-1 h-2.5 w-px shrink-0 bg-border"
                               />
                               <span className="min-w-0 truncate">
-                                {playerSurname(player.name)}
+                                {player.name}
                               </span>
                             </div>
                           </HoverCardTrigger>
@@ -822,11 +822,6 @@ function sameFormationPitchProps(
     left.formationSnapshots === right.formationSnapshots &&
     sameFormationPlayers(left.players, right.players)
   )
-}
-
-function playerSurname(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  return parts.at(-1) ?? name
 }
 
 function updateFormationHistory(

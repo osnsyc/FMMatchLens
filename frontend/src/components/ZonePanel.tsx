@@ -424,9 +424,7 @@ function isGoalkeeperCode(value?: string) {
 }
 
 function getPlayerSurname(player: MatchPlayer) {
-  const displayName = (player.fullName ?? player.name).trim()
-  const parts = displayName.split(/\s+/)
-  return parts.at(-1) ?? displayName
+  return player.name
 }
 
 function getOutfieldPlayerIdKeys(players: readonly MatchPlayer[]) {

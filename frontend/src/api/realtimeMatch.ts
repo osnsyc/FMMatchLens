@@ -149,6 +149,8 @@ export type RealtimePlayerMetadata = {
   uid?: number
   team: TeamSide
   shirtNumber?: number
+  squadNumber?: number
+  shirtName?: string
   position?: string
   positionFamiliarities?: PlayerPositionFamiliarities
   inPossession?: PlayerTacticalAssignment
@@ -1374,6 +1376,7 @@ function toFormationSnapshot(
         id: uid ?? player.playerId,
         uid,
         name:
+          details?.shirtName ||
           details?.commonName ||
           details?.displayName ||
           `Player ${player.playerId}`,
@@ -1387,6 +1390,8 @@ function toFormationSnapshot(
             : archivedAssetUrl(details?.portraitPath),
         team: player.team,
         shirtNumber: details?.shirtNumber,
+        squadNumber: details?.squadNumber,
+        shirtName: details?.shirtName,
         position: details?.position,
         positionFamiliarities: details?.positionFamiliarities,
         inPossession: player.inPossession,
@@ -1440,6 +1445,7 @@ function toPlayer(
     id: uid ?? player.playerId,
     uid,
     name:
+      metadata?.shirtName ||
       metadata?.commonName ||
       metadata?.displayName ||
       `Player ${player.playerId}`,
@@ -1453,6 +1459,8 @@ function toPlayer(
         : archivedAssetUrl(metadata?.portraitPath),
     team: player.team,
     shirtNumber: metadata?.shirtNumber,
+    squadNumber: metadata?.squadNumber,
+    shirtName: metadata?.shirtName,
     position: metadata?.position,
     positionFamiliarities: metadata?.positionFamiliarities,
     inPossession: metadata?.inPossession,

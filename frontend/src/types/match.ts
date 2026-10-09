@@ -372,6 +372,8 @@ export type MatchPlayer = {
   portraitUrl?: string
   team: TeamSide
   shirtNumber?: number
+  squadNumber?: number
+  shirtName?: string
   position?: string
   positionFamiliarities?: PlayerPositionFamiliarities
   inPossession?: PlayerTacticalAssignment

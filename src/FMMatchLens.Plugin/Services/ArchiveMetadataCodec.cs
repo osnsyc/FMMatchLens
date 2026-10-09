@@ -38,6 +38,7 @@ internal static class ArchiveMetadataCodec
         metadata.Players.Count > 0 && metadata.Players.All(player =>
             player.Uid.HasValue &&
             player.ShirtNumber.HasValue &&
+            !string.IsNullOrWhiteSpace(player.ShirtName) &&
             player.Profile is
             {
                 DateOfBirth: not null,
@@ -390,7 +391,7 @@ internal static class ArchiveMetadataCodec
 
     private static void AddPlayer(RealtimePlayerMetadata player, ISet<string> values)
     {
-        Add(values, player.Position, player.FirstName, player.SecondName, player.CommonName, player.DisplayName, player.PortraitPath);
+        Add(values, player.Position, player.FirstName, player.SecondName, player.CommonName, player.DisplayName, player.ShirtName, player.PortraitPath);
         AddAssignment(player.InPossession, values);
         AddAssignment(player.OutOfPossession, values);
         AddAttributes(player.Attributes?.Technical, values);
@@ -524,7 +525,15 @@ internal static class ArchiveMetadataCodec
         ArchiveBinary.WriteVarInt64(writer, player.PlayerId);
         WriteNullableUInt(writer, player.Uid);
         writer.Write((byte)player.Team);
-        WriteNullableInt(writer, player.ShirtNumber);
+        if (structureMinor >= 7)
+        {
+            WriteNullableInt(writer, player.ShirtNumber);
+            WriteNullableInt(writer, player.SquadNumber);
+        }
+        else
+        {
+            WriteNullableInt(writer, player.SquadNumber ?? player.ShirtNumber);
+        }
         WriteStringId(writer, player.Position, ids);
         WritePositionFamiliarities(writer, player.PositionFamiliarities);
         WriteAssignment(writer, player.InPossession, ids);
@@ -533,6 +542,7 @@ internal static class ArchiveMetadataCodec
         WriteStringId(writer, player.SecondName, ids);
         WriteStringId(writer, player.CommonName, ids);
         WriteStringId(writer, player.DisplayName, ids);
+        if (structureMinor >= 7) WriteStringId(writer, player.ShirtName, ids);
         WriteStringId(writer, player.PortraitPath, ids);
         WriteProfile(writer, player.Profile, structureMinor);
         WriteAttributes(writer, player.Attributes, ids, structureMinor);
@@ -548,6 +558,7 @@ internal static class ArchiveMetadataCodec
         var uid = ReadNullableUInt(reader);
         var team = ReadTeamSide(reader);
         var shirt = ReadNullableInt(reader);
+        var squad = structureMinor >= 7 ? ReadNullableInt(reader) : shirt;
         var position = ReadStringId(reader, strings);
         var positionFamiliarities = ReadPositionFamiliarities(reader);
         var inPossession = ReadAssignment(reader, strings);
@@ -556,10 +567,13 @@ internal static class ArchiveMetadataCodec
         var second = ReadStringId(reader, strings);
         var common = ReadStringId(reader, strings);
         var display = ReadStringId(reader, strings) ?? $"Player {playerId}";
+        var shirtName = structureMinor >= 7
+            ? ReadStringId(reader, strings)
+            : common ?? display;
         var portrait = ReadStringId(reader, strings);
         var profile = ReadProfile(reader, structureMinor);
         var attributes = ReadAttributes(reader, strings, structureMinor);
-        return new RealtimePlayerMetadata(slot, playerId, uid, team, shirt, position, first, second, common, display, portrait, profile, attributes, inPossession, outOfPossession, positionFamiliarities);
+        return new RealtimePlayerMetadata(slot, playerId, uid, team, shirt, position, first, second, common, display, portrait, profile, attributes, inPossession, outOfPossession, positionFamiliarities, shirtName, squad);
     }
 
     private static void WritePositionFamiliarities(

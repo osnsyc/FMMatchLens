@@ -1026,10 +1026,14 @@ internal sealed class GameMatchTickHook : IDisposable
             _memoryReader.TryReadPointer(person + Offsets.Person.FullContract, out var fullContract);
             var playerUid = ReadUid(person + Offsets.Person.Uid);
             var playerId = playerUid.HasValue ? playerUid.Value : FallbackPlayerIdentity(slot);
-            var shirtNumber = fullContract != default &&
-                _memoryReader.TryReadByte(fullContract + Offsets.FullContract.SquadNumber, out var number) && number > 0
-                    ? number
+            var squadNumber = fullContract != default &&
+                _memoryReader.TryReadByte(fullContract + Offsets.FullContract.SquadNumber, out var contractNumber) && contractNumber > 0
+                    ? contractNumber
                     : (byte?)null;
+            var shirtNumber = _memoryReader.TryReadByte(matchPlayer + Offsets.MatchPlayer.ShirtNumber, out var matchNumber) && matchNumber > 0
+                ? matchNumber
+                : (byte?)null;
+            var shirtName = ReadInlineNameInstance(matchPlayer, Offsets.MatchPlayer.ShirtName);
             var firstName = ReadPersonName(person, Offsets.Person.FirstName);
             var secondName = ReadPersonName(person, Offsets.Person.SecondName);
             var commonName = ReadPersonName(person, Offsets.Person.CommonName);
@@ -1039,6 +1043,10 @@ internal sealed class GameMatchTickHook : IDisposable
             if (string.IsNullOrWhiteSpace(displayName))
             {
                 displayName = $"Player {playerId}";
+            }
+            if (string.IsNullOrWhiteSpace(shirtName))
+            {
+                shirtName = displayName;
             }
 
             var positionFamiliarities = ReadPlayerPositionFamiliarities(person);
@@ -1059,7 +1067,9 @@ internal sealed class GameMatchTickHook : IDisposable
                 ReadPlayerAttributes(person),
                 ReadTacticalAssignment(matchPlayer, inPossession: true),
                 ReadTacticalAssignment(matchPlayer, inPossession: false),
-                positionFamiliarities));
+                positionFamiliarities,
+                shirtName,
+                squadNumber));
         }
 
     }

@@ -31,9 +31,9 @@ internal static class ArchiveWireFormat
     // type, and guide value define 2.4. Pitch dimensions in metadata define 2.5.
     // Goalkeeper save breakdown fields, competition metadata, the fixed
     // 64-bit player-traits field, and first/second-half team shots define 2.6.
-    // Static pre-match player match sharpness and season statistics, stored in
-    // player profile metadata, define 2.7. The pre-season-stats 2.7 draft is
-    // intentionally not wire-compatible.
+    // Static pre-match player match sharpness and season statistics, plus the
+    // authoritative match shirt name/number and retained contract squad number,
+    // define 2.7.
     // The file-header version is the sole authority for payload decoding; do not
     // add an independent version byte inside ArchiveFrameCodec payloads.
     internal const ushort StructureMajor = 2;

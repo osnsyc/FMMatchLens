@@ -218,7 +218,9 @@ internal readonly record struct RealtimePlayerMetadata(
     PlayerAttributes? Attributes,
     PlayerTacticalAssignment? InPossession,
     PlayerTacticalAssignment? OutOfPossession,
-    IReadOnlyDictionary<string, int>? PositionFamiliarities = null);
+    IReadOnlyDictionary<string, int>? PositionFamiliarities = null,
+    string? ShirtName = null,
+    int? SquadNumber = null);
 
 internal static class PlayerPositionFamiliarity
 {

@@ -468,6 +468,7 @@ internal sealed class RealtimeMatchTimeline
             if (!leftPlayers.TryGetValue(player.Slot, out var previous) ||
                 previous.Team != player.Team ||
                 previous.ShirtNumber != player.ShirtNumber ||
+                previous.ShirtName != player.ShirtName ||
                 previous.DisplayName != player.DisplayName ||
                 previous.InPossession != player.InPossession ||
                 previous.OutOfPossession != player.OutOfPossession)
@@ -497,6 +498,8 @@ internal sealed class RealtimeMatchTimeline
                 Uid = player.Uid ?? existing.Uid,
                 Team = player.Team,
                 ShirtNumber = player.ShirtNumber ?? existing.ShirtNumber,
+                SquadNumber = player.SquadNumber ?? existing.SquadNumber,
+                ShirtName = player.ShirtName ?? existing.ShirtName,
                 Position = player.Position ?? existing.Position,
                 PositionFamiliarities = player.PositionFamiliarities ?? existing.PositionFamiliarities,
                 FirstName = player.FirstName ?? existing.FirstName,
@@ -571,6 +574,7 @@ internal sealed class RealtimeMatchTimeline
                metadata.Players.All(player =>
                    player.Uid.HasValue &&
                    player.ShirtNumber.HasValue &&
+                   !string.IsNullOrWhiteSpace(player.ShirtName) &&
                    player.Profile is
                    {
                        DateOfBirth: not null,

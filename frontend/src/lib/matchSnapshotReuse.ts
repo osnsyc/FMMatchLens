@@ -58,6 +58,8 @@ function samePlayer(left: MatchPlayer, right: MatchPlayer) {
     left.portraitUrl === right.portraitUrl &&
     left.team === right.team &&
     left.shirtNumber === right.shirtNumber &&
+    left.squadNumber === right.squadNumber &&
+    left.shirtName === right.shirtName &&
     left.position === right.position &&
     left.positionFamiliarities === right.positionFamiliarities &&
     left.inPossession === right.inPossession &&

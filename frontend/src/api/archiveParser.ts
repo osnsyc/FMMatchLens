@@ -591,7 +591,11 @@ function readPlayerMetadata(
   const uid = readNullableUint(reader)
   const teamRaw = reader.readByte()
   if (teamRaw > 1) throw new ArchiveError("元数据球队值无效")
-  const shirtNumber = readNullableInt(reader)
+  const legacyOrShirtNumber = readNullableInt(reader)
+  const shirtNumber = legacyOrShirtNumber
+  const squadNumber = structureMinor >= 7
+    ? readNullableInt(reader)
+    : legacyOrShirtNumber
   const position = readStringId(reader, strings)
   const positionFamiliarities = readPositionFamiliarities(reader)
   const inPossession = readAssignment(reader, strings)
@@ -600,10 +604,13 @@ function readPlayerMetadata(
   const secondName = readStringId(reader, strings)
   const commonName = readStringId(reader, strings)
   const displayName = readStringId(reader, strings) ?? `Player ${playerId}`
+  const shirtName = structureMinor >= 7
+    ? readStringId(reader, strings)
+    : commonName ?? displayName
   const portraitPath = readStringId(reader, strings)
   const profile = readProfile(reader, structureMinor)
   const attributes = readAttributes(reader, strings, structureMinor)
-  return { slot, playerId, uid, team: teamRaw === 1 ? "away" : "home", shirtNumber, position, positionFamiliarities, inPossession, outOfPossession,
+  return { slot, playerId, uid, team: teamRaw === 1 ? "away" : "home", shirtNumber, squadNumber, shirtName, position, positionFamiliarities, inPossession, outOfPossession,
     firstName, secondName, commonName, displayName, portraitPath, profile, attributes }
 }
 
