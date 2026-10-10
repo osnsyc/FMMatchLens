@@ -122,6 +122,8 @@ internal readonly record struct PlayerTickData(
     bool IsBallHolder,
     float X,
     float Y,
+    ushort SpeedCentimetersPerSecond,
+    ushort AngleDegrees,
     float Rating,
     bool IsSubstitute,
     bool IsOnPitch,

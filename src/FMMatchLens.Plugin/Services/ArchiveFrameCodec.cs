@@ -73,6 +73,9 @@ internal static class ArchiveFrameCodec
                     var currentY = ArchiveBinary.Quantize(current.Y, frame.HalfPitchLength);
                     ArchiveBinary.WriteVarInt64(writer, currentX - previousX);
                     ArchiveBinary.WriteVarInt64(writer, currentY - previousY);
+                    ArchiveBinary.WriteVarInt64(writer,
+                        current.SpeedCentimetersPerSecond - prior.SpeedCentimetersPerSecond);
+                    ArchiveBinary.WriteVarInt64(writer, current.AngleDegrees - prior.AngleDegrees);
                     var mask = PlayerMask(prior, current);
                     ArchiveBinary.WriteVarUInt64(writer, mask);
                     WritePlayerFields(writer, current, prior, mask);
@@ -140,7 +143,12 @@ internal static class ArchiveFrameCodec
                 var slots = new HashSet<int>();
                 for (var index = 0; index < count; index++)
                 {
-                    players[index] = ReadFullPlayer(reader, halfWidth, halfLength, supportedPlayerFields);
+                    players[index] = ReadFullPlayer(
+                        reader,
+                        halfWidth,
+                        halfLength,
+                        supportedPlayerFields,
+                        structureMinor >= 7);
                     if (!slots.Add(players[index].Slot)) throw new ArchiveFormatException("duplicate_slot", "Chunk keyframe has duplicate player slots.");
                 }
             }
@@ -153,12 +161,25 @@ internal static class ArchiveFrameCodec
                     var qx = checked((int)ArchiveBinary.Quantize(prior.X, halfWidth) + (int)ArchiveBinary.ReadVarInt64(reader));
                     var qy = checked((int)ArchiveBinary.Quantize(prior.Y, halfLength) + (int)ArchiveBinary.ReadVarInt64(reader));
                     if (qx is < 0 or > ushort.MaxValue || qy is < 0 or > ushort.MaxValue) throw new ArchiveFormatException("invalid_coordinate", "Position delta exceeds the quantized pitch range.");
+                    var speed = prior.SpeedCentimetersPerSecond;
+                    var angle = prior.AngleDegrees;
+                    if (structureMinor >= 7)
+                    {
+                        var decodedSpeed = checked((int)speed + (int)ArchiveBinary.ReadVarInt64(reader));
+                        var decodedAngle = checked((int)angle + (int)ArchiveBinary.ReadVarInt64(reader));
+                        if (decodedSpeed is < 0 or > ushort.MaxValue || decodedAngle is < 0 or > 360)
+                            throw new ArchiveFormatException("invalid_movement", "Player movement delta is outside its quantized range.");
+                        speed = (ushort)decodedSpeed;
+                        angle = (ushort)decodedAngle;
+                    }
                     var mask = ArchiveBinary.ReadVarUInt64(reader);
                     if ((mask & ~supportedPlayerFields) != 0) throw new ArchiveFormatException("unknown_player_field", "Player delta contains unknown fields.");
                     players[index] = ReadPlayerFields(reader, prior with
                     {
                         X = ArchiveBinary.Dequantize((ushort)qx, halfWidth),
-                        Y = ArchiveBinary.Dequantize((ushort)qy, halfLength)
+                        Y = ArchiveBinary.Dequantize((ushort)qy, halfLength),
+                        SpeedCentimetersPerSecond = speed,
+                        AngleDegrees = angle
                     }, mask);
                 }
             }
@@ -256,22 +277,37 @@ internal static class ArchiveFrameCodec
         writer.Write((byte)player.Team);
         writer.Write(ArchiveBinary.Quantize(player.X, halfWidth));
         writer.Write(ArchiveBinary.Quantize(player.Y, halfLength));
+        writer.Write(player.SpeedCentimetersPerSecond);
+        writer.Write(player.AngleDegrees);
         WritePlayerFields(writer, player, default, AllPlayerFields);
     }
 
-    private static PlayerTickData ReadFullPlayer(BinaryReader reader, float halfWidth, float halfLength, ulong playerFields)
+    private static PlayerTickData ReadFullPlayer(
+        BinaryReader reader,
+        float halfWidth,
+        float halfLength,
+        ulong playerFields,
+        bool hasMovement)
     {
         var slot = checked((int)ArchiveBinary.ReadVarUInt64(reader, 5));
         var playerId = ArchiveBinary.ReadVarInt64(reader);
         var teamValue = reader.ReadByte();
         if (teamValue > 1) throw new ArchiveFormatException("invalid_team", "Player team value is invalid.");
+        var x = ArchiveBinary.Dequantize(reader.ReadUInt16(), halfWidth);
+        var y = ArchiveBinary.Dequantize(reader.ReadUInt16(), halfLength);
+        var speed = hasMovement ? reader.ReadUInt16() : (ushort)0;
+        var angle = hasMovement ? reader.ReadUInt16() : (ushort)0;
+        if (angle > 360)
+            throw new ArchiveFormatException("invalid_movement", "Player facing angle is outside its quantized range.");
         var seed = default(PlayerTickData) with
         {
             Slot = slot,
             PlayerId = playerId,
             Team = (TeamSide)teamValue,
-            X = ArchiveBinary.Dequantize(reader.ReadUInt16(), halfWidth),
-            Y = ArchiveBinary.Dequantize(reader.ReadUInt16(), halfLength)
+            X = x,
+            Y = y,
+            SpeedCentimetersPerSecond = speed,
+            AngleDegrees = angle
         };
         return ReadPlayerFields(reader, seed, playerFields);
     }

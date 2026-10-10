@@ -71,6 +71,9 @@ export type RealtimePlayer = PlayerStats & {
   isBallHolder: boolean
   x: number
   y: number
+  /** Integer wire value; divide by 100 for m/s. */
+  speedCentimetersPerSecond?: number
+  angleDegrees?: number
   rating: number
   isSubstitute: boolean
   isOnPitch: boolean

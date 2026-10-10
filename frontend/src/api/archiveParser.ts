@@ -274,16 +274,34 @@ function readFrames(
     if (rosterReset) {
       const count = reader.readVarUint()
       if (count > 255) throw new ArchiveError("球员数量过大")
-      players = Array.from({ length: count }, () => readFullPlayer(reader, halfPitchWidth, halfPitchLength, supportedPlayerFields))
+      players = Array.from(
+        { length: count },
+        () => readFullPlayer(reader, halfPitchWidth, halfPitchLength, supportedPlayerFields, structureMinor >= 7),
+      )
       if (new Set(players.map((player) => player.slot)).size !== players.length) throw new ArchiveError("关键帧包含重复 Slot")
     } else {
       players = previous!.players.map((prior) => {
         const qx = quantize(prior.x, halfPitchWidth) + reader.readVarInt()
         const qy = quantize(prior.y, halfPitchLength) + reader.readVarInt()
         if (qx < 0 || qx > 65535 || qy < 0 || qy > 65535) throw new ArchiveError("坐标差分越界")
+        const speedCentimetersPerSecond = structureMinor >= 7
+          ? (prior.speedCentimetersPerSecond ?? 0) + reader.readVarInt()
+          : 0
+        const angleDegrees = structureMinor >= 7
+          ? (prior.angleDegrees ?? 0) + reader.readVarInt()
+          : 0
+        if (speedCentimetersPerSecond < 0 || speedCentimetersPerSecond > 65535 || angleDegrees < 0 || angleDegrees > 360) {
+          throw new ArchiveError("Player movement data is outside its quantized range")
+        }
         const mask = reader.readVarUintBig()
         if ((mask & ~supportedPlayerFields) !== 0n) throw new ArchiveError("球员状态包含未知字段")
-        return readPlayerFields(reader, { ...prior, x: dequantize(qx, halfPitchWidth), y: dequantize(qy, halfPitchLength) }, mask)
+        return readPlayerFields(reader, {
+          ...prior,
+          x: dequantize(qx, halfPitchWidth),
+          y: dequantize(qy, halfPitchLength),
+          speedCentimetersPerSecond,
+          angleDegrees,
+        }, mask)
       })
     }
     const holderSlot = holderSlotValue - 1
@@ -331,14 +349,25 @@ function readTeamDelta(reader: ArchiveBufferReader, previous: RealtimeTeam | und
   }
 }
 
-function readFullPlayer(reader: ArchiveBufferReader, halfWidth: number, halfLength: number, playerFields: bigint): RealtimePlayer {
+function readFullPlayer(
+  reader: ArchiveBufferReader,
+  halfWidth: number,
+  halfLength: number,
+  playerFields: bigint,
+  hasMovement: boolean,
+): RealtimePlayer {
   const slot = reader.readVarUint()
   const playerId = reader.readVarInt()
   const teamRaw = reader.readByte()
   if (teamRaw > 1) throw new ArchiveError("球员所属球队无效")
+  const x = dequantize(reader.readUint16(), halfWidth)
+  const y = dequantize(reader.readUint16(), halfLength)
+  const speedCentimetersPerSecond = hasMovement ? reader.readUint16() : 0
+  const angleDegrees = hasMovement ? reader.readUint16() : 0
+  if (angleDegrees > 360) throw new ArchiveError("Player facing angle is outside its quantized range")
   const seed = {
     slot, playerId, team: teamRaw === 1 ? "away" : "home", isBallHolder: false,
-    x: dequantize(reader.readUint16(), halfWidth), y: dequantize(reader.readUint16(), halfLength), rating: 0,
+    x, y, speedCentimetersPerSecond, angleDegrees, rating: 0,
     isSubstitute: false, isOnPitch: false, subbedOnMinute: 0, subbedOffMinute: 0, penalties: 0, ownGoals: 0,
     goals: 0, assists: 0, shotsFaced: 0, savesHeld: 0, savesParried: 0, savesTipped: 0,
   } satisfies RealtimePlayer

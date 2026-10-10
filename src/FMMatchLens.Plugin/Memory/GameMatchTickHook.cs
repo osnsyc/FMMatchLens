@@ -843,6 +843,7 @@ internal sealed class GameMatchTickHook : IDisposable
         var starterFlag = ReadByteDirect(stats + Offsets.PlayerStats.StarterSubstituteFlag);
         var subbedOn = ReadByteDirect(stats + Offsets.PlayerStats.SubbedOnMinute);
         var subbedOff = ReadByteDirect(stats + Offsets.PlayerStats.SubbedOffMinute);
+        ReadPlayerMovement(matchPlayer, out var speedCentimetersPerSecond, out var angleDegrees);
 
         player = new PlayerTickData(
             Slot: slot,
@@ -851,6 +852,8 @@ internal sealed class GameMatchTickHook : IDisposable
             IsBallHolder: matchPlayer == ballHolder,
             X: ReadFloatDirect(matchPlayer + Offsets.MatchPlayer.PositionX),
             Y: ReadFloatDirect(matchPlayer + Offsets.MatchPlayer.PositionY),
+            SpeedCentimetersPerSecond: speedCentimetersPerSecond,
+            AngleDegrees: angleDegrees,
             Rating: Marshal.ReadInt16(stats + Offsets.PlayerStats.RatingTimes100) / 100f,
             IsSubstitute: (starterFlag & 0x20) != 0,
             IsOnPitch: ((starterFlag & 0x20) == 0 || subbedOn > 0) && subbedOff == 0,
@@ -893,6 +896,40 @@ internal sealed class GameMatchTickHook : IDisposable
             SavesParried: ReadByteDirect(stats + Offsets.PlayerStats.SavesParried),
             SavesTipped: ReadByteDirect(stats + Offsets.PlayerStats.SavesTipped),
             DistanceM: ReadFloatDirect(stats + Offsets.PlayerStats.DistanceM));
+        return true;
+    }
+
+    private bool ReadPlayerMovement(
+        nint matchPlayer,
+        out ushort speedCentimetersPerSecond,
+        out ushort angleDegrees)
+    {
+        speedCentimetersPerSecond = 0;
+        angleDegrees = 0;
+        if (!_memoryReader.TryReadPointer(
+                matchPlayer + Offsets.MatchPlayer.PositionHistory,
+                out var positionHistory) ||
+            positionHistory == default ||
+            !VirtualMemory.IsReadable(
+                positionHistory,
+                Offsets.PositionHistory.Angle + sizeof(ushort)))
+        {
+            return false;
+        }
+
+        var speedMetersPerSecond = ReadFloatDirect(positionHistory + Offsets.PositionHistory.Speed);
+        var angle = unchecked((ushort)Marshal.ReadInt16(
+            positionHistory + Offsets.PositionHistory.Angle));
+        if (!float.IsFinite(speedMetersPerSecond) || speedMetersPerSecond < 0 ||
+            speedMetersPerSecond > ushort.MaxValue / 100f || angle > 360)
+        {
+            return false;
+        }
+
+        speedCentimetersPerSecond = checked((ushort)Math.Round(
+            speedMetersPerSecond * 100f,
+            MidpointRounding.AwayFromZero));
+        angleDegrees = angle;
         return true;
     }
 

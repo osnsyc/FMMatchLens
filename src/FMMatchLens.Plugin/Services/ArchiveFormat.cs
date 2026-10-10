@@ -32,8 +32,8 @@ internal static class ArchiveWireFormat
     // Goalkeeper save breakdown fields, competition metadata, the fixed
     // 64-bit player-traits field, and first/second-half team shots define 2.6.
     // Static pre-match player match sharpness and season statistics, plus the
-    // authoritative match shirt name/number and retained contract squad number,
-    // define 2.7.
+    // authoritative match shirt name/number, retained contract squad number,
+    // and quantized per-tick player speed/facing angle define the current 2.7.
     // The file-header version is the sole authority for payload decoding; do not
     // add an independent version byte inside ArchiveFrameCodec payloads.
     internal const ushort StructureMajor = 2;

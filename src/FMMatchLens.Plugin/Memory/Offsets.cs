@@ -304,7 +304,7 @@ internal static class Offsets
         public const int PositionZ = 0x8; //unconfirmed
         public const int Flags = 0xC; //unconfirmed
         public const int Speed = 0x10; //speed
-        public const int Angle = 0x14; //angle (PositionX=0,PositionY=1)=0,clock+
+        public const int Angle = 0x14; // u16; (PositionX=0, PositionY=1)=0, clockwise+
     }
 
     public static class Person
