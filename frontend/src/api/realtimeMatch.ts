@@ -96,6 +96,10 @@ export type RealtimeFrame = {
   capturedUnixMilliseconds: number
   possessionTeam?: TeamSide
   ballHolderPlayerId?: number
+  /** Integer wire values in centimeters. */
+  ballXCentimeters: number
+  ballYCentimeters: number
+  ballZCentimeters: number
   halfPitchWidth: number
   halfPitchLength: number
   momentumEvents: RealtimeMomentumEvent[]

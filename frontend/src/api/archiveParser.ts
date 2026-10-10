@@ -261,6 +261,15 @@ function readFrames(
     const possessionTeam: TeamSide | undefined = possessionRaw === 1 ? "home" : possessionRaw === 2 ? "away" : undefined
     if (possessionRaw > 2) throw new ArchiveError("帧持球方无效")
     const holderSlotValue = reader.readVarUint()
+    const ballXCentimeters = structureMinor >= 7
+      ? addSafe(previous?.ballXCentimeters ?? 0, reader.readVarInt())
+      : 0
+    const ballYCentimeters = structureMinor >= 7
+      ? addSafe(previous?.ballYCentimeters ?? 0, reader.readVarInt())
+      : 0
+    const ballZCentimeters = structureMinor >= 7
+      ? addSafe(previous?.ballZCentimeters ?? 0, reader.readVarInt())
+      : 0
     let halfPitchWidth = previous?.halfPitchWidth ?? 0
     let halfPitchLength = previous?.halfPitchLength ?? 0
     if (pitchChanged) {
@@ -321,6 +330,7 @@ function readFrames(
     const rollingMomentum = readTail(reader, previous?.rollingMomentum, readMomentum)
     const frame: RealtimeFrame = {
       sequence, matchId, tick, displayTick, period, capturedUnixMilliseconds, possessionTeam, ballHolderPlayerId,
+      ballXCentimeters, ballYCentimeters, ballZCentimeters,
       halfPitchWidth, halfPitchLength, momentumEvents, momentum, rollingMomentum, home, away, players,
     }
     frames.push(frame)

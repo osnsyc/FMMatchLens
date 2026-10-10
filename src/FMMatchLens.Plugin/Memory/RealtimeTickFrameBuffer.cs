@@ -139,6 +139,9 @@ internal sealed class RawRealtimeTickFrame
     public byte PlayerCount;
     public TeamSide? PossessionTeam;
     public long BallHolderPlayerId;
+    public int BallXCentimeters;
+    public int BallYCentimeters;
+    public int BallZCentimeters;
     public float HalfPitchWidth;
     public float HalfPitchLength;
     public byte MomentumEventCount;

@@ -47,6 +47,9 @@ internal static class ArchiveFrameCodec
                 if (!found) throw new ArchiveFormatException("invalid_slot", "Ball holder does not reference a player in the frame roster.");
             }
             ArchiveBinary.WriteVarUInt64(writer, checked((ulong)Math.Max(0, holderSlot)));
+            ArchiveBinary.WriteVarInt64(writer, (long)frame.BallXCentimeters - (previous?.BallXCentimeters ?? 0));
+            ArchiveBinary.WriteVarInt64(writer, (long)frame.BallYCentimeters - (previous?.BallYCentimeters ?? 0));
+            ArchiveBinary.WriteVarInt64(writer, (long)frame.BallZCentimeters - (previous?.BallZCentimeters ?? 0));
             if (pitchChanged)
             {
                 ValidatePitch(frame.HalfPitchWidth, frame.HalfPitchLength);
@@ -124,6 +127,15 @@ internal static class ArchiveFrameCodec
             var possessionValue = reader.ReadByte();
             TeamSide? possession = possessionValue switch { 0 => null, 1 => TeamSide.Home, 2 => TeamSide.Away, _ => throw new ArchiveFormatException("invalid_team", "Frame possession value is invalid.") };
             var holderSlotValue = checked((int)ArchiveBinary.ReadVarUInt64(reader, 5));
+            var ballXCentimeters = previous?.BallXCentimeters ?? 0;
+            var ballYCentimeters = previous?.BallYCentimeters ?? 0;
+            var ballZCentimeters = previous?.BallZCentimeters ?? 0;
+            if (structureMinor >= 7)
+            {
+                ballXCentimeters = checked(ballXCentimeters + (int)ArchiveBinary.ReadVarInt64(reader));
+                ballYCentimeters = checked(ballYCentimeters + (int)ArchiveBinary.ReadVarInt64(reader));
+                ballZCentimeters = checked(ballZCentimeters + (int)ArchiveBinary.ReadVarInt64(reader));
+            }
             var halfWidth = previous?.HalfPitchWidth ?? 0;
             var halfLength = previous?.HalfPitchLength ?? 0;
             if (pitchChanged)
@@ -200,6 +212,7 @@ internal static class ArchiveFrameCodec
             var momentum = ReadTail(reader, previous?.Momentum, ReadMomentum);
             var rolling = ReadTail(reader, previous?.RollingMomentum, ReadMomentum);
             var frame = new RealtimeTickFrame(sequence, matchId, tick, displayTick, period, captured, possession, holderPlayerId,
+                ballXCentimeters, ballYCentimeters, ballZCentimeters,
                 halfWidth, halfLength, events, momentum, rolling, home, away, players);
             frames[frameIndex] = frame;
             previous = frame;

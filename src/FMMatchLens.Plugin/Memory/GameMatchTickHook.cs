@@ -359,6 +359,10 @@ internal sealed class GameMatchTickHook : IDisposable
         _memoryReader.TryReadByte(match + Offsets.GameMatch.LifecycleStateD, out var state142FB);
         _memoryReader.TryReadPointer(match + Offsets.GameMatch.PossessionTeam, out var possessionTeam);
         _memoryReader.TryReadPointer(match + Offsets.GameMatch.CurrentBallHolder, out var currentBallHolder);
+        _memoryReader.TryReadPointer(match + Offsets.GameMatch.BallPosition, out var ballPosition);
+        var ballXCentimeters = ReadCoordinateCentimeters(ballPosition, Offsets.BallPosition.X);
+        var ballYCentimeters = ReadCoordinateCentimeters(ballPosition, Offsets.BallPosition.Y);
+        var ballZCentimeters = ReadCoordinateCentimeters(ballPosition, Offsets.BallPosition.Z);
 
         var totalPlayerCount = homePlayerCount + awayPlayerCount;
         var isActive = homeTeam != default && awayTeam != default && homeTeam != awayTeam &&
@@ -410,6 +414,9 @@ internal sealed class GameMatchTickHook : IDisposable
             AwayTeam: awayTeam,
             PossessionTeam: possessionTeam,
             CurrentBallHolder: currentBallHolder,
+            BallXCentimeters: ballXCentimeters,
+            BallYCentimeters: ballYCentimeters,
+            BallZCentimeters: ballZCentimeters,
             HomeGoals: homeGoals,
             AwayGoals: awayGoals,
             HomeXg: homeXg,
@@ -417,6 +424,19 @@ internal sealed class GameMatchTickHook : IDisposable
             HomeShots: homeShots,
             AwayShots: awayShots);
         return true;
+    }
+
+    private int ReadCoordinateCentimeters(nint source, int offset)
+    {
+        if (source == default ||
+            !_memoryReader.TryReadFloat(source + offset, out var meters) ||
+            !float.IsFinite(meters) ||
+            meters is < int.MinValue / 100f or > int.MaxValue / 100f)
+        {
+            return 0;
+        }
+
+        return checked((int)Math.Round(meters * 100f, MidpointRounding.AwayFromZero));
     }
 
     private bool TryReadTeamPlayerCount(nint team, out byte playerCount)
@@ -475,6 +495,9 @@ internal sealed class GameMatchTickHook : IDisposable
                     ? TeamSide.Away
                     : null;
             frame.BallHolderPlayerId = 0;
+            frame.BallXCentimeters = record.BallXCentimeters;
+            frame.BallYCentimeters = record.BallYCentimeters;
+            frame.BallZCentimeters = record.BallZCentimeters;
             frame.Home = ReadTeamFrame(record.HomeTeam);
             frame.Away = ReadTeamFrame(record.AwayTeam);
             _momentumCalculator.Capture(
