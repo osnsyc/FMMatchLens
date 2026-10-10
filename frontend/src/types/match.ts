@@ -178,6 +178,7 @@ export type TacticalEventPoint = {
   nativeEventType: number
   flags: number
   sequenceIndex?: number
+  completionTick?: number
   annotations?: TacticalEventAnnotation[]
 }
 

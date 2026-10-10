@@ -1,4 +1,12 @@
-import { memo, useEffect, useMemo, useState, type CSSProperties } from "react"
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import {
@@ -64,9 +72,19 @@ import type {
 } from "@/types/match"
 import { useTheme } from "@/components/theme-provider"
 import { cssVizTokens } from "@/theme/vizTokens"
+import type { RealtimeFrame } from "@/api/realtimeMatch"
+import {
+  buildDribblePlayback,
+  DRIBBLE_PLAYBACK_SEARCH_RADIUS_TICKS,
+} from "@/components/tactical/dribblePlayback"
 
 type TacticalBoardProps = {
   match: MatchSnapshot
+  loadTickFrames: (
+    fromTick: number,
+    toTick: number,
+    signal: AbortSignal
+  ) => Promise<readonly RealtimeFrame[]>
   isFocusMode: boolean
   eventFilterMode: TacticalEventFilterMode
   selectedPlayerIds: ReadonlySet<number>
@@ -90,6 +108,7 @@ const emptyShotChains: readonly ShotChain[] = []
 
 export const TacticalBoard = memo(function TacticalBoard({
   match,
+  loadTickFrames,
   isFocusMode,
   eventFilterMode,
   selectedPlayerIds,
@@ -105,23 +124,87 @@ export const TacticalBoard = memo(function TacticalBoard({
   const [showNumbers, setShowNumbers] = useState(true)
   const [showAttackFocus, setShowAttackFocus] = useState(true)
   const [selectedShotId, setSelectedShotId] = useState<string | null>(null)
+  const [selectedDribbleId, setSelectedDribbleId] = useState<string | null>(
+    null
+  )
+  const [loadedDribbleFrames, setLoadedDribbleFrames] = useState<{
+    source: TacticalBoardProps["loadTickFrames"]
+    frames: readonly RealtimeFrame[]
+  } | null>(null)
+  const dribbleLoadAbortRef = useRef<AbortController | null>(null)
   const [selectedMetrics, setSelectedMetrics] = useState<
     Record<string, boolean>
   >(initialSelectedMetrics)
   const [hovered, setHovered] = useState<HoveredTacticalPoint | null>(null)
 
+  const clearDribblePlayback = useCallback(() => {
+    dribbleLoadAbortRef.current?.abort()
+    dribbleLoadAbortRef.current = null
+    setSelectedDribbleId(null)
+    setLoadedDribbleFrames(null)
+  }, [])
+
+  const selectDribble = useCallback(
+    (point: { id: string; tick: number }) => {
+      dribbleLoadAbortRef.current?.abort()
+      const controller = new AbortController()
+      dribbleLoadAbortRef.current = controller
+      setSelectedDribbleId(point.id)
+      setLoadedDribbleFrames(null)
+      void loadTickFrames(
+        Math.max(0, point.tick - DRIBBLE_PLAYBACK_SEARCH_RADIUS_TICKS),
+        point.tick + DRIBBLE_PLAYBACK_SEARCH_RADIUS_TICKS,
+        controller.signal
+      )
+        .then((frames) => {
+          if (!controller.signal.aborted) {
+            setLoadedDribbleFrames({ source: loadTickFrames, frames })
+          }
+        })
+        .catch((error: unknown) => {
+          if (
+            !controller.signal.aborted &&
+            !(error instanceof DOMException && error.name === "AbortError")
+          ) {
+            console.error("Unable to load dribble playback frames", error)
+          }
+        })
+        .finally(() => {
+          if (dribbleLoadAbortRef.current === controller) {
+            dribbleLoadAbortRef.current = null
+          }
+        })
+    },
+    [loadTickFrames]
+  )
+
+  useEffect(
+    () => () => dribbleLoadAbortRef.current?.abort(),
+    [loadTickFrames]
+  )
+
   useEffect(() => {
     const selectTourMetricGroup = (event: Event) => {
-      const group = (event as CustomEvent<{ group: "shots" | "distribution" }>).detail.group
+      const group = (event as CustomEvent<{ group: "shots" | "distribution" }>)
+        .detail.group
       setSelectedMetrics(
-        Object.fromEntries(metrics.map((metric) => [metric.id, metric.group === group]))
+        Object.fromEntries(
+          metrics.map((metric) => [metric.id, metric.group === group])
+        )
       )
       setSelectedShotId(null)
+      clearDribblePlayback()
     }
-    window.addEventListener(exploreTourTacticalMetricsEventName, selectTourMetricGroup)
+    window.addEventListener(
+      exploreTourTacticalMetricsEventName,
+      selectTourMetricGroup
+    )
     return () =>
-      window.removeEventListener(exploreTourTacticalMetricsEventName, selectTourMetricGroup)
-  }, [])
+      window.removeEventListener(
+        exploreTourTacticalMetricsEventName,
+        selectTourMetricGroup
+      )
+  }, [clearDribblePlayback])
 
   const groupLabel = (group: (typeof groups)[number]) =>
     t(`dataMap.groups.${group.id}`, { defaultValue: group.label })
@@ -180,6 +263,28 @@ export const TacticalBoard = memo(function TacticalBoard({
           ),
     [activeSelectedShotId, filteredTacticalEvents, selectedMetrics]
   )
+  const selectedDribble = useMemo(
+    () =>
+      selectedDribbleId == null
+        ? undefined
+        : filteredTacticalEvents.find(
+            (event) =>
+              event.id === selectedDribbleId &&
+              event.metricId === "dribblesCompleted"
+          ),
+    [filteredTacticalEvents, selectedDribbleId]
+  )
+  const dribblePlayback = useMemo(
+    () =>
+      selectedDribble && loadedDribbleFrames?.source === loadTickFrames
+        ? buildDribblePlayback(
+            selectedDribble,
+            loadedDribbleFrames.frames,
+            playerById
+          )
+        : null,
+    [loadTickFrames, loadedDribbleFrames, playerById, selectedDribble]
+  )
   const momentumLaneShares = useMemo(
     () => calculateMomentumLaneShares(filteredTacticalEvents),
     [filteredTacticalEvents]
@@ -189,9 +294,20 @@ export const TacticalBoard = memo(function TacticalBoard({
       homeColor: match.home.color ?? "var(--team-home-fallback)",
       awayColor: match.away.color ?? "var(--team-away-fallback)",
       showNumbers,
-      tokens: cssVizTokens(settings.presetId, resolvedScheme, settings.colorVision),
+      tokens: cssVizTokens(
+        settings.presetId,
+        resolvedScheme,
+        settings.colorVision
+      ),
     }),
-    [match.away.color, match.home.color, resolvedScheme, settings.colorVision, settings.presetId, showNumbers]
+    [
+      match.away.color,
+      match.home.color,
+      resolvedScheme,
+      settings.colorVision,
+      settings.presetId,
+      showNumbers,
+    ]
   )
 
   const toggleMetric = (metric: DataMetric) => {
@@ -231,21 +347,22 @@ export const TacticalBoard = memo(function TacticalBoard({
             value={eventFilterMode}
             onValueChange={(value) => {
               onEventFilterModeChange(value)
-              emitExploreTourInteraction({ id: "tactical-filter-change", value })
+              emitExploreTourInteraction({
+                id: "tactical-filter-change",
+                value,
+              })
             }}
             variant="outline"
             size="sm"
             className="min-w-14 px-2 text-[10px]"
             aria-label={t("dataMap.eventFilter")}
             contextMenuClassName="min-w-28"
-            states={
-              (["all", "home", "away", "individual"] as const).map(
-                (value) => ({
-                  value,
-                  label: t(`dataMap.filters.${value}`),
-                })
-              )
-            }
+            states={(["all", "home", "away", "individual"] as const).map(
+              (value) => ({
+                value,
+                label: t(`dataMap.filters.${value}`),
+              })
+            )}
           />
         )}
 
@@ -353,40 +470,42 @@ export const TacticalBoard = memo(function TacticalBoard({
           <aside className="w-28 shrink-0 overflow-y-auto py-1">
             {selectedMetricGroups.length > 0 ? (
               <ul className="space-y-2.5">
-                {selectedMetricGroups.map(({ group, metrics: groupMetrics }) => (
-                  <li key={`legend-group-${group.id}`}>
-                    <div className="flex items-center gap-1.5 text-[10px] font-semibold text-foreground/90">
-                      <MarkerGlyph
-                        shape={group.shape}
-                        variant="solid"
-                        color="var(--primary)"
-                        size={15}
-                      />
-                      <span className="min-w-0 truncate leading-4">
-                        {groupLabel(group)}
-                      </span>
-                    </div>
-                    <ul className="ml-[7px] mt-1 space-y-1 border-l border-border/70 pl-2">
-                      {groupMetrics.map((metric) => (
-                        <li
-                          key={`legend-${metric.id}`}
-                          className="flex items-center gap-1.5 text-[9px] text-muted-foreground"
-                        >
-                          <MarkerGlyph
-                            shape={metric.shape}
-                            variant={metric.variant}
-                            decoration={metric.decoration}
-                            color="var(--primary)"
-                            size={13}
-                          />
-                          <span className="min-w-0 leading-tight">
-                            {metricLabel(metric)}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
+                {selectedMetricGroups.map(
+                  ({ group, metrics: groupMetrics }) => (
+                    <li key={`legend-group-${group.id}`}>
+                      <div className="flex items-center gap-1.5 text-[10px] font-semibold text-foreground/90">
+                        <MarkerGlyph
+                          shape={group.shape}
+                          variant="solid"
+                          color="var(--primary)"
+                          size={15}
+                        />
+                        <span className="min-w-0 truncate leading-4">
+                          {groupLabel(group)}
+                        </span>
+                      </div>
+                      <ul className="mt-1 ml-[7px] space-y-1 border-l border-border/70 pl-2">
+                        {groupMetrics.map((metric) => (
+                          <li
+                            key={`legend-${metric.id}`}
+                            className="flex items-center gap-1.5 text-[9px] text-muted-foreground"
+                          >
+                            <MarkerGlyph
+                              shape={metric.shape}
+                              variant={metric.variant}
+                              decoration={metric.decoration}
+                              color="var(--primary)"
+                              size={13}
+                            />
+                            <span className="min-w-0 leading-tight">
+                              {metricLabel(metric)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  )
+                )}
               </ul>
             ) : (
               <span className="text-[9px] text-muted-foreground">
@@ -395,7 +514,10 @@ export const TacticalBoard = memo(function TacticalBoard({
             )}
           </aside>
 
-          <div data-tour="tactical-pitch" className="tactical-pitch-viewport flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden">
+          <div
+            data-tour="tactical-pitch"
+            className="tactical-pitch-viewport flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden"
+          >
             <div
               className="tactical-pitch pitch-frame relative shrink-0 text-[var(--pitch-line)]"
               style={pitchStyle}
@@ -405,9 +527,11 @@ export const TacticalBoard = memo(function TacticalBoard({
                 <PitchMarkings dimensions={pitchDimensions} />
                 <PitchGoals dimensions={pitchDimensions} />
 
-                {showAttackFocus && activeSelectedShotId == null && (
-                  <AttackFocus laneShares={momentumLaneShares} />
-                )}
+                {showAttackFocus &&
+                  activeSelectedShotId == null &&
+                  !dribblePlayback && (
+                    <AttackFocus laneShares={momentumLaneShares} />
+                  )}
 
                 <PixiTactical
                   scene={scene}
@@ -415,6 +539,7 @@ export const TacticalBoard = memo(function TacticalBoard({
                   appearance={appearance}
                   selectedShotId={activeSelectedShotId}
                   shotChains={visibleShotChains}
+                  dribblePlayback={dribblePlayback}
                   onHover={(hit, clientX, clientY) => {
                     setHovered((current) => {
                       if (!hit) return null
@@ -428,7 +553,16 @@ export const TacticalBoard = memo(function TacticalBoard({
                     })
                   }}
                   onPointClick={(hit: TacticalHit) => {
+                    if (
+                      !hit.historical &&
+                      hit.point.metricId === "dribblesCompleted"
+                    ) {
+                      setSelectedShotId(null)
+                      selectDribble(hit.point)
+                      return
+                    }
                     if (!hit.historical && hit.point.group === "shots") {
+                      clearDribblePlayback()
                       setSelectedShotId(hit.point.id)
                       emitExploreTourInteraction({
                         id: "tactical-shot-select",
@@ -438,6 +572,7 @@ export const TacticalBoard = memo(function TacticalBoard({
                   }}
                   onEmptyClick={() => {
                     setSelectedShotId(null)
+                    clearDribblePlayback()
                     emitExploreTourInteraction({ id: "tactical-empty-click" })
                   }}
                 />
@@ -451,7 +586,7 @@ export const TacticalBoard = memo(function TacticalBoard({
                         : eventFilterMode === "individual" &&
                             selectedPlayerIds.size === 0
                           ? t("dataMap.selectPlayers")
-                        : t("dataMap.noData")}
+                          : t("dataMap.noData")}
                     </div>
                   </div>
                 )}
@@ -483,6 +618,7 @@ function sameTacticalBoardProps(
   const right = next.match
   return (
     left.tacticalEvents === right.tacticalEvents &&
+    previous.loadTickFrames === next.loadTickFrames &&
     previous.isFocusMode === next.isFocusMode &&
     previous.eventFilterMode === next.eventFilterMode &&
     previous.selectedPlayerIds === next.selectedPlayerIds &&
@@ -546,7 +682,7 @@ function TacticalPointTooltip({
   return createPortal(
     <div
       role="tooltip"
-      className={`pointer-events-none fixed z-[100] w-fit min-w-40 max-w-48 -translate-x-1/2 overflow-hidden rounded-lg border bg-popover/95 text-popover-foreground shadow-xl backdrop-blur-sm ${placeBelow ? "translate-y-2.5" : "-translate-y-[calc(100%+10px)]"}`}
+      className={`pointer-events-none fixed z-[100] w-fit max-w-48 min-w-40 -translate-x-1/2 overflow-hidden rounded-lg border bg-popover/95 text-popover-foreground shadow-xl backdrop-blur-sm ${placeBelow ? "translate-y-2.5" : "-translate-y-[calc(100%+10px)]"}`}
       style={{ left: tooltipX, top: clientY, borderColor: color }}
     >
       <div className="flex items-center gap-2 px-2.5 py-2">

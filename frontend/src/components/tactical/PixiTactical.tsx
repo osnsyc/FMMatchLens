@@ -11,6 +11,7 @@ import type {
   TacticalScene,
 } from "@/components/tactical/tacticalScene"
 import type { MatchPlayer } from "@/types/match"
+import type { DribblePlayback } from "@/components/tactical/dribblePlayback"
 
 type PixiTacticalProps = {
   scene: TacticalScene
@@ -18,6 +19,7 @@ type PixiTacticalProps = {
   appearance: TacticalAppearance
   selectedShotId: string | null
   shotChains: readonly ShotChain[]
+  dribblePlayback: DribblePlayback | null
   onHover: (hit: TacticalHit | null, clientX: number, clientY: number) => void
   onPointClick: (hit: TacticalHit) => void
   onEmptyClick: () => void
@@ -29,6 +31,7 @@ export function PixiTactical({
   appearance,
   selectedShotId,
   shotChains,
+  dribblePlayback,
   onHover,
   onPointClick,
   onEmptyClick,
@@ -41,6 +44,7 @@ export function PixiTactical({
     appearance,
     selectedShotId,
     shotChains,
+    dribblePlayback,
     onHover,
     onPointClick,
     onEmptyClick,
@@ -53,12 +57,14 @@ export function PixiTactical({
       appearance,
       selectedShotId,
       shotChains,
+      dribblePlayback,
       onHover,
       onPointClick,
       onEmptyClick,
     }
   }, [
     appearance,
+    dribblePlayback,
     onEmptyClick,
     onHover,
     onPointClick,
@@ -73,8 +79,14 @@ export function PixiTactical({
     if (!host) return
     let disposed = false
     const bounds = host.getBoundingClientRect()
-    const fieldWidth = Math.max(1, bounds.width - TACTICAL_EVENT_OVERSCAN_PX * 2)
-    const fieldHeight = Math.max(1, bounds.height - TACTICAL_EVENT_OVERSCAN_PX * 2)
+    const fieldWidth = Math.max(
+      1,
+      bounds.width - TACTICAL_EVENT_OVERSCAN_PX * 2
+    )
+    const fieldHeight = Math.max(
+      1,
+      bounds.height - TACTICAL_EVENT_OVERSCAN_PX * 2
+    )
 
     void (async () => {
       let renderer: PixiTacticalRenderer | undefined
@@ -96,6 +108,7 @@ export function PixiTactical({
           latestRef.current.selectedShotId,
           latestRef.current.shotChains
         )
+        renderer.updateDribblePlayback(latestRef.current.dribblePlayback)
       } catch (error) {
         renderer?.destroy()
         if (rendererRef.current === renderer) rendererRef.current = null
@@ -141,6 +154,10 @@ export function PixiTactical({
     rendererRef.current?.updateSelection(selectedShotId, shotChains)
   }, [selectedShotId, shotChains])
 
+  useEffect(() => {
+    rendererRef.current?.updateDribblePlayback(dribblePlayback)
+  }, [dribblePlayback])
+
   const hitAtPointer = (
     event: React.PointerEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>
   ) => {
@@ -167,14 +184,16 @@ export function PixiTactical({
         latestRef.current.onHover(
           hit,
           hit
-            ? bounds.left + TACTICAL_EVENT_OVERSCAN_PX +
-              (hit.point.x / 100) *
-                (bounds.width - TACTICAL_EVENT_OVERSCAN_PX * 2)
+            ? bounds.left +
+                TACTICAL_EVENT_OVERSCAN_PX +
+                (hit.point.x / 100) *
+                  (bounds.width - TACTICAL_EVENT_OVERSCAN_PX * 2)
             : event.clientX,
           hit
-            ? bounds.top + TACTICAL_EVENT_OVERSCAN_PX +
-              (hit.point.y / 100) *
-                (bounds.height - TACTICAL_EVENT_OVERSCAN_PX * 2)
+            ? bounds.top +
+                TACTICAL_EVENT_OVERSCAN_PX +
+                (hit.point.y / 100) *
+                  (bounds.height - TACTICAL_EVENT_OVERSCAN_PX * 2)
             : event.clientY
         )
       }}

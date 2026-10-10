@@ -573,8 +573,7 @@ export class HistoricalDerivations {
       const matchingPlayerIds = new Set(
         change.players
           .filter(
-            (player) =>
-              player.shotDelta > 0 || player.xgDelta > XG_EPSILON
+            (player) => player.shotDelta > 0 || player.xgDelta > XG_EPSILON
           )
           .map((player) => player.playerId)
       )
@@ -883,6 +882,7 @@ export function nativeMomentumEventToTacticalPoint(
     nativeEventType: item.eventType,
     flags: item.flags,
     sequenceIndex: item.sequenceIndex,
+    completionTick: item.completionTick,
     annotations: nativeMomentumEventAnnotations(item),
   }
 }

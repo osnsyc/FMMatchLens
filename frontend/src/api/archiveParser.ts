@@ -286,11 +286,18 @@ function readFrames(
         if (qx < 0 || qx > 65535 || qy < 0 || qy > 65535) throw new ArchiveError("坐标差分越界")
         const speedCentimetersPerSecond = structureMinor >= 7
           ? (prior.speedCentimetersPerSecond ?? 0) + reader.readVarInt()
-          : 0
-        const angleDegrees = structureMinor >= 7
-          ? (prior.angleDegrees ?? 0) + reader.readVarInt()
-          : 0
-        if (speedCentimetersPerSecond < 0 || speedCentimetersPerSecond > 65535 || angleDegrees < 0 || angleDegrees > 360) {
+          : undefined
+        const encodedAngle = structureMinor >= 7
+          ? (prior.angleDegrees ?? 65535) + reader.readVarInt()
+          : 65535
+        const angleDegrees = encodedAngle === 65535 ? undefined : encodedAngle
+        if (structureMinor >= 7 && (
+          speedCentimetersPerSecond! < 0 ||
+          speedCentimetersPerSecond! > 65535 ||
+          encodedAngle < 0 ||
+          encodedAngle > 65535 ||
+          (encodedAngle > 360 && encodedAngle !== 65535)
+        )) {
           throw new ArchiveError("Player movement data is outside its quantized range")
         }
         const mask = reader.readVarUintBig()
@@ -362,9 +369,10 @@ function readFullPlayer(
   if (teamRaw > 1) throw new ArchiveError("球员所属球队无效")
   const x = dequantize(reader.readUint16(), halfWidth)
   const y = dequantize(reader.readUint16(), halfLength)
-  const speedCentimetersPerSecond = hasMovement ? reader.readUint16() : 0
-  const angleDegrees = hasMovement ? reader.readUint16() : 0
-  if (angleDegrees > 360) throw new ArchiveError("Player facing angle is outside its quantized range")
+  const speedCentimetersPerSecond = hasMovement ? reader.readUint16() : undefined
+  const encodedAngle = hasMovement ? reader.readUint16() : 65535
+  if (encodedAngle > 360 && encodedAngle !== 65535) throw new ArchiveError("Player facing angle is outside its quantized range")
+  const angleDegrees = encodedAngle === 65535 ? undefined : encodedAngle
   const seed = {
     slot, playerId, team: teamRaw === 1 ? "away" : "home", isBallHolder: false,
     x, y, speedCentimetersPerSecond, angleDegrees, rating: 0,

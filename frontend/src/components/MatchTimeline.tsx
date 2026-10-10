@@ -58,6 +58,7 @@ type MatchTimelineProps = {
   localConnectionEnabled: boolean
   backendUrl: string
   onReplayFrame: (snapshot: MatchSnapshot) => void
+  onReplayFramesChange: (frames: readonly RealtimeFrame[]) => void
   onLive: () => void
 }
 
@@ -81,6 +82,7 @@ export function MatchTimeline({
   localConnectionEnabled,
   backendUrl: apiBase,
   onReplayFrame,
+  onReplayFramesChange,
   onLive,
 }: MatchTimelineProps) {
   const { t, i18n } = useTranslation()
@@ -338,6 +340,10 @@ export function MatchTimeline({
   const busy = loading || preprocessing
 
   useEffect(() => {
+    onReplayFramesChange(replaying ? frames : [])
+  }, [frames, onReplayFramesChange, replaying])
+
+  useEffect(() => {
     const togglePlayback = () => {
       if (!replaying || busy || frames.length === 0) return
       setPlaying((current) => !current)
@@ -383,8 +389,9 @@ export function MatchTimeline({
       const targetTick = minute * 60 * 4
       const targetIndex = frames.findIndex(
         (frame) =>
-          (Number.isFinite(frame.displayTick) ? frame.displayTick : frame.tick) >=
-          targetTick
+          (Number.isFinite(frame.displayTick)
+            ? frame.displayTick
+            : frame.tick) >= targetTick
       )
       setPlaying(false)
       setDraftSliderPercent(undefined)
@@ -629,7 +636,9 @@ export function MatchTimeline({
                   const next = Array.isArray(value) ? value[0] : value
                   if (typeof next === "number" && replaying) {
                     commitSliderSeek(next)
-                    emitExploreTourInteraction({ id: "timeline-drag-committed" })
+                    emitExploreTourInteraction({
+                      id: "timeline-drag-committed",
+                    })
                   }
                 }}
                 className="[&_[data-slot=slider-range]]:bg-primary/80 [&_[data-slot=slider-thumb]]:size-5 [&_[data-slot=slider-thumb]]:rounded-full [&_[data-slot=slider-thumb]]:border-2 [&_[data-slot=slider-thumb]]:bg-background [&_[data-slot=slider-track]]:h-2 [&_[data-slot=slider-track]]:rounded-full"

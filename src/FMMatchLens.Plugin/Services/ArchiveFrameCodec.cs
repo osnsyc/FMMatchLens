@@ -75,7 +75,8 @@ internal static class ArchiveFrameCodec
                     ArchiveBinary.WriteVarInt64(writer, currentY - previousY);
                     ArchiveBinary.WriteVarInt64(writer,
                         current.SpeedCentimetersPerSecond - prior.SpeedCentimetersPerSecond);
-                    ArchiveBinary.WriteVarInt64(writer, current.AngleDegrees - prior.AngleDegrees);
+                    ArchiveBinary.WriteVarInt64(writer,
+                        EncodeAngle(current.AngleDegrees) - EncodeAngle(prior.AngleDegrees));
                     var mask = PlayerMask(prior, current);
                     ArchiveBinary.WriteVarUInt64(writer, mask);
                     WritePlayerFields(writer, current, prior, mask);
@@ -166,11 +167,13 @@ internal static class ArchiveFrameCodec
                     if (structureMinor >= 7)
                     {
                         var decodedSpeed = checked((int)speed + (int)ArchiveBinary.ReadVarInt64(reader));
-                        var decodedAngle = checked((int)angle + (int)ArchiveBinary.ReadVarInt64(reader));
-                        if (decodedSpeed is < 0 or > ushort.MaxValue || decodedAngle is < 0 or > 360)
+                        var decodedAngle = checked(EncodeAngle(angle) + (int)ArchiveBinary.ReadVarInt64(reader));
+                        if (decodedSpeed is < 0 or > ushort.MaxValue ||
+                            decodedAngle is < 0 or > ushort.MaxValue ||
+                            decodedAngle is > 360 and not ushort.MaxValue)
                             throw new ArchiveFormatException("invalid_movement", "Player movement delta is outside its quantized range.");
                         speed = (ushort)decodedSpeed;
-                        angle = (ushort)decodedAngle;
+                        angle = DecodeAngle((ushort)decodedAngle);
                     }
                     var mask = ArchiveBinary.ReadVarUInt64(reader);
                     if ((mask & ~supportedPlayerFields) != 0) throw new ArchiveFormatException("unknown_player_field", "Player delta contains unknown fields.");
@@ -278,7 +281,7 @@ internal static class ArchiveFrameCodec
         writer.Write(ArchiveBinary.Quantize(player.X, halfWidth));
         writer.Write(ArchiveBinary.Quantize(player.Y, halfLength));
         writer.Write(player.SpeedCentimetersPerSecond);
-        writer.Write(player.AngleDegrees);
+        writer.Write((ushort)EncodeAngle(player.AngleDegrees));
         WritePlayerFields(writer, player, default, AllPlayerFields);
     }
 
@@ -296,9 +299,10 @@ internal static class ArchiveFrameCodec
         var x = ArchiveBinary.Dequantize(reader.ReadUInt16(), halfWidth);
         var y = ArchiveBinary.Dequantize(reader.ReadUInt16(), halfLength);
         var speed = hasMovement ? reader.ReadUInt16() : (ushort)0;
-        var angle = hasMovement ? reader.ReadUInt16() : (ushort)0;
-        if (angle > 360)
+        var encodedAngle = hasMovement ? reader.ReadUInt16() : ushort.MaxValue;
+        if (encodedAngle > 360 && encodedAngle != ushort.MaxValue)
             throw new ArchiveFormatException("invalid_movement", "Player facing angle is outside its quantized range.");
+        var angle = DecodeAngle(encodedAngle);
         var seed = default(PlayerTickData) with
         {
             Slot = slot,
@@ -311,6 +315,11 @@ internal static class ArchiveFrameCodec
         };
         return ReadPlayerFields(reader, seed, playerFields);
     }
+
+    private static int EncodeAngle(ushort? angle) => angle ?? ushort.MaxValue;
+
+    private static ushort? DecodeAngle(ushort angle) =>
+        angle == ushort.MaxValue ? null : angle;
 
     private static ulong PlayerMask(PlayerTickData left, PlayerTickData right)
     {

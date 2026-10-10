@@ -39,7 +39,7 @@ import { ScoreHeader } from "@/components/ScoreHeader"
 import { PlayerComparisonPopup, SquadPanel } from "@/components/SquadPanel"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useTheme } from "@/components/theme-provider"
-import { useRealtimeMatch } from "@/api/realtimeMatch"
+import { useRealtimeMatch, type RealtimeFrame } from "@/api/realtimeMatch"
 import {
   defaultBackendUrl,
   loadBackendUrl,
@@ -164,6 +164,9 @@ export function App() {
     backendUrl
   )
   const [startupArchive, setStartupArchive] = useState<ReplayArchive>()
+  const [tacticalReplayFrames, setTacticalReplayFrames] = useState<
+    readonly RealtimeFrame[]
+  >([])
   const [archiveError, setArchiveError] = useState("")
   const [draggingArchive, setDraggingArchive] = useState(false)
   const [isDemoLoading, setIsDemoLoading] = useState(false)
@@ -282,6 +285,38 @@ export function App() {
     }
   }
   const sourceMatch = replayMatch ?? realtimeMatch
+  const isReplayMode = replayMatch !== null
+  const activeMatchId = sourceMatch?.matchId
+  const loadTacticalFrames = useCallback(
+    async (fromTick: number, toTick: number, signal: AbortSignal) => {
+      if (isReplayMode) {
+        if (signal.aborted) return []
+        return tacticalReplayFrames.slice(
+          lowerBoundFrameTick(tacticalReplayFrames, fromTick),
+          lowerBoundFrameTick(tacticalReplayFrames, toTick + 1)
+        )
+      }
+
+      const limit = Math.max(1, toTick - fromTick + 1)
+      const response = await fetch(
+        `${backendUrl}/api/match/frames?fromTick=${fromTick}&stride=1&limit=${limit}`,
+        { cache: "no-store", signal }
+      )
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const slice = (await response.json()) as {
+        matchId?: string
+        frames: RealtimeFrame[]
+      }
+      if (
+        signal.aborted ||
+        (activeMatchId && slice.matchId && slice.matchId !== activeMatchId)
+      ) {
+        return []
+      }
+      return slice.frames.filter((frame) => frame.tick <= toTick)
+    },
+    [activeMatchId, backendUrl, isReplayMode, tacticalReplayFrames]
+  )
   const pinnedPlayerMatchScope = pinnedPlayerMatchScopeKey(sourceMatch)
   const pinnedPlayerMatchScopeRef = useRef(pinnedPlayerMatchScope)
 
@@ -854,6 +889,7 @@ export function App() {
                     <div data-tour="tactical-panel" className="h-full min-h-0">
                       <TacticalBoard
                         match={match}
+                        loadTickFrames={loadTacticalFrames}
                         isFocusMode={isTacticalFocusMode}
                         eventFilterMode={tacticalEventFilterMode}
                         selectedPlayerIds={tacticalPlayerIds}
@@ -937,6 +973,7 @@ export function App() {
                   localConnectionEnabled={liveConnectionEnabled}
                   backendUrl={backendUrl}
                   onReplayFrame={showReplayFrame}
+                  onReplayFramesChange={setTacticalReplayFrames}
                   onLive={returnToLive}
                 />
               </Card>
@@ -951,6 +988,20 @@ export function App() {
 function colorSourceFromCss(color?: string) {
   if (!color || !/^#[0-9a-f]{6}$/i.test(color)) return undefined
   return { backgroundColour: Number.parseInt(color.slice(1), 16) }
+}
+
+function lowerBoundFrameTick(
+  frames: readonly RealtimeFrame[],
+  tick: number
+) {
+  let low = 0
+  let high = frames.length
+  while (low < high) {
+    const middle = (low + high) >>> 1
+    if (frames[middle].tick < tick) low = middle + 1
+    else high = middle
+  }
+  return low
 }
 
 export default App

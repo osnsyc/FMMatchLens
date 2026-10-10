@@ -902,10 +902,10 @@ internal sealed class GameMatchTickHook : IDisposable
     private bool ReadPlayerMovement(
         nint matchPlayer,
         out ushort speedCentimetersPerSecond,
-        out ushort angleDegrees)
+        out ushort? angleDegrees)
     {
         speedCentimetersPerSecond = 0;
-        angleDegrees = 0;
+        angleDegrees = null;
         if (!_memoryReader.TryReadPointer(
                 matchPlayer + Offsets.MatchPlayer.PositionHistory,
                 out var positionHistory) ||

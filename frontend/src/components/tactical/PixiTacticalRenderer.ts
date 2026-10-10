@@ -21,6 +21,11 @@ import {
 } from "@/components/tactical/tacticalScene"
 import type { MatchPlayer, TeamSide } from "@/types/match"
 import type { ResolvedVizTokens } from "@/theme/types"
+import type {
+  DribblePlayback,
+  TacticalPlaybackPlayer,
+} from "@/components/tactical/dribblePlayback"
+import { interpolatePlaybackPlayer } from "@/components/tactical/dribblePlayback"
 
 export type TacticalAppearance = {
   homeColor: string
@@ -62,6 +67,15 @@ type MarkerReveal = {
   startedAt: number
 }
 
+type PlaybackMarkerRecord = {
+  container: Container
+  body: Graphics
+  arrow: Graphics
+  label: BitmapText
+  team: TeamSide
+  shirtNumber?: number
+}
+
 const GRID_SIZE = 20
 const BASE_MARKER_SIZE = 20
 const HIT_DISTANCE_EPSILON = 0.001
@@ -69,6 +83,8 @@ const RENDER_RESOLUTION = 2
 const TRAJECTORY_DASH_LENGTH_PX = 4
 const TRAJECTORY_DASH_GAP_PX = 5
 const MARKER_REVEAL_DURATION_MS = 250
+const PLAYBACK_TICK_DURATION_MS = 250
+const PLAYBACK_MARKER_RADIUS = 10
 export const TACTICAL_EVENT_OVERSCAN_PX = 16
 
 /** Persistent, demand-rendered tactical scene with incremental event diffs. */
@@ -81,6 +97,9 @@ export class PixiTacticalRenderer {
   private readonly selectionLayer = new Container()
   private readonly chainMarkerLayer = new Container()
   private readonly selectionRing = new Graphics()
+  private readonly playbackTrailLayer = new Container()
+  private readonly playbackPlayerLayer = new Container()
+  private readonly playbackTrail = new Graphics()
   private readonly markerByEventId = new Map<string, MarkerRecord>()
   private readonly trajectoryByEventId = new Map<string, Graphics>()
   private readonly chainMarkerByEventId = new Map<string, MarkerRecord>()
@@ -100,6 +119,11 @@ export class PixiTacticalRenderer {
   private hoveredEventId: string | null = null
   private chainSignature = ""
   private animationFrame: number | null = null
+  private playbackAnimationFrame: number | null = null
+  private playback?: DribblePlayback
+  private playbackStartedAt = 0
+  private playbackFrameIndex = 0
+  private readonly playbackMarkers = new Map<number, PlaybackMarkerRecord>()
   private readonly reduceMotion = window.matchMedia(
     "(prefers-reduced-motion: reduce)"
   ).matches
@@ -143,11 +167,16 @@ export class PixiTacticalRenderer {
     this.selectionLayer.interactiveChildren = false
     this.chainMarkerLayer.sortableChildren = true
     this.selectionLayer.addChild(this.selectionRing, this.chainMarkerLayer)
+    this.playbackTrailLayer.addChild(this.playbackTrail)
+    this.playbackTrailLayer.visible = false
+    this.playbackPlayerLayer.visible = false
     this.stage.addChild(
       this.trajectoryLayer,
       this.shotChainLayer,
       this.markerLayer,
-      this.selectionLayer
+      this.selectionLayer,
+      this.playbackTrailLayer,
+      this.playbackPlayerLayer
     )
   }
 
@@ -158,14 +187,8 @@ export class PixiTacticalRenderer {
     appearance: TacticalAppearance
   ) {
     const renderer = await autoDetectRenderer({
-      width: Math.max(
-        1,
-        Math.round(width + TACTICAL_EVENT_OVERSCAN_PX * 2)
-      ),
-      height: Math.max(
-        1,
-        Math.round(height + TACTICAL_EVENT_OVERSCAN_PX * 2)
-      ),
+      width: Math.max(1, Math.round(width + TACTICAL_EVENT_OVERSCAN_PX * 2)),
+      height: Math.max(1, Math.round(height + TACTICAL_EVENT_OVERSCAN_PX * 2)),
       backgroundAlpha: 0,
       antialias: true,
       preference: ["webgl"],
@@ -258,6 +281,9 @@ export class PixiTacticalRenderer {
     }
     this.drawSelectionRing()
     this.drawShotChains(this.shotChains)
+    for (const marker of this.playbackMarkers.values()) {
+      this.drawPlaybackMarkerAppearance(marker)
+    }
     this.renderOnce()
   }
 
@@ -276,6 +302,36 @@ export class PixiTacticalRenderer {
     this.renderOnce()
   }
 
+  updateDribblePlayback(playback: DribblePlayback | null) {
+    if (sameDribblePlayback(this.playback, playback)) return
+    if (this.playbackAnimationFrame != null) {
+      cancelAnimationFrame(this.playbackAnimationFrame)
+      this.playbackAnimationFrame = null
+    }
+    this.clearPlaybackMarkers()
+    this.playbackTrail.clear()
+    this.playback = playback ?? undefined
+    this.playbackFrameIndex = 0
+    const active = playback != null
+    this.setBaseLayersVisible(!active)
+    this.playbackTrailLayer.visible = active
+    this.playbackPlayerLayer.visible = active
+    if (!playback) {
+      this.renderOnce()
+      return
+    }
+
+    this.playbackStartedAt = performance.now()
+    if (this.reduceMotion) {
+      this.drawPlaybackFrame(playback.frames.length - 1, 0)
+      return
+    }
+    this.drawPlaybackFrame(0, 0)
+    this.playbackAnimationFrame = requestAnimationFrame(
+      this.advanceDribblePlayback
+    )
+  }
+
   setHovered(eventId: string | null) {
     if (eventId === this.hoveredEventId) return
     const previous = this.findMarker(this.hoveredEventId)
@@ -287,6 +343,7 @@ export class PixiTacticalRenderer {
   }
 
   hitTest(localX: number, localY: number): TacticalHit | null {
+    if (this.playback) return null
     if (this.width <= 0 || this.height <= 0) return null
     const fieldX = localX - TACTICAL_EVENT_OVERSCAN_PX
     const fieldY = localY - TACTICAL_EVENT_OVERSCAN_PX
@@ -355,18 +412,23 @@ export class PixiTacticalRenderer {
     this.drawShotChains(this.shotChains)
     this.drawSelectionRing()
     this.rebuildSpatialGrid()
+    if (this.playback) this.drawPlaybackFrame(this.playbackFrameIndex, 0)
     this.renderOnce()
   }
 
   destroy() {
     if (this.animationFrame != null) cancelAnimationFrame(this.animationFrame)
+    if (this.playbackAnimationFrame != null)
+      cancelAnimationFrame(this.playbackAnimationFrame)
     this.animationFrame = null
+    this.playbackAnimationFrame = null
     this.markerReveals.clear()
     for (const context of this.markerContextByKey.values()) context.destroy()
     this.markerContextByKey.clear()
     this.markerByEventId.clear()
     this.trajectoryByEventId.clear()
     this.chainMarkerByEventId.clear()
+    this.playbackMarkers.clear()
     this.spatialGrid.clear()
     this.shotChains = []
     this.stage.destroy({ children: true })
@@ -777,7 +839,10 @@ export class PixiTacticalRenderer {
         appearance.tokens.tacticalPitchSurface,
         0x0a0f1e
       ),
-      important: this.resolveCssColor(appearance.tokens.eventImportant, 0xf6c453),
+      important: this.resolveCssColor(
+        appearance.tokens.eventImportant,
+        0xf6c453
+      ),
       negative: this.resolveCssColor("var(--status-negative)", 0xff7188),
       contrast: this.resolveCssColor(appearance.tokens.eventContrast, 0xf4f0ff),
       foreground: this.resolveCssColor(
@@ -799,6 +864,221 @@ export class PixiTacticalRenderer {
     context.fillRect(0, 0, 1, 1)
     const [red, green, blue] = context.getImageData(0, 0, 1, 1).data
     return (red << 16) | (green << 8) | blue
+  }
+
+  private readonly advanceDribblePlayback = (timestamp: number) => {
+    this.playbackAnimationFrame = null
+    const playback = this.playback
+    if (!playback) return
+    const frames = playback.frames
+    const firstTick = frames[0].tick
+    const lastTick = frames[frames.length - 1].tick
+    const playbackTick = Math.min(
+      lastTick,
+      firstTick +
+        (timestamp - this.playbackStartedAt) / PLAYBACK_TICK_DURATION_MS
+    )
+    while (
+      this.playbackFrameIndex < frames.length - 2 &&
+      frames[this.playbackFrameIndex + 1].tick <= playbackTick
+    ) {
+      this.playbackFrameIndex += 1
+    }
+    const current = frames[this.playbackFrameIndex]
+    const next =
+      frames[Math.min(frames.length - 1, this.playbackFrameIndex + 1)]
+    const tickSpan = Math.max(1, next.tick - current.tick)
+    const progress = clamp((playbackTick - current.tick) / tickSpan, 0, 1)
+    this.drawPlaybackFrame(this.playbackFrameIndex, progress)
+    if (playbackTick >= lastTick) return
+    this.playbackAnimationFrame = requestAnimationFrame(
+      this.advanceDribblePlayback
+    )
+  }
+
+  private drawPlaybackFrame(frameIndex: number, progress: number) {
+    const playback = this.playback
+    if (!playback) return
+    const frames = playback.frames
+    const current = frames[Math.min(frameIndex, frames.length - 1)]
+    const next = frames[Math.min(frameIndex + 1, frames.length - 1)]
+    const nextPlayers = new Map(
+      next.players.map((player) => [player.playerId, player])
+    )
+    const visible = new Set<number>()
+    for (const player of current.players) {
+      const target = nextPlayers.get(player.playerId) ?? player
+      const interpolated = interpolatePlaybackPlayer(
+        player,
+        target,
+        progress,
+        Math.max(1, next.tick - current.tick)
+      )
+      visible.add(player.playerId)
+      this.positionPlaybackMarker(interpolated)
+    }
+    for (const [playerId, marker] of this.playbackMarkers) {
+      marker.container.visible = visible.has(playerId)
+    }
+    this.drawPlaybackTrail(frameIndex, progress)
+    this.renderOnce()
+  }
+
+  private positionPlaybackMarker(player: TacticalPlaybackPlayer) {
+    let marker = this.playbackMarkers.get(player.playerId)
+    if (!marker) {
+      const container = new Container()
+      const body = new Graphics()
+      const arrow = new Graphics()
+      const label = new BitmapText({
+        text: player.shirtNumber == null ? "" : String(player.shirtNumber),
+        style: {
+          fontFamily: "Arial",
+          fontSize: 9,
+          fontWeight: "bold",
+          fill: this.resolvedAppearance.foreground,
+          align: "center",
+        },
+      })
+      label.anchor.set(0.5)
+      container.addChild(body, label, arrow)
+      marker = {
+        container,
+        body,
+        arrow,
+        label,
+        team: player.team,
+        shirtNumber: player.shirtNumber,
+      }
+      this.playbackMarkers.set(player.playerId, marker)
+      this.playbackPlayerLayer.addChild(container)
+      this.drawPlaybackMarkerAppearance(marker)
+    } else if (
+      marker.team !== player.team ||
+      marker.shirtNumber !== player.shirtNumber
+    ) {
+      marker.team = player.team
+      marker.shirtNumber = player.shirtNumber
+      marker.label.text =
+        player.shirtNumber == null ? "" : String(player.shirtNumber)
+      this.drawPlaybackMarkerAppearance(marker)
+    }
+    marker.container.visible = true
+    marker.container.position.set(
+      (player.x / 100) * this.width,
+      (player.y / 100) * this.height
+    )
+    marker.arrow.visible = player.angleDegrees != null
+    if (player.angleDegrees != null) {
+      marker.arrow.rotation = (player.angleDegrees * Math.PI) / 180
+    }
+  }
+
+  private drawPlaybackMarkerAppearance(marker: PlaybackMarkerRecord) {
+    const teamColor = this.teamColor(marker.team)
+    const labelColor = this.resolvedAppearance.foreground
+    marker.body
+      .clear()
+      .circle(0, 0, PLAYBACK_MARKER_RADIUS)
+      .fill({ color: teamColor, alpha: 0.96 })
+      .stroke({
+        width: 2.5,
+        color: teamColor,
+        alpha: 1,
+      })
+      .circle(0, 0, PLAYBACK_MARKER_RADIUS - 2)
+      .stroke({
+        width: 1.5,
+        color: labelColor,
+        alpha: 0.95,
+      })
+    marker.arrow
+      .clear()
+      .poly(
+        [
+          { x: 0, y: -PLAYBACK_MARKER_RADIUS - 7 },
+          { x: -4, y: -PLAYBACK_MARKER_RADIUS + 1 },
+          { x: 4, y: -PLAYBACK_MARKER_RADIUS + 1 },
+        ],
+        true
+      )
+      .fill({ color: teamColor, alpha: 1 })
+    marker.label.style.fill = labelColor
+  }
+
+  private drawPlaybackTrail(frameIndex: number, progress: number) {
+    const playback = this.playback
+    if (!playback) return
+    const points: Array<{ x: number; y: number }> = []
+    for (let index = 0; index <= frameIndex; index += 1) {
+      const player = playback.frames[index].players.find(
+        (candidate) => candidate.playerId === playback.dribblerPlayerId
+      )
+      if (player) points.push(player)
+    }
+    const current = playback.frames[frameIndex].players.find(
+      (candidate) => candidate.playerId === playback.dribblerPlayerId
+    )
+    const next = playback.frames[
+      Math.min(frameIndex + 1, playback.frames.length - 1)
+    ].players.find(
+      (candidate) => candidate.playerId === playback.dribblerPlayerId
+    )
+    if (current && next && progress > 0) {
+      points.push(
+        interpolatePlaybackPlayer(
+          current,
+          next,
+          progress,
+          Math.max(
+            1,
+            playback.frames[
+              Math.min(frameIndex + 1, playback.frames.length - 1)
+            ].tick - playback.frames[frameIndex].tick
+          )
+        )
+      )
+    }
+
+    this.playbackTrail.clear()
+    if (points.length < 2) return
+    const pixelPoints = points.map((point) => ({
+      x: (point.x / 100) * this.width,
+      y: (point.y / 100) * this.height,
+    }))
+    const teamColor = this.teamColor(playback.team)
+
+    drawSmoothTrailPath(this.playbackTrail, pixelPoints)
+    this.playbackTrail.stroke({
+      width: 3,
+      color: teamColor,
+      alpha: 0.12,
+      cap: "round",
+      join: "round",
+    })
+    drawSmoothTrailPath(this.playbackTrail, pixelPoints)
+    this.playbackTrail.stroke({
+      width: 1.5,
+      color: teamColor,
+      alpha: 0.68,
+      cap: "round",
+      join: "round",
+    })
+
+  }
+
+  private clearPlaybackMarkers() {
+    this.playbackPlayerLayer
+      .removeChildren()
+      .forEach((child) => child.destroy({ children: true }))
+    this.playbackMarkers.clear()
+  }
+
+  private setBaseLayersVisible(visible: boolean) {
+    this.trajectoryLayer.visible = visible
+    this.shotChainLayer.visible = visible
+    this.markerLayer.visible = visible
+    this.selectionLayer.visible = visible
   }
 
   private renderOnce() {
@@ -1246,6 +1526,47 @@ function sameTrajectoryGeometry(
     left.endY === right.endY &&
     left.trajectoryPoints === right.trajectoryPoints &&
     left.showTrajectory === right.showTrajectory
+  )
+}
+
+function drawSmoothTrailPath(
+  target: Graphics,
+  points: readonly { x: number; y: number }[]
+) {
+  if (points.length < 2) return
+  target.moveTo(points[0].x, points[0].y)
+  if (points.length === 2) {
+    target.lineTo(points[1].x, points[1].y)
+    return
+  }
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const control = points[index]
+    const next = points[index + 1]
+    target.quadraticCurveTo(
+      control.x,
+      control.y,
+      (control.x + next.x) / 2,
+      (control.y + next.y) / 2
+    )
+  }
+  const last = points.at(-1)!
+  target.lineTo(last.x, last.y)
+}
+
+function sameDribblePlayback(
+  current: DribblePlayback | undefined,
+  next: DribblePlayback | null
+) {
+  if (!current || !next) return current == null && next == null
+  if (current.id !== next.id || current.frames.length !== next.frames.length)
+    return false
+  const currentFirst = current.frames[0]
+  const currentLast = current.frames.at(-1)
+  const nextFirst = next.frames[0]
+  const nextLast = next.frames.at(-1)
+  return (
+    currentFirst?.tick === nextFirst?.tick &&
+    currentLast?.tick === nextLast?.tick
   )
 }
 

@@ -487,6 +487,7 @@ export class LegacyLiveDerivations {
         nativeEventType: item.eventType,
         flags: item.flags,
         sequenceIndex: item.sequenceIndex,
+        completionTick: item.completionTick,
         annotations: nativeMomentumEventAnnotations(item),
       })
     }
@@ -713,7 +714,9 @@ export function useRealtimeMatch(
             (frame) => frame.tick > historyLastTick
           )
           derived.append(additions)
-          if (additions.length > 0) historyLastTick = additions.at(-1)!.tick
+          if (additions.length > 0) {
+            historyLastTick = additions.at(-1)!.tick
+          }
           changed ||= additions.length > 0
           keepLoading =
             slice.frames.length >= liveFramePageSize && additions.length > 0
@@ -1215,6 +1218,7 @@ export function buildTacticalEvents(
         nativeEventType: item.eventType,
         flags: item.flags,
         sequenceIndex: item.sequenceIndex,
+        completionTick: item.completionTick,
         annotations: nativeMomentumEventAnnotations(item),
       })
     }
