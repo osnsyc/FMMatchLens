@@ -9,11 +9,11 @@ internal static class Offsets
         public const int CompetitionPrimaryColour = 0x68C;
         public const int CompetitionSecondaryColour = 0x690;
         public const int CompetitionTertiaryColour = 0x694;
+        public const int BallPosition = 0x126B0;
         // public const int MatchPlayersCount = 0x13A20; //deprecated
         // public const int FirstMatchPlayer = 0x13A28;  //deprecated
         public const int MomentumEventSource = 0x139F0;
         public const int WaitingReceiver = 0x13D10;
-        public const int BallPosition = 0x140D0;
         public const int HomeTeam = 0x14100;
         public const int AwayTeam = 0x14108;
         public const int StadiumColourObject = 0x14178;
@@ -36,9 +36,9 @@ internal static class Offsets
 
     public static class BallPosition
     {
-        public const int X = 0x100;
-        public const int Y = 0x104;
-        public const int Z = 0x108;
+        public const int X = 0x160;
+        public const int Y = 0x164;
+        public const int Z = 0x168;
     }
 
     public static class Competition

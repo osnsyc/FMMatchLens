@@ -536,7 +536,7 @@ internal sealed class GameMatchTickHook : IDisposable
 
     private void CaptureBallPosition(nint match, RawRealtimeTickFrame frame)
     {
-        _memoryReader.TryReadPointer(match + Offsets.GameMatch.BallPosition, out var ballPosition);
+        var ballPosition = match + Offsets.GameMatch.BallPosition;
         frame.BallXCentimeters = ReadCoordinateCentimeters(ballPosition, Offsets.BallPosition.X);
         frame.BallYCentimeters = ReadCoordinateCentimeters(ballPosition, Offsets.BallPosition.Y);
         frame.BallZCentimeters = ReadCoordinateCentimeters(ballPosition, Offsets.BallPosition.Z);
