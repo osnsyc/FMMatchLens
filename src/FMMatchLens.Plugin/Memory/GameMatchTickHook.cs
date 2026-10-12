@@ -359,10 +359,6 @@ internal sealed class GameMatchTickHook : IDisposable
         _memoryReader.TryReadByte(match + Offsets.GameMatch.LifecycleStateD, out var state142FB);
         _memoryReader.TryReadPointer(match + Offsets.GameMatch.PossessionTeam, out var possessionTeam);
         _memoryReader.TryReadPointer(match + Offsets.GameMatch.CurrentBallHolder, out var currentBallHolder);
-        _memoryReader.TryReadPointer(match + Offsets.GameMatch.BallPosition, out var ballPosition);
-        var ballXCentimeters = ReadCoordinateCentimeters(ballPosition, Offsets.BallPosition.X);
-        var ballYCentimeters = ReadCoordinateCentimeters(ballPosition, Offsets.BallPosition.Y);
-        var ballZCentimeters = ReadCoordinateCentimeters(ballPosition, Offsets.BallPosition.Z);
 
         var totalPlayerCount = homePlayerCount + awayPlayerCount;
         var isActive = homeTeam != default && awayTeam != default && homeTeam != awayTeam &&
@@ -414,9 +410,6 @@ internal sealed class GameMatchTickHook : IDisposable
             AwayTeam: awayTeam,
             PossessionTeam: possessionTeam,
             CurrentBallHolder: currentBallHolder,
-            BallXCentimeters: ballXCentimeters,
-            BallYCentimeters: ballYCentimeters,
-            BallZCentimeters: ballZCentimeters,
             HomeGoals: homeGoals,
             AwayGoals: awayGoals,
             HomeXg: homeXg,
@@ -495,9 +488,7 @@ internal sealed class GameMatchTickHook : IDisposable
                     ? TeamSide.Away
                     : null;
             frame.BallHolderPlayerId = 0;
-            frame.BallXCentimeters = record.BallXCentimeters;
-            frame.BallYCentimeters = record.BallYCentimeters;
-            frame.BallZCentimeters = record.BallZCentimeters;
+            CaptureBallPosition(record.MatchAddress, frame);
             frame.Home = ReadTeamFrame(record.HomeTeam);
             frame.Away = ReadTeamFrame(record.AwayTeam);
             _momentumCalculator.Capture(
@@ -541,6 +532,14 @@ internal sealed class GameMatchTickHook : IDisposable
                 _realtimeFrames.ReleaseUnpublished(frame);
             }
         }
+    }
+
+    private void CaptureBallPosition(nint match, RawRealtimeTickFrame frame)
+    {
+        _memoryReader.TryReadPointer(match + Offsets.GameMatch.BallPosition, out var ballPosition);
+        frame.BallXCentimeters = ReadCoordinateCentimeters(ballPosition, Offsets.BallPosition.X);
+        frame.BallYCentimeters = ReadCoordinateCentimeters(ballPosition, Offsets.BallPosition.Y);
+        frame.BallZCentimeters = ReadCoordinateCentimeters(ballPosition, Offsets.BallPosition.Z);
     }
 
     private void CaptureTeamPlayerFrames(

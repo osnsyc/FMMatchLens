@@ -12,9 +12,16 @@ export type TacticalPlaybackPlayer = {
   velocityYPerTick: number
 }
 
+export type TacticalPlaybackBall = {
+  x: number
+  y: number
+  zCentimeters: number
+}
+
 export type TacticalPlaybackFrame = {
   tick: number
   players: readonly TacticalPlaybackPlayer[]
+  ball?: TacticalPlaybackBall
 }
 
 export type DribblePlayback = {
@@ -45,6 +52,12 @@ export function buildDribblePlayback(
     const halfWidth = validPitchHalf(frame.halfPitchWidth)
     const halfLength = validPitchHalf(frame.halfPitchLength)
     if (!halfWidth || !halfLength) continue
+    const ball = projectBallToTacticalBoard(
+      frame,
+      rotateForDisplay,
+      halfWidth,
+      halfLength
+    )
     const playbackPlayers: TacticalPlaybackPlayer[] = []
     for (const player of frame.players) {
       if (
@@ -103,7 +116,7 @@ export function buildDribblePlayback(
       })
     }
     if (playbackPlayers.length > 0) {
-      playbackFrames.push({ tick: frame.tick, players: playbackPlayers })
+      playbackFrames.push({ tick: frame.tick, players: playbackPlayers, ball })
     }
   }
 
@@ -113,6 +126,44 @@ export function buildDribblePlayback(
     dribblerPlayerId: event.playerId,
     team: event.team,
     frames: smoothHeldPositions(playbackFrames),
+  }
+}
+
+function projectBallToTacticalBoard(
+  frame: RealtimeFrame,
+  rotate: boolean,
+  halfWidth: number,
+  halfLength: number
+): TacticalPlaybackBall | undefined {
+  if (
+    !Number.isFinite(frame.ballXCentimeters) ||
+    !Number.isFinite(frame.ballYCentimeters) ||
+    !Number.isFinite(frame.ballZCentimeters)
+  )
+    return undefined
+  return {
+    ...projectPositionToTacticalBoard(
+      frame.ballXCentimeters / 100,
+      frame.ballYCentimeters / 100,
+      rotate,
+      halfWidth,
+      halfLength
+    ),
+    zCentimeters: frame.ballZCentimeters,
+  }
+}
+
+export function interpolatePlaybackBall(
+  current: TacticalPlaybackBall,
+  next: TacticalPlaybackBall,
+  progress: number
+): TacticalPlaybackBall {
+  const t = Math.min(1, Math.max(0, progress))
+  return {
+    x: current.x + (next.x - current.x) * t,
+    y: current.y + (next.y - current.y) * t,
+    zCentimeters:
+      current.zCentimeters + (next.zCentimeters - current.zCentimeters) * t,
   }
 }
 
@@ -170,7 +221,46 @@ function smoothHeldPositions(
       }
     }
   }
+  smoothHeldBallPositions(result)
   return result
+}
+
+function smoothHeldBallPositions(frames: TacticalPlaybackFrame[]) {
+  const samples = frames.flatMap((frame) =>
+    frame.ball ? [{ frame, ball: frame.ball }] : []
+  )
+  if (samples.length < 3) return
+  const anchorIndexes = [0]
+  for (let index = 1; index < samples.length; index += 1) {
+    const anchor = samples[anchorIndexes.at(-1) ?? 0].ball
+    const candidate = samples[index].ball
+    if (
+      Math.hypot(candidate.x - anchor.x, candidate.y - anchor.y) > 0.001 ||
+      Math.abs(candidate.zCentimeters - anchor.zCentimeters) > 0.5
+    ) {
+      anchorIndexes.push(index)
+    }
+  }
+  for (
+    let anchorIndex = 0;
+    anchorIndex < anchorIndexes.length - 1;
+    anchorIndex += 1
+  ) {
+    const fromIndex = anchorIndexes[anchorIndex]
+    const toIndex = anchorIndexes[anchorIndex + 1]
+    if (toIndex - fromIndex < 2) continue
+    const from = samples[fromIndex]
+    const to = samples[toIndex]
+    const tickSpan = Math.max(1, to.frame.tick - from.frame.tick)
+    for (let index = fromIndex + 1; index < toIndex; index += 1) {
+      const sample = samples[index]
+      sample.frame.ball = interpolatePlaybackBall(
+        from.ball,
+        to.ball,
+        (sample.frame.tick - from.frame.tick) / tickSpan
+      )
+    }
+  }
 }
 
 export function interpolatePlaybackPlayer(

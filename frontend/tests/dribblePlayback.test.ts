@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import type { RealtimeFrame, RealtimePlayer } from "@/api/realtimeMatch"
 import {
   buildDribblePlayback,
+  interpolatePlaybackBall,
   interpolatePlaybackPlayer,
   type TacticalPlaybackPlayer,
 } from "@/components/tactical/dribblePlayback"
@@ -41,6 +42,11 @@ describe("buildDribblePlayback", () => {
     })
     expect(playback?.frames[0].players[0].velocityXPerTick).toBeCloseTo(0)
     expect(playback?.frames[0].players[0].velocityYPerTick).toBeCloseTo(-1)
+    expect(playback?.frames[0].ball).toMatchObject({
+      x: 35,
+      y: 37.5,
+      zCentimeters: 25,
+    })
     expect(
       playback?.frames[0].players.find((player) => player.playerId === 8)
     ).toMatchObject({ angleDegrees: 0 })
@@ -100,6 +106,11 @@ describe("buildDribblePlayback", () => {
     expect(xPositions?.[1]).toBeLessThan(40)
     expect(xPositions?.[2]).toBeLessThan(xPositions?.[1] ?? 100)
     expect(xPositions?.[3]).toBeCloseTo(30)
+    const ballXPositions = playback?.frames.map((item) => item.ball?.x)
+    expect(ballXPositions?.[0]).toBeCloseTo(40)
+    expect(ballXPositions?.[1]).toBeLessThan(40)
+    expect(ballXPositions?.[2]).toBeLessThan(ballXPositions?.[1] ?? 100)
+    expect(ballXPositions?.[3]).toBeCloseTo(30)
   })
 
   it("uses speed-derived tangents and interpolates absolute angles across zero", () => {
@@ -141,6 +152,16 @@ describe("buildDribblePlayback", () => {
     ).toBeUndefined()
   })
 
+  it("interpolates the football position and height between ticks", () => {
+    expect(
+      interpolatePlaybackBall(
+        { x: 20, y: 30, zCentimeters: 0 },
+        { x: 40, y: 50, zCentimeters: 100 },
+        0.25
+      )
+    ).toEqual({ x: 25, y: 35, zCentimeters: 25 })
+  })
+
   it("rejects events without usable trajectory endpoints", () => {
     expect(
       buildDribblePlayback(
@@ -163,6 +184,9 @@ function frame(tick: number): RealtimeFrame {
   return {
     tick,
     period: 1,
+    ballXCentimeters: (10 + step * 2.5) * 100,
+    ballYCentimeters: (20 + step * 10) * 100,
+    ballZCentimeters: 25,
     halfPitchWidth: 50,
     halfPitchLength: 100,
     players: [
@@ -192,6 +216,9 @@ function heldFrame(tick: number, x: number, y: number): RealtimeFrame {
   return {
     tick,
     period: 1,
+    ballXCentimeters: x * 100,
+    ballYCentimeters: y * 100,
+    ballZCentimeters: 0,
     halfPitchWidth: 50,
     halfPitchLength: 100,
     players: [

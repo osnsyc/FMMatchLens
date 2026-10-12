@@ -1,9 +1,12 @@
 import {
+  Assets,
   autoDetectRenderer,
   BitmapText,
   Container,
   Graphics,
   GraphicsContext,
+  Sprite,
+  type Texture,
   type Renderer,
 } from "pixi.js"
 
@@ -23,9 +26,13 @@ import type { MatchPlayer, TeamSide } from "@/types/match"
 import type { ResolvedVizTokens } from "@/theme/types"
 import type {
   DribblePlayback,
+  TacticalPlaybackBall,
   TacticalPlaybackPlayer,
 } from "@/components/tactical/dribblePlayback"
-import { interpolatePlaybackPlayer } from "@/components/tactical/dribblePlayback"
+import {
+  interpolatePlaybackBall,
+  interpolatePlaybackPlayer,
+} from "@/components/tactical/dribblePlayback"
 
 export type TacticalAppearance = {
   homeColor: string
@@ -85,6 +92,7 @@ const TRAJECTORY_DASH_GAP_PX = 5
 const MARKER_REVEAL_DURATION_MS = 250
 const PLAYBACK_TICK_DURATION_MS = 250
 const PLAYBACK_MARKER_RADIUS = 10
+const PLAYBACK_BALL_SIZE = 12
 export const TACTICAL_EVENT_OVERSCAN_PX = 16
 
 /** Persistent, demand-rendered tactical scene with incremental event diffs. */
@@ -99,7 +107,9 @@ export class PixiTacticalRenderer {
   private readonly selectionRing = new Graphics()
   private readonly playbackTrailLayer = new Container()
   private readonly playbackPlayerLayer = new Container()
+  private readonly playbackBallLayer = new Container()
   private readonly playbackTrail = new Graphics()
+  private readonly playbackBall: Sprite
   private readonly markerByEventId = new Map<string, MarkerRecord>()
   private readonly trajectoryByEventId = new Map<string, Graphics>()
   private readonly chainMarkerByEventId = new Map<string, MarkerRecord>()
@@ -133,7 +143,8 @@ export class PixiTacticalRenderer {
     host: HTMLDivElement,
     width: number,
     height: number,
-    appearance: TacticalAppearance
+    appearance: TacticalAppearance,
+    ballTexture: Texture
   ) {
     this.renderer = renderer
     this.width = width
@@ -168,15 +179,22 @@ export class PixiTacticalRenderer {
     this.chainMarkerLayer.sortableChildren = true
     this.selectionLayer.addChild(this.selectionRing, this.chainMarkerLayer)
     this.playbackTrailLayer.addChild(this.playbackTrail)
+    this.playbackBall = new Sprite(ballTexture)
+    this.playbackBall.anchor.set(0.5)
+    this.playbackBall.width = PLAYBACK_BALL_SIZE
+    this.playbackBall.height = PLAYBACK_BALL_SIZE
+    this.playbackBallLayer.addChild(this.playbackBall)
     this.playbackTrailLayer.visible = false
     this.playbackPlayerLayer.visible = false
+    this.playbackBallLayer.visible = false
     this.stage.addChild(
       this.trajectoryLayer,
       this.shotChainLayer,
       this.markerLayer,
       this.selectionLayer,
       this.playbackTrailLayer,
-      this.playbackPlayerLayer
+      this.playbackPlayerLayer,
+      this.playbackBallLayer
     )
   }
 
@@ -195,10 +213,18 @@ export class PixiTacticalRenderer {
       resolution: RENDER_RESOLUTION,
       autoDensity: true,
     })
+    const ballTexture = await Assets.load<Texture>("./goal.svg")
     renderer.canvas.className = "pointer-events-none block size-full"
     renderer.canvas.setAttribute("aria-hidden", "true")
     host.appendChild(renderer.canvas)
-    return new PixiTacticalRenderer(renderer, host, width, height, appearance)
+    return new PixiTacticalRenderer(
+      renderer,
+      host,
+      width,
+      height,
+      appearance,
+      ballTexture
+    )
   }
 
   updateEvents(scene: TacticalScene) {
@@ -316,6 +342,7 @@ export class PixiTacticalRenderer {
     this.setBaseLayersVisible(!active)
     this.playbackTrailLayer.visible = active
     this.playbackPlayerLayer.visible = active
+    this.playbackBallLayer.visible = active
     if (!playback) {
       this.renderOnce()
       return
@@ -920,8 +947,28 @@ export class PixiTacticalRenderer {
     for (const [playerId, marker] of this.playbackMarkers) {
       marker.container.visible = visible.has(playerId)
     }
+    const currentBall = current.ball
+    const nextBall = next.ball ?? currentBall
+    if (currentBall && nextBall) {
+      this.positionPlaybackBall(
+        interpolatePlaybackBall(currentBall, nextBall, progress)
+      )
+    } else {
+      this.playbackBall.visible = false
+    }
     this.drawPlaybackTrail(frameIndex, progress)
     this.renderOnce()
+  }
+
+  private positionPlaybackBall(ball: TacticalPlaybackBall) {
+    this.playbackBall.visible = true
+    this.playbackBall.position.set(
+      (ball.x / 100) * this.width,
+      (ball.y / 100) * this.height
+    )
+    const elevationScale = 1 + clamp(ball.zCentimeters, 0, 300) / 900
+    this.playbackBall.width = PLAYBACK_BALL_SIZE * elevationScale
+    this.playbackBall.height = PLAYBACK_BALL_SIZE * elevationScale
   }
 
   private positionPlaybackMarker(player: TacticalPlaybackPlayer) {
