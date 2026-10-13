@@ -615,6 +615,16 @@ export function useExploreTour(adapter: ExploreTourAdapter) {
       }
       if (
         currentId === "tactical-explore" &&
+        detail.id === "tactical-shot-chain-playback" &&
+        transitionMachine({ type: "tactical-playback-started" })
+      ) {
+        updatePrompt({
+          body: t("exploreTour.prompts.shotChainPlayback.body"),
+          action: t("exploreTour.prompts.shotChainPlayback.action"),
+        })
+      }
+      if (
+        currentId === "tactical-explore" &&
         detail.id === "tactical-empty-click" &&
         transitionMachine({ type: "tactical-chain-closed" })
       ) {

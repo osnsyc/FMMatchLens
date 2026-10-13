@@ -8,7 +8,7 @@ export type ExploreTourMachineState = {
   heatmapPhase: "range" | "possession" | "player" | "focus" | "restore"
   archiveOpened: boolean
   themeOpened: boolean
-  tacticalPhase: "shot" | "chain" | "focus" | "filter" | "players"
+  tacticalPhase: "shot" | "chain" | "playback" | "focus" | "filter" | "players"
 }
 
 export type ExploreTourMachineAction =
@@ -23,6 +23,7 @@ export type ExploreTourMachineAction =
   | { type: "archive-opened" }
   | { type: "theme-opened" }
   | { type: "tactical-shot-selected" }
+  | { type: "tactical-playback-started" }
   | { type: "tactical-chain-closed" }
   | { type: "tactical-focused" }
   | { type: "tactical-focus-failed" }
@@ -81,8 +82,12 @@ export function reduceExploreTourMachine(
       return state.tacticalPhase === "shot"
         ? { ...state, tacticalPhase: "chain" }
         : state
-    case "tactical-chain-closed":
+    case "tactical-playback-started":
       return state.tacticalPhase === "chain"
+        ? { ...state, tacticalPhase: "playback" }
+        : state
+    case "tactical-chain-closed":
+      return state.tacticalPhase === "playback"
         ? { ...state, tacticalPhase: "focus" }
         : state
     case "tactical-focused":

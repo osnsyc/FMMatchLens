@@ -165,6 +165,20 @@ describe("explore tour lifecycle", () => {
 
     expect(ignored).toBe(initial)
     expect(focused.tacticalPhase).toBe("chain")
+
+    const cannotCloseBeforePlayback = reduceExploreTourMachine(focused, {
+      type: "tactical-chain-closed",
+    })
+    const playing = reduceExploreTourMachine(focused, {
+      type: "tactical-playback-started",
+    })
+    const closed = reduceExploreTourMachine(playing, {
+      type: "tactical-chain-closed",
+    })
+
+    expect(cannotCloseBeforePlayback).toBe(focused)
+    expect(playing.tacticalPhase).toBe("playback")
+    expect(closed.tacticalPhase).toBe("focus")
   })
 
   it("cancels pending timers and animation frames as one task scope", () => {

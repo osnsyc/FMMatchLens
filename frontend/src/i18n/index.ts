@@ -149,7 +149,11 @@ const resources = {
           heatmapEnterFocus: { action: "按 H 进入热图专注模式。" },
           shotChainOpen: {
             body: "射门组织链已经展开。",
-            action: "点击球场空白区域退出。",
+            action: "请点击组织链中时间最早的事件，启动回放。",
+          },
+          shotChainPlayback: {
+            body: "射门组织链回放已启动。",
+            action: "观看回放后，点击球场空白区域退出。",
           },
           individualMode: {
             body: "个人模式已开启，现在从任一阵容选择球员。",
@@ -893,7 +897,12 @@ const resources = {
           heatmapEnterFocus: { action: "Press H to enter heatmap focus mode." },
           shotChainOpen: {
             body: "The shot buildup chain is now expanded.",
-            action: "Click an empty area of the pitch to close it.",
+            action: "Click the earliest event in the chain to start playback.",
+          },
+          shotChainPlayback: {
+            body: "Shot-chain playback is now active.",
+            action:
+              "After watching the playback, click an empty area of the pitch to close it.",
           },
           individualMode: {
             body: "Individual mode is active. Now choose players from either squad.",

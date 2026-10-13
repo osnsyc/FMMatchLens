@@ -538,7 +538,13 @@ export const TacticalBoard = memo(function TacticalBoard({
                       const chain = visibleShotChains.find((candidate) =>
                         isShotChainPlaybackTrigger(candidate, hit.point.id)
                       )
-                      if (chain) selectShotChain(chain)
+                      if (chain) {
+                        selectShotChain(chain)
+                        emitExploreTourInteraction({
+                          id: "tactical-shot-chain-playback",
+                          chainId: chain.id,
+                        })
+                      }
                       return
                     }
                     if (hit.point.metricId === "dribblesCompleted") {

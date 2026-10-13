@@ -14,6 +14,7 @@ export type ExploreTourInteraction =
   | { id: "heatmap-phase-change"; value: string }
   | { id: "heatmap-player-select"; playerId: number }
   | { id: "tactical-shot-select"; eventId: string }
+  | { id: "tactical-shot-chain-playback"; chainId: string }
   | { id: "tactical-empty-click" }
   | { id: "tactical-filter-change"; value: string }
   | { id: "theme-preset-change"; value: string }
