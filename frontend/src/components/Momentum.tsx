@@ -169,8 +169,8 @@ export const Momentum = memo(function Momentum({ match }: MomentumProps) {
               cursor={{ stroke: "var(--border)", strokeDasharray: "3 3" }}
               content={(
                 <MomentumTooltipDetails
-                  homeName={match.home.name}
-                  awayName={match.away.name}
+                  homeColor={homeColor}
+                  awayColor={awayColor}
                   fallback={t("momentum.title")}
                 />
               )}
@@ -338,11 +338,24 @@ function splitAtZeroCrossings(points: readonly MomentumPoint[]) {
     const previous = result.at(-1)
     if (previous && previous.value * point.value < 0) {
       const ratio = Math.abs(previous.value) / (Math.abs(previous.value) + Math.abs(point.value))
-      result.push(toMomentumPoint(previous.minute + (point.minute - previous.minute) * ratio, 0))
+      result.push(toMomentumPoint(
+        previous.minute + (point.minute - previous.minute) * ratio,
+        0,
+        {
+          timeTicks: interpolateOptional(previous.timeTicks, point.timeTicks, ratio),
+          homeWeight: interpolateOptional(previous.homeWeight, point.homeWeight, ratio),
+          awayWeight: interpolateOptional(previous.awayWeight, point.awayWeight, ratio),
+        },
+      ))
     }
     result.push(point)
   }
   return result
+}
+
+function interpolateOptional(start: number | undefined, end: number | undefined, ratio: number) {
+  if (start == null || end == null) return undefined
+  return start + (end - start) * ratio
 }
 
 function buildFiveMinuteBars(points: readonly MomentumPoint[]): MomentumBar[] {
@@ -465,54 +478,68 @@ function toMomentumPoint(
 type MomentumTooltipDetailsProps = {
   active?: boolean
   payload?: Array<{ payload?: MomentumPoint | MomentumBar }>
-  homeName: string
-  awayName: string
+  homeColor: string
+  awayColor: string
   fallback: string
 }
 
 function MomentumTooltipDetails({
   active,
   payload,
-  homeName,
-  awayName,
+  homeColor,
+  awayColor,
   fallback,
 }: MomentumTooltipDetailsProps) {
   const point = payload?.find((entry) => entry.payload)?.payload
   if (!active || !point) return null
   const label = momentumTooltipLabel(point, fallback)
-  const leadingTeam = point.value >= 0 ? homeName : awayName
 
   return (
-    <div className="grid min-w-40 gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-2 text-xs shadow-xl">
-      <div className="font-medium tabular-nums">{label}</div>
-      <div className="flex items-center justify-between gap-4">
-        <span className="text-muted-foreground">{leadingTeam}</span>
-        <span className="font-mono font-medium tabular-nums text-foreground">
-          {Math.abs(point.value).toFixed(4)}
+    <div className="pointer-events-none grid min-w-24 place-items-center content-center gap-1 rounded-lg border border-border/50 bg-background/60 px-2.5 py-2 text-xs shadow-xl backdrop-blur-sm">
+      <div className="flex items-center justify-center gap-4">
+        <span className="font-medium tabular-nums text-foreground">{label}</span>
+        <span
+          className="font-mono font-semibold tabular-nums"
+          style={{ color: point.value >= 0 ? homeColor : awayColor }}
+        >
+          {formatTooltipValue(point.value)}
         </span>
       </div>
-      {point.homeWeight != null && point.awayWeight != null && (
-        <div className="flex items-center justify-between gap-4 text-[10px] text-muted-foreground">
-          <span>{homeName} {point.homeWeight}</span>
-          <span>{awayName} {point.awayWeight}</span>
-        </div>
-      )}
+      <div className="flex items-center justify-center gap-1.5 font-mono tabular-nums">
+        {point.homeWeight != null && point.awayWeight != null ? (
+          <>
+            <span style={{ color: homeColor }}>{formatTooltipValue(point.homeWeight)}</span>
+            <span className="text-muted-foreground">–</span>
+            <span style={{ color: awayColor }}>{formatTooltipValue(point.awayWeight)}</span>
+          </>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </div>
     </div>
   )
 }
 
+function formatTooltipValue(value: number) {
+  const rounded = Math.abs(value) < 0.005 ? 0 : Number(value.toFixed(2))
+  return String(rounded)
+}
+
 function momentumTooltipLabel(payload: MomentumPoint | MomentumBar, fallback: string) {
   if ("startMinute" in payload && "endMinute" in payload) {
-    return `${formatMinute(payload.startMinute)}–${formatMinute(payload.endMinute)}`
+    return `${formatTooltipMinute(payload.startMinute)}-${formatTooltipMinute(payload.endMinute)}`
   }
   if (payload.timeTicks != null) return formatMomentumTick(payload.timeTicks)
-  if (Number.isFinite(payload.minute)) return formatMinute(payload.minute)
+  if (Number.isFinite(payload.minute)) return formatTooltipMinute(payload.minute)
   return fallback
 }
 
 function formatMomentumTick(ticks: number) {
-  const totalSeconds = Math.floor(Math.max(0, ticks) / 4)
-  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`
+  return formatTooltipMinute(Math.floor(Math.max(0, ticks) / 4) / 60)
+}
+
+function formatTooltipMinute(minute: number) {
+  return `${Math.floor(Math.max(0, minute))}′`
 }
 
 function formatMinute(minute: number) {
