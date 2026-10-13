@@ -11,7 +11,7 @@ import type {
   TacticalScene,
 } from "@/components/tactical/tacticalScene"
 import type { MatchPlayer } from "@/types/match"
-import type { DribblePlayback } from "@/components/tactical/dribblePlayback"
+import type { TacticalPlayback } from "@/components/tactical/dribblePlayback"
 
 type PixiTacticalProps = {
   scene: TacticalScene
@@ -19,7 +19,7 @@ type PixiTacticalProps = {
   appearance: TacticalAppearance
   selectedShotId: string | null
   shotChains: readonly ShotChain[]
-  dribblePlayback: DribblePlayback | null
+  playback: TacticalPlayback | null
   onHover: (hit: TacticalHit | null, clientX: number, clientY: number) => void
   onPointClick: (hit: TacticalHit) => void
   onEmptyClick: () => void
@@ -31,7 +31,7 @@ export function PixiTactical({
   appearance,
   selectedShotId,
   shotChains,
-  dribblePlayback,
+  playback,
   onHover,
   onPointClick,
   onEmptyClick,
@@ -44,7 +44,7 @@ export function PixiTactical({
     appearance,
     selectedShotId,
     shotChains,
-    dribblePlayback,
+    playback,
     onHover,
     onPointClick,
     onEmptyClick,
@@ -57,14 +57,14 @@ export function PixiTactical({
       appearance,
       selectedShotId,
       shotChains,
-      dribblePlayback,
+      playback,
       onHover,
       onPointClick,
       onEmptyClick,
     }
   }, [
     appearance,
-    dribblePlayback,
+    playback,
     onEmptyClick,
     onHover,
     onPointClick,
@@ -108,7 +108,7 @@ export function PixiTactical({
           latestRef.current.selectedShotId,
           latestRef.current.shotChains
         )
-        renderer.updateDribblePlayback(latestRef.current.dribblePlayback)
+        renderer.updatePlayback(latestRef.current.playback)
       } catch (error) {
         renderer?.destroy()
         if (rendererRef.current === renderer) rendererRef.current = null
@@ -155,8 +155,8 @@ export function PixiTactical({
   }, [selectedShotId, shotChains])
 
   useEffect(() => {
-    rendererRef.current?.updateDribblePlayback(dribblePlayback)
-  }, [dribblePlayback])
+    rendererRef.current?.updatePlayback(playback)
+  }, [playback])
 
   const hitAtPointer = (
     event: React.PointerEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>

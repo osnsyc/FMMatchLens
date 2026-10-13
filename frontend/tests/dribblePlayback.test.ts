@@ -3,10 +3,14 @@ import { describe, expect, it } from "vitest"
 import type { RealtimeFrame, RealtimePlayer } from "@/api/realtimeMatch"
 import {
   buildDribblePlayback,
+  buildShotChainPlayback,
   interpolatePlaybackBall,
   interpolatePlaybackPlayer,
+  isShotChainPlaybackTrigger,
+  shotChainPlaybackTickRange,
   type TacticalPlaybackPlayer,
 } from "@/components/tactical/dribblePlayback"
+import type { ShotChain } from "@/components/tactical/tacticalScene"
 import type { MatchPlayer, TacticalEventPoint } from "@/types/match"
 
 const event = {
@@ -176,6 +180,63 @@ describe("buildDribblePlayback", () => {
         new Map()
       )
     ).toBeNull()
+  })
+})
+
+describe("buildShotChainPlayback", () => {
+  const chain = {
+    id: "shot-chain-shot-1",
+    shotEventId: "shot-1",
+    team: "home",
+    events: [
+      {
+        ...event,
+        id: "pass-1",
+        metricId: "passesCompleted",
+        nativeEventType: 6,
+        tick: 9,
+        completionTick: 10,
+      },
+      {
+        ...event,
+        id: "shot-1",
+        metricId: "shotsOnTarget",
+        nativeEventType: 2,
+        tick: 11,
+        completionTick: 12,
+      },
+    ],
+  } as ShotChain
+
+  it("plays every captured frame from the earliest action through shot completion", () => {
+    const playback = buildShotChainPlayback(
+      chain,
+      [8, 9, 10, 11, 12, 13].map((tick) => frame(tick)),
+      new Map()
+    )
+
+    expect(playback?.id).toBe(chain.id)
+    expect(playback?.frames.map((item) => item.tick)).toEqual([9, 10, 11, 12])
+    expect(playback?.trailPlayerId).toBeUndefined()
+    expect(playback?.frames[0].ball).toMatchObject({
+      x: 35,
+      y: 37.5,
+      zCentimeters: 25,
+    })
+  })
+
+  it("only lets the earliest expanded event trigger playback", () => {
+    expect(isShotChainPlaybackTrigger(chain, "pass-1")).toBe(true)
+    expect(isShotChainPlaybackTrigger(chain, "shot-1")).toBe(false)
+  })
+
+  it("falls back to the shot tick when completion precedes the shot", () => {
+    expect(
+      shotChainPlaybackTickRange({
+        ...chain,
+        events: [chain.events[0], { ...chain.events[1], completionTick: 0 }],
+      })
+    ).toEqual({ startTick: 9, endTick: 11 })
   })
 })
 

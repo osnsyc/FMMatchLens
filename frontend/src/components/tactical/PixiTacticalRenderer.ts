@@ -25,7 +25,7 @@ import {
 import type { MatchPlayer, TeamSide } from "@/types/match"
 import type { ResolvedVizTokens } from "@/theme/types"
 import type {
-  DribblePlayback,
+  TacticalPlayback,
   TacticalPlaybackBall,
   TacticalPlaybackPlayer,
 } from "@/components/tactical/dribblePlayback"
@@ -130,7 +130,7 @@ export class PixiTacticalRenderer {
   private chainSignature = ""
   private animationFrame: number | null = null
   private playbackAnimationFrame: number | null = null
-  private playback?: DribblePlayback
+  private playback?: TacticalPlayback
   private playbackStartedAt = 0
   private playbackFrameIndex = 0
   private readonly playbackMarkers = new Map<number, PlaybackMarkerRecord>()
@@ -328,8 +328,8 @@ export class PixiTacticalRenderer {
     this.renderOnce()
   }
 
-  updateDribblePlayback(playback: DribblePlayback | null) {
-    if (sameDribblePlayback(this.playback, playback)) return
+  updatePlayback(playback: TacticalPlayback | null) {
+    if (samePlayback(this.playback, playback)) return
     if (this.playbackAnimationFrame != null) {
       cancelAnimationFrame(this.playbackAnimationFrame)
       this.playbackAnimationFrame = null
@@ -354,9 +354,7 @@ export class PixiTacticalRenderer {
       return
     }
     this.drawPlaybackFrame(0, 0)
-    this.playbackAnimationFrame = requestAnimationFrame(
-      this.advanceDribblePlayback
-    )
+    this.playbackAnimationFrame = requestAnimationFrame(this.advancePlayback)
   }
 
   setHovered(eventId: string | null) {
@@ -893,7 +891,7 @@ export class PixiTacticalRenderer {
     return (red << 16) | (green << 8) | blue
   }
 
-  private readonly advanceDribblePlayback = (timestamp: number) => {
+  private readonly advancePlayback = (timestamp: number) => {
     this.playbackAnimationFrame = null
     const playback = this.playback
     if (!playback) return
@@ -918,9 +916,7 @@ export class PixiTacticalRenderer {
     const progress = clamp((playbackTick - current.tick) / tickSpan, 0, 1)
     this.drawPlaybackFrame(this.playbackFrameIndex, progress)
     if (playbackTick >= lastTick) return
-    this.playbackAnimationFrame = requestAnimationFrame(
-      this.advanceDribblePlayback
-    )
+    this.playbackAnimationFrame = requestAnimationFrame(this.advancePlayback)
   }
 
   private drawPlaybackFrame(frameIndex: number, progress: number) {
@@ -1057,34 +1053,48 @@ export class PixiTacticalRenderer {
     const playback = this.playback
     if (!playback) return
     const points: Array<{ x: number; y: number }> = []
-    for (let index = 0; index <= frameIndex; index += 1) {
-      const player = playback.frames[index].players.find(
-        (candidate) => candidate.playerId === playback.dribblerPlayerId
+    if (playback.trailPlayerId != null) {
+      for (let index = 0; index <= frameIndex; index += 1) {
+        const player = playback.frames[index].players.find(
+          (candidate) => candidate.playerId === playback.trailPlayerId
+        )
+        if (player) points.push(player)
+      }
+      const current = playback.frames[frameIndex].players.find(
+        (candidate) => candidate.playerId === playback.trailPlayerId
       )
-      if (player) points.push(player)
-    }
-    const current = playback.frames[frameIndex].players.find(
-      (candidate) => candidate.playerId === playback.dribblerPlayerId
-    )
-    const next = playback.frames[
-      Math.min(frameIndex + 1, playback.frames.length - 1)
-    ].players.find(
-      (candidate) => candidate.playerId === playback.dribblerPlayerId
-    )
-    if (current && next && progress > 0) {
-      points.push(
-        interpolatePlaybackPlayer(
-          current,
-          next,
-          progress,
-          Math.max(
-            1,
-            playback.frames[
-              Math.min(frameIndex + 1, playback.frames.length - 1)
-            ].tick - playback.frames[frameIndex].tick
+      const next = playback.frames[
+        Math.min(frameIndex + 1, playback.frames.length - 1)
+      ].players.find(
+        (candidate) => candidate.playerId === playback.trailPlayerId
+      )
+      if (current && next && progress > 0) {
+        points.push(
+          interpolatePlaybackPlayer(
+            current,
+            next,
+            progress,
+            Math.max(
+              1,
+              playback.frames[
+                Math.min(frameIndex + 1, playback.frames.length - 1)
+              ].tick - playback.frames[frameIndex].tick
+            )
           )
         )
-      )
+      }
+    } else {
+      for (let index = 0; index <= frameIndex; index += 1) {
+        const ball = playback.frames[index].ball
+        if (ball) points.push(ball)
+      }
+      const current = playback.frames[frameIndex].ball
+      const next =
+        playback.frames[Math.min(frameIndex + 1, playback.frames.length - 1)]
+          .ball ?? current
+      if (current && next && progress > 0) {
+        points.push(interpolatePlaybackBall(current, next, progress))
+      }
     }
 
     this.playbackTrail.clear()
@@ -1111,7 +1121,6 @@ export class PixiTacticalRenderer {
       cap: "round",
       join: "round",
     })
-
   }
 
   private clearPlaybackMarkers() {
@@ -1600,9 +1609,9 @@ function drawSmoothTrailPath(
   target.lineTo(last.x, last.y)
 }
 
-function sameDribblePlayback(
-  current: DribblePlayback | undefined,
-  next: DribblePlayback | null
+function samePlayback(
+  current: TacticalPlayback | undefined,
+  next: TacticalPlayback | null
 ) {
   if (!current || !next) return current == null && next == null
   if (current.id !== next.id || current.frames.length !== next.frames.length)

@@ -75,7 +75,11 @@ import { cssVizTokens } from "@/theme/vizTokens"
 import type { RealtimeFrame } from "@/api/realtimeMatch"
 import {
   buildDribblePlayback,
+  buildShotChainPlayback,
   DRIBBLE_PLAYBACK_SEARCH_RADIUS_TICKS,
+  isShotChainPlaybackTrigger,
+  SHOT_CHAIN_PLAYBACK_PADDING_TICKS,
+  shotChainPlaybackTickRange,
 } from "@/components/tactical/dribblePlayback"
 
 type TacticalBoardProps = {
@@ -127,38 +131,42 @@ export const TacticalBoard = memo(function TacticalBoard({
   const [selectedDribbleId, setSelectedDribbleId] = useState<string | null>(
     null
   )
-  const [loadedDribbleFrames, setLoadedDribbleFrames] = useState<{
+  const [selectedShotChainId, setSelectedShotChainId] = useState<string | null>(
+    null
+  )
+  const [loadedPlaybackFrames, setLoadedPlaybackFrames] = useState<{
     source: TacticalBoardProps["loadTickFrames"]
+    requestId: string
     frames: readonly RealtimeFrame[]
   } | null>(null)
-  const dribbleLoadAbortRef = useRef<AbortController | null>(null)
+  const playbackLoadAbortRef = useRef<AbortController | null>(null)
   const [selectedMetrics, setSelectedMetrics] = useState<
     Record<string, boolean>
   >(initialSelectedMetrics)
   const [hovered, setHovered] = useState<HoveredTacticalPoint | null>(null)
 
-  const clearDribblePlayback = useCallback(() => {
-    dribbleLoadAbortRef.current?.abort()
-    dribbleLoadAbortRef.current = null
+  const clearPlayback = useCallback(() => {
+    playbackLoadAbortRef.current?.abort()
+    playbackLoadAbortRef.current = null
     setSelectedDribbleId(null)
-    setLoadedDribbleFrames(null)
+    setSelectedShotChainId(null)
+    setLoadedPlaybackFrames(null)
   }, [])
 
-  const selectDribble = useCallback(
-    (point: { id: string; tick: number }) => {
-      dribbleLoadAbortRef.current?.abort()
+  const loadPlaybackFrames = useCallback(
+    (requestId: string, fromTick: number, toTick: number) => {
+      playbackLoadAbortRef.current?.abort()
       const controller = new AbortController()
-      dribbleLoadAbortRef.current = controller
-      setSelectedDribbleId(point.id)
-      setLoadedDribbleFrames(null)
-      void loadTickFrames(
-        Math.max(0, point.tick - DRIBBLE_PLAYBACK_SEARCH_RADIUS_TICKS),
-        point.tick + DRIBBLE_PLAYBACK_SEARCH_RADIUS_TICKS,
-        controller.signal
-      )
+      playbackLoadAbortRef.current = controller
+      setLoadedPlaybackFrames(null)
+      void loadTickFrames(fromTick, toTick, controller.signal)
         .then((frames) => {
           if (!controller.signal.aborted) {
-            setLoadedDribbleFrames({ source: loadTickFrames, frames })
+            setLoadedPlaybackFrames({
+              source: loadTickFrames,
+              requestId,
+              frames,
+            })
           }
         })
         .catch((error: unknown) => {
@@ -166,22 +174,46 @@ export const TacticalBoard = memo(function TacticalBoard({
             !controller.signal.aborted &&
             !(error instanceof DOMException && error.name === "AbortError")
           ) {
-            console.error("Unable to load dribble playback frames", error)
+            console.error("Unable to load tactical playback frames", error)
           }
         })
         .finally(() => {
-          if (dribbleLoadAbortRef.current === controller) {
-            dribbleLoadAbortRef.current = null
+          if (playbackLoadAbortRef.current === controller) {
+            playbackLoadAbortRef.current = null
           }
         })
     },
     [loadTickFrames]
   )
 
-  useEffect(
-    () => () => dribbleLoadAbortRef.current?.abort(),
-    [loadTickFrames]
+  const selectDribble = useCallback(
+    (point: { id: string; tick: number }) => {
+      setSelectedShotChainId(null)
+      setSelectedDribbleId(point.id)
+      loadPlaybackFrames(
+        point.id,
+        Math.max(0, point.tick - DRIBBLE_PLAYBACK_SEARCH_RADIUS_TICKS),
+        point.tick + DRIBBLE_PLAYBACK_SEARCH_RADIUS_TICKS
+      )
+    },
+    [loadPlaybackFrames]
   )
+
+  const selectShotChain = useCallback(
+    (chain: ShotChain) => {
+      const range = shotChainPlaybackTickRange(chain)
+      setSelectedDribbleId(null)
+      setSelectedShotChainId(chain.id)
+      loadPlaybackFrames(
+        chain.id,
+        Math.max(0, range.startTick - SHOT_CHAIN_PLAYBACK_PADDING_TICKS),
+        range.endTick + SHOT_CHAIN_PLAYBACK_PADDING_TICKS
+      )
+    },
+    [loadPlaybackFrames]
+  )
+
+  useEffect(() => () => playbackLoadAbortRef.current?.abort(), [loadTickFrames])
 
   useEffect(() => {
     const selectTourMetricGroup = (event: Event) => {
@@ -193,7 +225,7 @@ export const TacticalBoard = memo(function TacticalBoard({
         )
       )
       setSelectedShotId(null)
-      clearDribblePlayback()
+      clearPlayback()
     }
     window.addEventListener(
       exploreTourTacticalMetricsEventName,
@@ -204,7 +236,7 @@ export const TacticalBoard = memo(function TacticalBoard({
         exploreTourTacticalMetricsEventName,
         selectTourMetricGroup
       )
-  }, [clearDribblePlayback])
+  }, [clearPlayback])
 
   const groupLabel = (group: (typeof groups)[number]) =>
     t(`dataMap.groups.${group.id}`, { defaultValue: group.label })
@@ -276,15 +308,38 @@ export const TacticalBoard = memo(function TacticalBoard({
   )
   const dribblePlayback = useMemo(
     () =>
-      selectedDribble && loadedDribbleFrames?.source === loadTickFrames
+      selectedDribble &&
+      loadedPlaybackFrames?.source === loadTickFrames &&
+      loadedPlaybackFrames.requestId === selectedDribble.id
         ? buildDribblePlayback(
             selectedDribble,
-            loadedDribbleFrames.frames,
+            loadedPlaybackFrames.frames,
             playerById
           )
         : null,
-    [loadTickFrames, loadedDribbleFrames, playerById, selectedDribble]
+    [loadTickFrames, loadedPlaybackFrames, playerById, selectedDribble]
   )
+  const selectedShotChain = useMemo(
+    () =>
+      selectedShotChainId == null
+        ? undefined
+        : visibleShotChains.find((chain) => chain.id === selectedShotChainId),
+    [selectedShotChainId, visibleShotChains]
+  )
+  const shotChainPlayback = useMemo(
+    () =>
+      selectedShotChain &&
+      loadedPlaybackFrames?.source === loadTickFrames &&
+      loadedPlaybackFrames.requestId === selectedShotChain.id
+        ? buildShotChainPlayback(
+            selectedShotChain,
+            loadedPlaybackFrames.frames,
+            playerById
+          )
+        : null,
+    [loadTickFrames, loadedPlaybackFrames, playerById, selectedShotChain]
+  )
+  const tacticalPlayback = dribblePlayback ?? shotChainPlayback
   const momentumLaneShares = useMemo(
     () => calculateMomentumLaneShares(filteredTacticalEvents),
     [filteredTacticalEvents]
@@ -529,7 +584,7 @@ export const TacticalBoard = memo(function TacticalBoard({
 
                 {showAttackFocus &&
                   activeSelectedShotId == null &&
-                  !dribblePlayback && (
+                  !tacticalPlayback && (
                     <AttackFocus laneShares={momentumLaneShares} />
                   )}
 
@@ -539,7 +594,7 @@ export const TacticalBoard = memo(function TacticalBoard({
                   appearance={appearance}
                   selectedShotId={activeSelectedShotId}
                   shotChains={visibleShotChains}
-                  dribblePlayback={dribblePlayback}
+                  playback={tacticalPlayback}
                   onHover={(hit, clientX, clientY) => {
                     setHovered((current) => {
                       if (!hit) return null
@@ -553,16 +608,20 @@ export const TacticalBoard = memo(function TacticalBoard({
                     })
                   }}
                   onPointClick={(hit: TacticalHit) => {
-                    if (
-                      !hit.historical &&
-                      hit.point.metricId === "dribblesCompleted"
-                    ) {
+                    if (hit.historical) {
+                      const chain = visibleShotChains.find((candidate) =>
+                        isShotChainPlaybackTrigger(candidate, hit.point.id)
+                      )
+                      if (chain) selectShotChain(chain)
+                      return
+                    }
+                    if (hit.point.metricId === "dribblesCompleted") {
                       setSelectedShotId(null)
                       selectDribble(hit.point)
                       return
                     }
-                    if (!hit.historical && hit.point.group === "shots") {
-                      clearDribblePlayback()
+                    if (hit.point.group === "shots") {
+                      clearPlayback()
                       setSelectedShotId(hit.point.id)
                       emitExploreTourInteraction({
                         id: "tactical-shot-select",
@@ -572,7 +631,7 @@ export const TacticalBoard = memo(function TacticalBoard({
                   }}
                   onEmptyClick={() => {
                     setSelectedShotId(null)
-                    clearDribblePlayback()
+                    clearPlayback()
                     emitExploreTourInteraction({ id: "tactical-empty-click" })
                   }}
                 />

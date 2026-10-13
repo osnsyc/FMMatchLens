@@ -1,4 +1,5 @@
 import type { RealtimeFrame } from "@/api/realtimeMatch"
+import type { ShotChain } from "@/components/tactical/tacticalScene"
 import type { MatchPlayer, TacticalEventPoint, TeamSide } from "@/types/match"
 
 export type TacticalPlaybackPlayer = {
@@ -24,14 +25,19 @@ export type TacticalPlaybackFrame = {
   ball?: TacticalPlaybackBall
 }
 
-export type DribblePlayback = {
+export type TacticalPlayback = {
   id: string
-  dribblerPlayerId: number
   team: TeamSide
   frames: readonly TacticalPlaybackFrame[]
+  trailPlayerId?: number
+}
+
+export type DribblePlayback = TacticalPlayback & {
+  dribblerPlayerId: number
 }
 
 export const DRIBBLE_PLAYBACK_SEARCH_RADIUS_TICKS = 32
+export const SHOT_CHAIN_PLAYBACK_PADDING_TICKS = 8
 const MAX_ENDPOINT_ERROR = 8
 const SECONDS_PER_TICK = 0.25
 
@@ -46,8 +52,79 @@ export function buildDribblePlayback(
   const range = findTrajectoryFrameRange(event, frames, rotateForDisplay)
   if (!range) return null
 
+  const playbackFrames = buildPlaybackFrames(
+    frames,
+    range.start,
+    range.end,
+    players,
+    rotateForDisplay
+  )
+
+  if (playbackFrames.length < 2) return null
+  return {
+    id: event.id,
+    dribblerPlayerId: event.playerId,
+    trailPlayerId: event.playerId,
+    team: event.team,
+    frames: smoothHeldPositions(playbackFrames),
+  }
+}
+
+export function buildShotChainPlayback(
+  chain: ShotChain,
+  frames: readonly RealtimeFrame[],
+  players: ReadonlyMap<number, MatchPlayer>
+): TacticalPlayback | null {
+  const firstEvent = chain.events[0]
+  const shot = chain.events.at(-1)
+  if (!firstEvent || !shot || chain.events.length < 2 || frames.length === 0)
+    return null
+
+  const range = shotChainPlaybackTickRange(chain)
+  const start = lowerBoundFrameTick(frames, range.startTick)
+  const end = upperBoundFrameTick(frames, range.endTick) - 1
+  if (start < 0 || end <= start || start >= frames.length) return null
+
+  const playbackFrames = buildPlaybackFrames(
+    frames,
+    start,
+    Math.min(end, frames.length - 1),
+    players,
+    needsDisplayRotation(firstEvent)
+  )
+  if (playbackFrames.length < 2) return null
+  return {
+    id: chain.id,
+    team: chain.team,
+    frames: smoothHeldPositions(playbackFrames),
+  }
+}
+
+export function shotChainPlaybackTickRange(chain: ShotChain) {
+  const firstEvent = chain.events[0]
+  const shot = chain.events.at(-1)
+  const startTick = firstEvent?.tick ?? 0
+  const shotTick = shot?.tick ?? startTick
+  const completionTick =
+    shot?.completionTick != null && shot.completionTick >= shotTick
+      ? shot.completionTick
+      : shotTick
+  return { startTick, endTick: completionTick }
+}
+
+export function isShotChainPlaybackTrigger(chain: ShotChain, eventId: string) {
+  return chain.events[0]?.id === eventId
+}
+
+function buildPlaybackFrames(
+  frames: readonly RealtimeFrame[],
+  start: number,
+  end: number,
+  players: ReadonlyMap<number, MatchPlayer>,
+  rotateForDisplay: boolean
+) {
   const playbackFrames: TacticalPlaybackFrame[] = []
-  for (let frameIndex = range.start; frameIndex <= range.end; frameIndex += 1) {
+  for (let frameIndex = start; frameIndex <= end; frameIndex += 1) {
     const frame = frames[frameIndex]
     const halfWidth = validPitchHalf(frame.halfPitchWidth)
     const halfLength = validPitchHalf(frame.halfPitchLength)
@@ -120,13 +197,7 @@ export function buildDribblePlayback(
     }
   }
 
-  if (playbackFrames.length < 2) return null
-  return {
-    id: event.id,
-    dribblerPlayerId: event.playerId,
-    team: event.team,
-    frames: smoothHeldPositions(playbackFrames),
-  }
+  return playbackFrames
 }
 
 function projectBallToTacticalBoard(
@@ -454,6 +525,17 @@ function lowerBoundFrameTick(frames: readonly RealtimeFrame[], tick: number) {
   while (low < high) {
     const middle = (low + high) >>> 1
     if (frames[middle].tick < tick) low = middle + 1
+    else high = middle
+  }
+  return low
+}
+
+function upperBoundFrameTick(frames: readonly RealtimeFrame[], tick: number) {
+  let low = 0
+  let high = frames.length
+  while (low < high) {
+    const middle = (low + high) >>> 1
+    if (frames[middle].tick <= tick) low = middle + 1
     else high = middle
   }
   return low
