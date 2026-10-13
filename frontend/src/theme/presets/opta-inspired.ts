@@ -9,6 +9,7 @@ export const optaInspiredPreset: ThemePreset = {
     mode: "fixed",
     home: "#6327c6",
     away: "#dc3a44",
+    dark: { home: "#9b73ed", away: "#dc3a44" },
   },
   preview: {
     surface: "#1d0a30",

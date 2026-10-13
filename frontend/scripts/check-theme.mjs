@@ -26,7 +26,7 @@ const presets = [
 const knownPresetIds = new Set(["fm", "opta-inspired", "wyscout-inspired"])
 const fixedTeamColors = new Map([
   ["opta-inspired/light", { home: "#6327c6", away: "#dc3a44" }],
-  ["opta-inspired/dark", { home: "#6327c6", away: "#dc3a44" }],
+  ["opta-inspired/dark", { home: "#9b73ed", away: "#dc3a44" }],
   ["wyscout-inspired", { home: "#e05a35", away: "#26648c" }],
 ])
 const failures = []

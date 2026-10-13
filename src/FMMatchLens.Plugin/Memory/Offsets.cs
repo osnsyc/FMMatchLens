@@ -252,6 +252,23 @@ internal static class Offsets
 
     public static class TeamBase
     {
+        // Live-match samples confirm that twenty-two consecutive uint32 ARGB
+        // colours occupy +0x04 through +0x58.
+        //
+        // GameAssembly.dll research reference (this is NOT a direct layout map):
+        // PlayerKitSetup contains 16-byte Color fields named as follows:
+        // +0x04 shirtBackgroundColor, +0x14 shirtForegroundColor,
+        // +0x24 shirtOutlineColor, +0x34 shirtNumberColor,
+        // +0x44 shirtNumberOutlineColor, +0x54 shortsBackgroundColor,
+        // +0x64 shortsForegroundColor, +0x74 socksBackgroundColor,
+        // +0x84 socksForegroundColor, +0x94 iconBackgroundColor,
+        // +0xA4 iconForegroundColor, +0xB4 iconOutlineColor, and
+        // +0xC4 iconNumberColor. PlayerKitSetup uses larger Color values,
+        // whereas this TeamBase block is twenty-two packed 4-byte ARGB values;
+        // do not transfer those offsets here without tracing the conversion.
+        public const int shirtNumberColor = 0x04;
+        public const int shirtBackgroundColor = 0x0C;
+        public const int shirtBackgroundColorGK = 0x1C;
         public const int Xg = 0x60;
         public const int PossessionTime = 0x7C;
         public const int Unknown84 = 0x84;

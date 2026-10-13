@@ -32,6 +32,8 @@ import { PlaybackRenderer } from "@/components/tactical/playback/renderer/Playba
 export type TacticalAppearance = {
   homeColor: string
   awayColor: string
+  homeGoalkeeperColor?: number
+  awayGoalkeeperColor?: number
   showNumbers: boolean
   tokens: ResolvedVizTokens
 }
@@ -833,6 +835,8 @@ export class PixiTacticalRenderer {
     return {
       home: this.resolvedAppearance.homeColor,
       away: this.resolvedAppearance.awayColor,
+      homeGoalkeeperColor: this.appearance.homeGoalkeeperColor,
+      awayGoalkeeperColor: this.appearance.awayGoalkeeperColor,
       foreground: this.resolvedAppearance.foreground,
       important: this.resolvedAppearance.important,
       negative: this.resolvedAppearance.negative,

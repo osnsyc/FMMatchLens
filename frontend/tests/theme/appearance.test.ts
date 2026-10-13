@@ -77,6 +77,7 @@ describe("theme registry", () => {
       mode: "fixed",
       home: "#6327c6",
       away: "#dc3a44",
+      dark: { home: "#9b73ed", away: "#dc3a44" },
     })
     expect(getThemePreset("wyscout-inspired").teamColors).toEqual({
       mode: "fixed",
@@ -95,6 +96,18 @@ describe("theme registry", () => {
 })
 
 describe("team color cache", () => {
+  it.each([
+    ["light", "#6327c6"],
+    ["dark", "#9b73ed"],
+  ] as const)("uses Opta's %s palette", (resolvedScheme, home) => {
+    expect(selectTeamDisplayColors(undefined, undefined, {
+      presetId: opta.id,
+      resolvedScheme,
+      colorVision: "standard",
+      fixedTeamColors: opta.teamColors,
+    })).toEqual({ home, away: "#dc3a44" })
+  })
+
   it("uses preset-fixed colors instead of club metadata", () => {
     expect(selectTeamDisplayColors(
       { backgroundColour: 0x112233 },

@@ -22,6 +22,10 @@
   --viz-away-fallback: #dc3a44;
 }
 
+:root[data-preset="opta-inspired"][data-scheme="dark"][data-color-vision="colorblind"] {
+  --viz-home-fallback: #9b73ed;
+}
+
 :root[data-preset="wyscout-inspired"][data-color-vision="colorblind"] {
   --viz-home-fallback: #e05a35;
   --viz-away-fallback: #26648c;

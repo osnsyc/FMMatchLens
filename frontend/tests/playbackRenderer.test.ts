@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-const { renderOverlays } = vi.hoisted(() => ({ renderOverlays: vi.fn() }))
+const { renderOverlays, markerFills } = vi.hoisted(() => ({
+  renderOverlays: vi.fn(),
+  markerFills: [] as number[],
+}))
 
 vi.mock("pixi.js", () => {
   class Container {
     visible = true
+    position = { set() {} }
     addChild() {}
     removeChild() {}
     removeChildren() {
@@ -13,7 +17,15 @@ vi.mock("pixi.js", () => {
     destroy() {}
   }
   class Graphics {
+    visible = true
     clear() {
+      return this
+    }
+    circle() { return this }
+    stroke() { return this }
+    poly() { return this }
+    fill({ color }: { color: number }) {
+      markerFills.push(color)
       return this
     }
   }
@@ -21,7 +33,16 @@ vi.mock("pixi.js", () => {
     anchor = { set() {} }
     visible = true
   }
-  return { Container, Graphics, Sprite, BitmapText: class {} }
+  class BitmapText {
+    anchor = { set() {} }
+    text: string
+    style: { fill: number }
+    constructor(options: { text: string; style: { fill: number } }) {
+      this.text = options.text
+      this.style = options.style
+    }
+  }
+  return { Container, Graphics, Sprite, BitmapText }
 })
 
 vi.mock(
@@ -38,9 +59,9 @@ vi.mock(
 
 import type { Texture } from "pixi.js"
 import type { TacticalPlayback } from "@/components/tactical/playback/core/types"
-import { PlaybackRenderer } from "@/components/tactical/playback/renderer/PlaybackRenderer"
+import { PlaybackRenderer, type PlaybackRendererAppearance } from "@/components/tactical/playback/renderer/PlaybackRenderer"
 
-function createRenderer(reduceMotion: boolean) {
+function createRenderer(reduceMotion: boolean, appearance: Partial<PlaybackRendererAppearance> = {}) {
   vi.stubGlobal("window", { matchMedia: () => ({ matches: reduceMotion }) })
   vi.stubGlobal(
     "requestAnimationFrame",
@@ -60,6 +81,7 @@ function createRenderer(reduceMotion: boolean) {
       negative: 0,
       neutral: 0,
       success: 0,
+      ...appearance,
     },
     undefined,
     vi.fn()
@@ -78,6 +100,51 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   renderOverlays.mockClear()
+  markerFills.length = 0
+})
+
+describe("playback goalkeeper colors", () => {
+  const players = [
+    { playerId: 1, team: "home", isGoalkeeper: true },
+    { playerId: 2, team: "away", isGoalkeeper: true },
+    { playerId: 3, team: "home", isGoalkeeper: false },
+  ].map((player) => ({ ...player, x: 50, y: 50, velocityXPerTick: 0, velocityYPerTick: 0 } as const))
+  const goalkeeperPlayback: TacticalPlayback = {
+    ...playback,
+    frames: [{ tick: 10, players }],
+  }
+
+  it("uses each team's GK kit color for the marker and arrow, retaining outfield colors", () => {
+    const renderer = createRenderer(true, {
+      home: 0x880000,
+      away: 0x000088,
+      homeGoalkeeperColor: 0xff00bb00,
+      awayGoalkeeperColor: 0xffffff00,
+    })
+    try {
+      renderer.updatePlayback(goalkeeperPlayback)
+      expect(markerFills).toEqual([0x00bb00, 0x00bb00, 0xffff00, 0xffff00, 0x880000, 0x880000])
+      markerFills.length = 0
+      renderer.updateAppearance({
+        home: 0x880000, away: 0x000088, foreground: 0, important: 0,
+        negative: 0, neutral: 0, success: 0,
+        homeGoalkeeperColor: 0xffbb00bb, awayGoalkeeperColor: 0xff000000,
+      })
+      expect(markerFills).toEqual([0xbb00bb, 0xbb00bb, 0, 0, 0x880000, 0x880000])
+    } finally {
+      renderer.destroy()
+    }
+  })
+
+  it.each([undefined, 0, Number.NaN])("falls back to team color for invalid GK color %s", (color) => {
+    const renderer = createRenderer(true, { home: 0x880000, away: 0x000088, homeGoalkeeperColor: color, awayGoalkeeperColor: color })
+    try {
+      renderer.updatePlayback(goalkeeperPlayback)
+      expect(markerFills).toEqual([0x880000, 0x880000, 0x000088, 0x000088, 0x880000, 0x880000])
+    } finally {
+      renderer.destroy()
+    }
+  })
 })
 
 describe("playback redraw state", () => {

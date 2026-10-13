@@ -34,7 +34,9 @@ internal static class ArchiveWireFormat
     // Static pre-match player match sharpness and season statistics, plus the
     // authoritative match shirt name/number, retained contract squad number,
     // quantized per-tick player speed/facing angle, and per-tick football XYZ
-    // coordinates stored as integer centimeters define the current 2.7.
+    // coordinates stored as integer centimeters, plus team shirt number,
+    // background, and goalkeeper background colors define the current 2.7.
+    // Earlier 2.7 layouts without the team kit colors are not supported.
     // The file-header version is the sole authority for payload decoding; do not
     // add an independent version byte inside ArchiveFrameCodec payloads.
     internal const ushort StructureMajor = 2;

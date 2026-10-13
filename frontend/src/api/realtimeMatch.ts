@@ -178,6 +178,9 @@ export type RealtimeTeamMetadata = {
   backgroundColour?: number
   foregroundColour?: number
   outlineColour?: number
+  shirtNumberColor?: number
+  shirtBackgroundColor?: number
+  shirtBackgroundColorGK?: number
   logoPath?: string
   manager?: RealtimeManagerMetadata
 }

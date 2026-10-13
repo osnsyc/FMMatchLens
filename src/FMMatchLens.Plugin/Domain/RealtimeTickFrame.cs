@@ -198,7 +198,10 @@ internal readonly record struct RealtimeTeamMetadata(
     uint? ForegroundColour,
     uint? OutlineColour,
     string? LogoPath,
-    RealtimeManagerMetadata? Manager = null);
+    RealtimeManagerMetadata? Manager = null,
+    uint? ShirtNumberColor = null,
+    uint? ShirtBackgroundColor = null,
+    uint? ShirtBackgroundColorGK = null);
 
 internal readonly record struct RealtimeManagerMetadata(
     uint? Uid,

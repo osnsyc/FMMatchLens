@@ -4,6 +4,7 @@ export type TacticalPlaybackPlayer = {
   playerId: number
   team: TeamSide
   shirtNumber?: number
+  isGoalkeeper?: boolean
   x: number
   y: number
   angleDegrees?: number

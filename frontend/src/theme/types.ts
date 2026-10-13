@@ -14,6 +14,7 @@ export type FixedTeamColors = {
   mode: "fixed"
   home: string
   away: string
+  dark?: { home: string; away: string }
 }
 
 export type ThemePreset = {

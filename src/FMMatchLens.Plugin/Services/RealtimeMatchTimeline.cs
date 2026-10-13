@@ -562,7 +562,10 @@ internal sealed class RealtimeMatchTimeline
             incoming.ForegroundColour ?? current.ForegroundColour,
             incoming.OutlineColour ?? current.OutlineColour,
             incoming.LogoPath ?? current.LogoPath,
-            incoming.Manager ?? current.Manager);
+            incoming.Manager ?? current.Manager,
+            incoming.ShirtNumberColor ?? current.ShirtNumberColor,
+            incoming.ShirtBackgroundColor ?? current.ShirtBackgroundColor,
+            incoming.ShirtBackgroundColorGK ?? current.ShirtBackgroundColorGK);
     }
 
     private static bool IsMetadataComplete(RealtimeMatchMetadata metadata)

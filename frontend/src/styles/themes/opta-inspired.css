@@ -107,9 +107,9 @@
   --status-warning: #ffd166;
   --status-info: #55c7e8;
 
-  --viz-home-fallback: #6327c6;
+  --viz-home-fallback: #9b73ed;
   --viz-away-fallback: #dc3a44;
-  --viz-series-1: #6327c6;
+  --viz-series-1: #9b73ed;
   --viz-series-2: #dc3a44;
   --viz-series-3: #fd4890;
   --viz-series-4: #ffd166;
@@ -204,9 +204,9 @@
 }
 
 :root[data-preset="opta-inspired"][data-scheme="dark"] svg :is(
-  [fill="#6327c6"],
+  [fill="#9b73ed"],
   [fill="#dc3a44"],
-  [stroke="#6327c6"],
+  [stroke="#9b73ed"],
   [stroke="#dc3a44"]
 ) {
   filter: drop-shadow(0 0 1px rgb(255 255 255 / 72%));

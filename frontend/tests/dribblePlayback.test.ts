@@ -30,6 +30,18 @@ const event = {
 } as TacticalEventPoint
 
 describe("buildDribblePlayback", () => {
+  it("identifies goalkeepers by tactical assignment, with metadata position as fallback", () => {
+    const players = new Map<number, MatchPlayer>([
+      [7, { id: 7, position: "ST", inPossession: { position: "GK" } } as MatchPlayer],
+      [8, { id: 8, position: "GK" } as MatchPlayer],
+    ])
+    const playback = buildDribblePlayback(event, [8, 9, 10, 11, 12].map((tick) => frame(tick)), players)
+    expect(playback?.frames[0].players.map((player) => player.isGoalkeeper)).toEqual([true, true])
+    players.set(7, { id: 7, position: "GK", inPossession: { position: "ST" } } as MatchPlayer)
+    const outfieldPlayback = buildDribblePlayback(event, [8, 9, 10, 11, 12].map((tick) => frame(tick)), players)
+    expect(outfieldPlayback?.frames[0].players[0].isGoalkeeper).toBe(false)
+  })
+
   it("selects the event tick range and transforms coordinates and angles", () => {
     const frames = [8, 9, 10, 11, 12].map((tick) => frame(tick))
     const players = new Map<number, MatchPlayer>([

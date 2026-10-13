@@ -474,8 +474,8 @@ function readMetadata(payload: Uint8Array, header: ArchiveHeader) {
   if (stringCount > 16_384) throw new ArchiveError("元数据字符串表过大")
   const strings: Array<string | undefined> = [undefined]
   for (let index = 0; index < stringCount; index += 1) strings.push(reader.readString())
-  let home = readTeamMetadata(reader, strings)
-  let away = readTeamMetadata(reader, strings)
+  let home = readTeamMetadata(reader, strings, header.structureMinor)
+  let away = readTeamMetadata(reader, strings, header.structureMinor)
   const playerCount = reader.readVarUint()
   if (playerCount > 255) throw new ArchiveError("元数据球员数量过大")
   const players = Array.from({ length: playerCount }, () => readPlayerMetadata(reader, strings, header.structureMinor))
@@ -529,10 +529,10 @@ function readMetadataDelta(payload: Uint8Array, header: ArchiveHeader, previous:
   const teamFlags = reader.readByte()
   if ((teamFlags & ~0x03) !== 0) throw new ArchiveError("Metadata 增量含有未知球队字段")
   const home = (teamFlags & 0x01) !== 0
-    ? { ...readTeamMetadata(reader, strings), manager: previous.home.manager }
+    ? { ...readTeamMetadata(reader, strings, header.structureMinor), manager: previous.home.manager }
     : previous.home
   const away = (teamFlags & 0x02) !== 0
-    ? { ...readTeamMetadata(reader, strings), manager: previous.away.manager }
+    ? { ...readTeamMetadata(reader, strings, header.structureMinor), manager: previous.away.manager }
     : previous.away
   const players = [...previous.players]
   const deltaCount = reader.readVarUint()
@@ -599,11 +599,14 @@ function readPitchHalf(reader: ArchiveBufferReader) {
   return value
 }
 
-function readTeamMetadata(reader: ArchiveBufferReader, strings: Array<string | undefined>): RealtimeTeamMetadata {
+function readTeamMetadata(reader: ArchiveBufferReader, strings: Array<string | undefined>, structureMinor: number): RealtimeTeamMetadata {
   return {
     uid: readNullableUint(reader), clubUid: readNullableUint(reader), name: readStringId(reader, strings) ?? "",
     backgroundColour: readNullableUint(reader), foregroundColour: readNullableUint(reader), outlineColour: readNullableUint(reader),
     logoPath: readStringId(reader, strings),
+    shirtNumberColor: structureMinor >= 7 ? readNullableUint(reader) : undefined,
+    shirtBackgroundColor: structureMinor >= 7 ? readNullableUint(reader) : undefined,
+    shirtBackgroundColorGK: structureMinor >= 7 ? readNullableUint(reader) : undefined,
   }
 }
 

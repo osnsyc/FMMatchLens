@@ -1215,6 +1215,7 @@ internal sealed class GameMatchTickHook : IDisposable
 
     private RealtimeTeamMetadata ReadTeamMetadata(nint team, string fallbackName)
     {
+        _memoryReader.TryReadPointer(team + Offsets.Team.TeamBase, out var teamBase);
         _memoryReader.TryReadPointer(team + Offsets.Team.DbTeam, out var dbTeam);
         _memoryReader.TryReadPointer(dbTeam + Offsets.DbTeam.Club, out var club);
 
@@ -1226,7 +1227,10 @@ internal sealed class GameMatchTickHook : IDisposable
             ReadUInt32(team + Offsets.Team.ForegroundColour),
             ReadUInt32(team + Offsets.Team.OutlineColour),
             null,
-            ReadManagerMetadata(team));
+            ReadManagerMetadata(team),
+            teamBase != default ? ReadUInt32(teamBase + Offsets.TeamBase.shirtNumberColor) : null,
+            teamBase != default ? ReadUInt32(teamBase + Offsets.TeamBase.shirtBackgroundColor) : null,
+            teamBase != default ? ReadUInt32(teamBase + Offsets.TeamBase.shirtBackgroundColorGK) : null);
     }
 
     private RealtimeManagerMetadata? ReadManagerMetadata(nint team)

@@ -68,8 +68,8 @@ internal static class ArchiveMetadataCodec
         ArchiveBinary.WriteVarInt64(writer, metadata.CapturedTick);
         ArchiveBinary.WriteVarUInt64(writer, (ulong)strings.Count);
         foreach (var value in strings) ArchiveBinary.WriteString(writer, value);
-        WriteTeam(writer, metadata.Home, ids);
-        WriteTeam(writer, metadata.Away, ids);
+        WriteTeam(writer, metadata.Home, ids, structureMinor);
+        WriteTeam(writer, metadata.Away, ids, structureMinor);
         ArchiveBinary.WriteVarUInt64(writer, (ulong)metadata.Players.Count);
         foreach (var player in metadata.Players.OrderBy(item => item.Slot)) WritePlayer(writer, player, ids, structureMinor);
         var extensionFlags = (byte)(
@@ -106,8 +106,8 @@ internal static class ArchiveMetadataCodec
         using var stream = new MemoryStream(payload.ToArray(), writable: false);
         using var reader = new BinaryReader(stream, Encoding.UTF8);
         var (revision, capturedTick, strings) = ReadPreamble(reader);
-        var home = ReadTeam(reader, strings);
-        var away = ReadTeam(reader, strings);
+        var home = ReadTeam(reader, strings, structureMinor);
+        var away = ReadTeam(reader, strings, structureMinor);
         var playerCount = checked((int)ArchiveBinary.ReadVarUInt64(reader, 5));
         if (playerCount > byte.MaxValue) throw new ArchiveFormatException("invalid_count", "Metadata has too many players.");
         var players = new RealtimePlayerMetadata[playerCount];
@@ -276,10 +276,10 @@ internal static class ArchiveMetadataCodec
         if ((teamFlags & ~AllTeamDeltaFlags) != 0)
             throw new ArchiveFormatException("unknown_metadata_delta_field", "Metadata delta contains unknown team fields.");
         var home = (teamFlags & HomeTeamFlag) != 0
-            ? ReadTeam(reader, strings) with { Manager = previous.Home.Manager }
+            ? ReadTeam(reader, strings, structureMinor) with { Manager = previous.Home.Manager }
             : previous.Home;
         var away = (teamFlags & AwayTeamFlag) != 0
-            ? ReadTeam(reader, strings) with { Manager = previous.Away.Manager }
+            ? ReadTeam(reader, strings, structureMinor) with { Manager = previous.Away.Manager }
             : previous.Away;
         var players = previous.Players.ToDictionary(player => player.Slot);
         var deltaCount = checked((int)ArchiveBinary.ReadVarUInt64(reader, 5));
@@ -449,7 +449,7 @@ internal static class ArchiveMetadataCodec
         }
     }
 
-    private static void WriteTeam(BinaryWriter writer, RealtimeTeamMetadata team, IReadOnlyDictionary<string, int> ids)
+    private static void WriteTeam(BinaryWriter writer, RealtimeTeamMetadata team, IReadOnlyDictionary<string, int> ids, ushort structureMinor = ArchiveWireFormat.StructureMinor)
     {
         WriteNullableUInt(writer, team.Uid);
         WriteNullableUInt(writer, team.ClubUid);
@@ -458,16 +458,26 @@ internal static class ArchiveMetadataCodec
         WriteNullableUInt(writer, team.ForegroundColour);
         WriteNullableUInt(writer, team.OutlineColour);
         WriteStringId(writer, team.LogoPath, ids);
+        if (structureMinor >= 7)
+        {
+            WriteNullableUInt(writer, team.ShirtNumberColor);
+            WriteNullableUInt(writer, team.ShirtBackgroundColor);
+            WriteNullableUInt(writer, team.ShirtBackgroundColorGK);
+        }
     }
 
-    private static RealtimeTeamMetadata ReadTeam(BinaryReader reader, IReadOnlyList<string> strings) => new(
+    private static RealtimeTeamMetadata ReadTeam(BinaryReader reader, IReadOnlyList<string> strings, ushort structureMinor) => new(
         ReadNullableUInt(reader),
         ReadNullableUInt(reader),
         ReadStringId(reader, strings) ?? string.Empty,
         ReadNullableUInt(reader),
         ReadNullableUInt(reader),
         ReadNullableUInt(reader),
-        ReadStringId(reader, strings));
+        ReadStringId(reader, strings),
+        Manager: null,
+        ShirtNumberColor: structureMinor >= 7 ? ReadNullableUInt(reader) : null,
+        ShirtBackgroundColor: structureMinor >= 7 ? ReadNullableUInt(reader) : null,
+        ShirtBackgroundColorGK: structureMinor >= 7 ? ReadNullableUInt(reader) : null);
 
     private static void WriteCompetition(
         BinaryWriter writer,

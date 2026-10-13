@@ -25,6 +25,7 @@ function reuseTeam(
     previous.clubUid === next.clubUid &&
     previous.name === next.name &&
     previous.color === next.color &&
+    sameFlatObject(previous.colorSource, next.colorSource) &&
     previous.themeColors?.light === next.themeColors?.light &&
     previous.themeColors?.dark === next.themeColors?.dark &&
     previous.logoPath === next.logoPath &&

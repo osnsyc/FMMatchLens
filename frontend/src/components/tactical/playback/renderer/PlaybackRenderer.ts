@@ -24,9 +24,14 @@ type PlaybackMarkerRecord = {
   label: BitmapText
   team: TeamSide
   shirtNumber?: number
+  isGoalkeeper?: boolean
 }
 
-export type PlaybackRendererAppearance = PlaybackOverlayColors
+export type PlaybackRendererAppearance = PlaybackOverlayColors & {
+  /** Packed ARGB kit colors from team metadata. */
+  homeGoalkeeperColor?: number
+  awayGoalkeeperColor?: number
+}
 
 const PLAYBACK_TICK_DURATION_MS = 250
 const PLAYBACK_MARKER_RADIUS = 10
@@ -238,16 +243,19 @@ export class PlaybackRenderer {
         label,
         team: player.team,
         shirtNumber: player.shirtNumber,
+        isGoalkeeper: player.isGoalkeeper,
       }
       this.markers.set(player.playerId, marker)
       this.playerLayer.addChild(container)
       this.drawMarker(marker)
     } else if (
       marker.team !== player.team ||
-      marker.shirtNumber !== player.shirtNumber
+      marker.shirtNumber !== player.shirtNumber ||
+      marker.isGoalkeeper !== player.isGoalkeeper
     ) {
       marker.team = player.team
       marker.shirtNumber = player.shirtNumber
+      marker.isGoalkeeper = player.isGoalkeeper
       marker.label.text =
         player.shirtNumber == null ? "" : String(player.shirtNumber)
       this.drawMarker(marker)
@@ -264,8 +272,15 @@ export class PlaybackRenderer {
   }
 
   private drawMarker(marker: PlaybackMarkerRecord) {
-    const teamColor =
+    const fallbackColor =
       marker.team === "home" ? this.appearance.home : this.appearance.away
+    const goalkeeperColor = marker.team === "home"
+      ? this.appearance.homeGoalkeeperColor
+      : this.appearance.awayGoalkeeperColor
+    const teamColor = marker.isGoalkeeper &&
+      goalkeeperColor != null && Number.isFinite(goalkeeperColor) && goalkeeperColor !== 0
+      ? (goalkeeperColor >>> 0) & 0x00ffffff
+      : fallbackColor
     const labelColor = this.appearance.foreground
     marker.body
       .clear()

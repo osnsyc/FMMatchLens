@@ -2,6 +2,9 @@ export type TeamColorSource = {
   backgroundColour?: number
   foregroundColour?: number
   outlineColour?: number
+  shirtNumberColor?: number
+  shirtBackgroundColor?: number
+  shirtBackgroundColorGK?: number
 }
 
 export type TeamThemeColors = {
@@ -40,7 +43,7 @@ export type TeamColorAppearance = {
   presetId: string
   resolvedScheme: "light" | "dark"
   colorVision: "standard" | "colorblind"
-  fixedTeamColors?: { home: string; away: string }
+  fixedTeamColors?: { home: string; away: string; dark?: { home: string; away: string } }
 }
 
 const displayColorCache = new Map<string, { home: string; away: string }>()
@@ -51,14 +54,17 @@ export function selectTeamDisplayColors(
   appearance: TeamColorAppearance
 ): { home: string; away: string } {
   if (appearance.fixedTeamColors) {
+    const colors = appearance.resolvedScheme === "dark"
+      ? appearance.fixedTeamColors.dark ?? appearance.fixedTeamColors
+      : appearance.fixedTeamColors
     return {
-      home: appearance.fixedTeamColors.home,
-      away: appearance.fixedTeamColors.away,
+      home: colors.home,
+      away: colors.away,
     }
   }
 
   const sourceKey = [homeSource, awaySource]
-    .flatMap((source) => [source?.backgroundColour, source?.foregroundColour, source?.outlineColour])
+    .flatMap((source) => [source?.shirtBackgroundColor, source?.backgroundColour, source?.foregroundColour, source?.outlineColour])
     .join(":")
   const cacheKey = `${appearance.presetId}:${appearance.resolvedScheme}:${appearance.colorVision}:${sourceKey}`
   const cached = displayColorCache.get(cacheKey)
@@ -159,6 +165,7 @@ function candidatesFrom(
   fallback: string
 ): Candidate[] {
   const colors = [
+    source?.shirtBackgroundColor,
     source?.backgroundColour,
     source?.foregroundColour,
     source?.outlineColour,
@@ -196,7 +203,7 @@ function selectPairForTheme(pairs: Pair[], surfaces: Rgb[]): Pair {
 
   scored.sort((left, right) => {
     // When both colors are readable, preserve the home team's source priority:
-    // background, then foreground, then outline.
+    // shirt background, then background, foreground, and outline.
     if (left.bothReadable !== right.bothReadable) {
       return Number(right.bothReadable) - Number(left.bothReadable)
     }
