@@ -18,7 +18,6 @@ import {
 import {
   ChartContainer,
   ChartTooltip,
-  ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
 import {
@@ -109,25 +108,6 @@ export const XgTimeline = memo(function XgTimeline({
           {t("stats.expectedGoals")}
         </CardTitle>
 
-        {/* Current xG */}
-        <div className="flex shrink-0 items-center gap-2">
-          <span
-            className="text-sm font-semibold leading-none tabular-nums"
-            style={{ color: homeColor }}
-          >
-            {match.home.stats.xg.toFixed(2)}
-          </span>
-          <span className="text-[10px] text-muted-foreground/40">
-            /
-          </span>
-          <span
-            className="text-sm font-semibold leading-none tabular-nums"
-            style={{ color: awayColor }}
-          >
-            {match.away.stats.xg.toFixed(2)}
-          </span>
-        </div>
-
         <NativeTabs
           items={[
             { id: "timeline", label: t("xg.timeline"), content: null },
@@ -145,11 +125,27 @@ export const XgTimeline = memo(function XgTimeline({
         {mode === "map" ? (
           <XgMap match={match} homeColor={homeColor} awayColor={awayColor} />
         ) : (
-        <ChartContainer
-          config={chartConfig}
-          className="min-h-0 flex-1 px-2 py-2"
-        >
-          <ComposedChart
+        <div className="relative flex min-h-0 flex-1">
+          <div className="pointer-events-none absolute top-2 left-10 z-10 flex items-center gap-2">
+            <span
+              className="text-sm leading-none font-semibold tabular-nums"
+              style={{ color: homeColor }}
+            >
+              {match.home.stats.xg.toFixed(2)}
+            </span>
+            <span className="text-[10px] text-muted-foreground/40">/</span>
+            <span
+              className="text-sm leading-none font-semibold tabular-nums"
+              style={{ color: awayColor }}
+            >
+              {match.away.stats.xg.toFixed(2)}
+            </span>
+          </div>
+          <ChartContainer
+            config={chartConfig}
+            className="min-h-0 flex-1 px-2 py-2"
+          >
+            <ComposedChart
             data={timeline}
             margin={{
               top: 4,
@@ -195,46 +191,13 @@ export const XgTimeline = memo(function XgTimeline({
 
             <ChartTooltip
               cursor={false}
-              content={
-                <ChartTooltipContent
-                  indicator="line"
-                  labelFormatter={(
-                    _,
-                    payload
-                  ) => {
-                    const minute =
-                      payload?.[0]
-                        ?.payload
-                        ?.minute
-
-                    return minute != null
-                      ? `${minute}'`
-                      : t(
-                          "stats.expectedGoals"
-                        )
-                  }}
-                  formatter={(
-                    value,
-                    name
-                  ) => (
-                    <>
-                      <span className="text-muted-foreground">
-                        {chartConfig[
-                          String(
-                            name
-                          ) as keyof typeof chartConfig
-                        ]?.label ?? name}
-                      </span>
-
-                      <span className="ml-auto font-mono font-medium tabular-nums text-foreground">
-                        {Number(
-                          value
-                        ).toFixed(2)}
-                      </span>
-                    </>
-                  )}
+              content={(
+                <XgTimelineTooltip
+                  homeColor={homeColor}
+                  awayColor={awayColor}
+                  fallback={t("stats.expectedGoals")}
                 />
-              }
+              )}
             />
 
             <Line
@@ -293,13 +256,55 @@ export const XgTimeline = memo(function XgTimeline({
                 </ReferenceDot>
               )
             )}
-          </ComposedChart>
-        </ChartContainer>
+            </ComposedChart>
+          </ChartContainer>
+        </div>
         )}
       </CardContent>
     </section>
   )
 }, sameXgTimelineProps)
+
+type XgTimelineTooltipProps = {
+  active?: boolean
+  payload?: Array<{ payload?: XgTimelinePoint }>
+  homeColor: string
+  awayColor: string
+  fallback: string
+}
+
+function XgTimelineTooltip({
+  active,
+  payload,
+  homeColor,
+  awayColor,
+  fallback,
+}: XgTimelineTooltipProps) {
+  const point = payload?.find((entry) => entry.payload)?.payload
+  if (!active || !point) return null
+
+  return (
+    <div className="pointer-events-none grid min-w-24 place-items-center content-center gap-1 rounded-lg border border-border/50 bg-background/60 px-2.5 py-2 text-xs shadow-xl backdrop-blur-sm">
+      <div className="font-medium tabular-nums text-foreground">
+        {Number.isFinite(point.minute) ? formatTooltipMinute(point.minute) : fallback}
+      </div>
+      <div className="flex items-center justify-center gap-1.5 font-mono font-semibold tabular-nums">
+        <span style={{ color: homeColor }}>{formatTooltipValue(point.home)}</span>
+        <span className="text-muted-foreground">–</span>
+        <span style={{ color: awayColor }}>{formatTooltipValue(point.away)}</span>
+      </div>
+    </div>
+  )
+}
+
+function formatTooltipValue(value: number) {
+  const rounded = Math.abs(value) < 0.005 ? 0 : Number(value.toFixed(2))
+  return String(rounded)
+}
+
+function formatTooltipMinute(minute: number) {
+  return `${Math.floor(Math.max(0, minute))}′`
+}
 
 function GoalMarkerLabel({
   color,

@@ -48,6 +48,21 @@ export const XgMap = memo(function XgMap({
       >
         <div className="relative size-full overflow-hidden bg-[var(--tactical-pitch-surface)]">
           <PitchMarkings dimensions={dimensions} />
+          <div className="pointer-events-none absolute top-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2">
+            <span
+              className="text-sm leading-none font-semibold tabular-nums"
+              style={{ color: homeColor }}
+            >
+              {match.home.stats.xg.toFixed(2)}
+            </span>
+            <span className="text-[10px] text-muted-foreground/40">/</span>
+            <span
+              className="text-sm leading-none font-semibold tabular-nums"
+              style={{ color: awayColor }}
+            >
+              {match.away.stats.xg.toFixed(2)}
+            </span>
+          </div>
 
           {shots.map((shot) => {
             const color = shot.team === "home" ? homeColor : awayColor
@@ -101,7 +116,7 @@ export const XgMap = memo(function XgMap({
                 >
                   <div className="flex items-center gap-2 px-2.5 py-2">
                     <span
-                      className="flex h-7 min-w-12 shrink-0 items-center justify-center rounded-md px-1.5 text-[10px] font-extrabold tabular-nums"
+                      className="flex size-7 shrink-0 items-center justify-center rounded-md text-[10px] font-extrabold tabular-nums"
                       style={{
                         backgroundColor: color,
                         color: "var(--event-marker-foreground)",
@@ -150,6 +165,8 @@ function formatDisplayTick(displayTick: number) {
 function sameXgMapProps(previous: XgMapProps, next: XgMapProps) {
   return (
     previous.match.xgShots === next.match.xgShots &&
+    previous.match.home.stats.xg === next.match.home.stats.xg &&
+    previous.match.away.stats.xg === next.match.away.stats.xg &&
     previous.homeColor === next.homeColor &&
     previous.awayColor === next.awayColor &&
     previous.match.home.name === next.match.home.name &&
