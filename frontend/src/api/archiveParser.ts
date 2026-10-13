@@ -30,6 +30,7 @@ const legacyTeamFields = (1n << 23n) - 1n
 const allTeamFields = (1n << 25n) - 1n
 const legacyPlayerFields = (1n << 39n) - 1n
 const allPlayerFields = (1n << 42n) - 1n
+const compactPlayerFields = allPlayerFields & ~(1n << 36n)
 
 type ArchiveHeader = {
   structureMajor: number
@@ -241,7 +242,7 @@ function readFrames(
 ) {
   const reader = new ArchiveBufferReader(payload)
   const supportedTeamFields = structureMinor >= 6 ? allTeamFields : legacyTeamFields
-  const supportedPlayerFields = structureMinor >= 6 ? allPlayerFields : legacyPlayerFields
+  const supportedPlayerFields = structureMinor >= 7 ? compactPlayerFields : structureMinor >= 6 ? allPlayerFields : legacyPlayerFields
   if (structureMinor === 1 && reader.readByte() !== legacy21FramePayloadMarker) {
     throw new ArchiveError("2.1 帧载荷标记无效")
   }
@@ -249,6 +250,7 @@ function readFrames(
   let previous: RealtimeFrame | undefined
   for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
     const flags = reader.readByte()
+    if ((flags & ~(structureMinor >= 7 ? 31 : 3)) !== 0) throw new ArchiveError("帧变化标记无效")
     const rosterReset = (flags & 1) !== 0
     const pitchChanged = (flags & 2) !== 0
     if (!previous && (!rosterReset || !pitchChanged)) throw new ArchiveError("数据块缺少独立关键帧")
@@ -262,14 +264,11 @@ function readFrames(
     if (possessionRaw > 2) throw new ArchiveError("帧持球方无效")
     const holderSlotValue = reader.readVarUint()
     const ballXCentimeters = structureMinor >= 7
-      ? addSafe(previous?.ballXCentimeters ?? 0, reader.readVarInt())
-      : 0
+      ? readBallDelta(reader, previous?.ballXCentimeters ?? 0, (flags & 4) !== 0) : 0
     const ballYCentimeters = structureMinor >= 7
-      ? addSafe(previous?.ballYCentimeters ?? 0, reader.readVarInt())
-      : 0
+      ? readBallDelta(reader, previous?.ballYCentimeters ?? 0, (flags & 8) !== 0) : 0
     const ballZCentimeters = structureMinor >= 7
-      ? addSafe(previous?.ballZCentimeters ?? 0, reader.readVarInt())
-      : 0
+      ? readBallDelta(reader, previous?.ballZCentimeters ?? 0, (flags & 16) !== 0) : 0
     let halfPitchWidth = previous?.halfPitchWidth ?? 0
     let halfPitchLength = previous?.halfPitchLength ?? 0
     if (pitchChanged) {
@@ -290,34 +289,42 @@ function readFrames(
       if (new Set(players.map((player) => player.slot)).size !== players.length) throw new ArchiveError("关键帧包含重复 Slot")
     } else {
       players = previous!.players.map((prior) => {
-        const qx = quantize(prior.x, halfPitchWidth) + reader.readVarInt()
-        const qy = quantize(prior.y, halfPitchLength) + reader.readVarInt()
-        if (qx < 0 || qx > 65535 || qy < 0 || qy > 65535) throw new ArchiveError("坐标差分越界")
+        const qx = (structureMinor >= 7 ? Math.round(prior.x * 100) : quantize(prior.x, halfPitchWidth)) + reader.readVarInt()
+        const qy = (structureMinor >= 7 ? Math.round(prior.y * 100) : quantize(prior.y, halfPitchLength)) + reader.readVarInt()
+        if (structureMinor >= 7
+          ? qx < -32768 || qx > 32767 || qy < -32768 || qy > 32767
+          : qx < 0 || qx > 65535 || qy < 0 || qy > 65535) throw new ArchiveError("坐标差分越界")
+        const playerFlags = structureMinor >= 7 ? reader.readByte() : 1
+        if ((playerFlags & ~15) !== 0) throw new ArchiveError("球员变化标记无效")
         const speedCentimetersPerSecond = structureMinor >= 7
-          ? (prior.speedCentimetersPerSecond ?? 0) + reader.readVarInt()
+          ? (prior.speedCentimetersPerSecond ?? 0) + ((playerFlags & 4) !== 0 ? reader.readVarInt() : 0)
           : undefined
-        const encodedAngle = structureMinor >= 7
-          ? (prior.angleDegrees ?? 65535) + reader.readVarInt()
-          : 65535
-        const angleDegrees = encodedAngle === 65535 ? undefined : encodedAngle
+        let angleDegrees = prior.angleDegrees
+        if (structureMinor >= 7 && (playerFlags & 8) !== 0) {
+          const delta = reader.readVarInt()
+          if (delta < -181 || delta > 180) throw new ArchiveError("朝向差分越界")
+          const encodedAngle = ((prior.angleDegrees ?? 361) + delta + 362) % 362
+          angleDegrees = encodedAngle === 361 ? undefined : encodedAngle
+        }
         if (structureMinor >= 7 && (
           speedCentimetersPerSecond! < 0 ||
-          speedCentimetersPerSecond! > 65535 ||
-          encodedAngle < 0 ||
-          encodedAngle > 65535 ||
-          (encodedAngle > 360 && encodedAngle !== 65535)
+          speedCentimetersPerSecond! > 65535
         )) {
           throw new ArchiveError("Player movement data is outside its quantized range")
         }
-        const mask = reader.readVarUintBig()
+        const mask = (playerFlags & 1) !== 0 ? reader.readVarUintBig() : 0n
         if ((mask & ~supportedPlayerFields) !== 0n) throw new ArchiveError("球员状态包含未知字段")
-        return readPlayerFields(reader, {
+        const player = readPlayerFields(reader, {
           ...prior,
-          x: dequantize(qx, halfPitchWidth),
-          y: dequantize(qy, halfPitchLength),
+          x: structureMinor >= 7 ? qx / 100 : dequantize(qx, halfPitchWidth),
+          y: structureMinor >= 7 ? qy / 100 : dequantize(qy, halfPitchLength),
           speedCentimetersPerSecond,
           angleDegrees,
         }, mask)
+        if (structureMinor >= 7 && (playerFlags & 2) !== 0) {
+          player.distanceM = readDistanceDelta(reader, prior.distanceM ?? 0)
+        }
+        return player
       })
     }
     const holderSlot = holderSlotValue - 1
@@ -371,25 +378,27 @@ function readFullPlayer(
   halfWidth: number,
   halfLength: number,
   playerFields: bigint,
-  hasMovement: boolean,
+  compactEncoding: boolean,
 ): RealtimePlayer {
   const slot = reader.readVarUint()
   const playerId = reader.readVarInt()
   const teamRaw = reader.readByte()
   if (teamRaw > 1) throw new ArchiveError("球员所属球队无效")
-  const x = dequantize(reader.readUint16(), halfWidth)
-  const y = dequantize(reader.readUint16(), halfLength)
-  const speedCentimetersPerSecond = hasMovement ? reader.readUint16() : undefined
-  const encodedAngle = hasMovement ? reader.readUint16() : 65535
-  if (encodedAngle > 360 && encodedAngle !== 65535) throw new ArchiveError("Player facing angle is outside its quantized range")
-  const angleDegrees = encodedAngle === 65535 ? undefined : encodedAngle
+  const x = compactEncoding ? reader.readInt16() / 100 : dequantize(reader.readUint16(), halfWidth)
+  const y = compactEncoding ? reader.readInt16() / 100 : dequantize(reader.readUint16(), halfLength)
+  const speedCentimetersPerSecond = compactEncoding ? reader.readVarUint() : undefined
+  const encodedAngle = compactEncoding ? reader.readVarUint() : 361
+  if ((speedCentimetersPerSecond ?? 0) > 65535 || encodedAngle > 361) throw new ArchiveError("Player movement is outside its quantized range")
+  const angleDegrees = encodedAngle === 361 ? undefined : encodedAngle
   const seed = {
     slot, playerId, team: teamRaw === 1 ? "away" : "home", isBallHolder: false,
     x, y, speedCentimetersPerSecond, angleDegrees, rating: 0,
     isSubstitute: false, isOnPitch: false, subbedOnMinute: 0, subbedOffMinute: 0, penalties: 0, ownGoals: 0,
     goals: 0, assists: 0, shotsFaced: 0, savesHeld: 0, savesParried: 0, savesTipped: 0,
   } satisfies RealtimePlayer
-  return readPlayerFields(reader, seed, playerFields)
+  const player = readPlayerFields(reader, seed, playerFields)
+  if (compactEncoding) player.distanceM = readDistanceDelta(reader, 0)
+  return player
 }
 
 function readPlayerFields(reader: ArchiveBufferReader, prior: RealtimePlayer, mask: bigint): RealtimePlayer {
@@ -413,9 +422,24 @@ function readPlayerFields(reader: ArchiveBufferReader, prior: RealtimePlayer, ma
     [37, "overallPhysicalCondition"], [38, "matchSharpness"],
     [39, "savesHeld"], [40, "savesParried"], [41, "savesTipped"],
   ]
-  for (const [bit, field] of statFields) if (has(bit)) Object.assign(result, { [field]: reader.readVarInt() })
-  if (has(36)) result.distanceM = reader.readFloatXor(result.distanceM ?? 0)
+  for (const [bit, field] of statFields) {
+    // Legacy bit 36 precedes condition/sharpness and keeper fields on the wire.
+    if (bit === 37 && has(36)) result.distanceM = reader.readFloatXor(result.distanceM ?? 0)
+    if (has(bit)) Object.assign(result, { [field]: reader.readVarInt() })
+  }
   return result
+}
+
+function readDistanceDelta(reader: ArchiveBufferReader, prior: number) {
+  const distance = addSafe(prior, reader.readVarInt())
+  if (distance < 0 || distance > 16_777_216) throw new ArchiveError("球员累计距离越界")
+  return distance
+}
+
+function readBallDelta(reader: ArchiveBufferReader, prior: number, changed: boolean) {
+  const value = changed ? addSafe(prior, reader.readVarInt()) : prior
+  if (value < -2147483648 || value > 2147483647) throw new ArchiveError("足球坐标越界")
+  return value
 }
 
 function readTail<T>(reader: ArchiveBufferReader, previous: readonly T[] | undefined, read: (reader: ArchiveBufferReader) => T): T[] {
@@ -895,6 +919,7 @@ class ArchiveBufferReader {
 
   readByte() { this.ensure(1); return this.view.getUint8(this.offset++) }
   readBoolean() { return this.readByte() !== 0 }
+  readInt16() { this.ensure(2); const value = this.view.getInt16(this.offset, true); this.offset += 2; return value }
   readUint16() { this.ensure(2); const value = this.view.getUint16(this.offset, true); this.offset += 2; return value }
   readInt32() { this.ensure(4); const value = this.view.getInt32(this.offset, true); this.offset += 4; return value }
   readUint32() { this.ensure(4); const value = this.view.getUint32(this.offset, true); this.offset += 4; return value }

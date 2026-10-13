@@ -102,6 +102,32 @@ internal static class ArchiveBinary
     public static float Dequantize(ushort value, float halfExtent) =>
         value / (float)ushort.MaxValue * (halfExtent * 2f) - halfExtent;
 
+    // 2.7 uses centered, signed centimeters, independent of pitch dimensions.
+    public static short QuantizeCentimeters(float value)
+    {
+        var rounded = Math.Round((double)value * 100, MidpointRounding.AwayFromZero);
+        if (!double.IsFinite(rounded) || rounded < short.MinValue || rounded > short.MaxValue)
+            throw new ArchiveFormatException("invalid_coordinate", "Player coordinate exceeds the signed centimeter range.");
+        return (short)rounded;
+    }
+
+    public static int QuantizeDistance(float value)
+    {
+        var rounded = Math.Round((double)value, MidpointRounding.AwayFromZero);
+        // Integer meters must remain exact in the float-based frame model.
+        if (!float.IsFinite(value) || value < 0 || rounded > 16_777_216)
+            throw new ArchiveFormatException("invalid_distance", "Player distance exceeds the exact integer-meter range.");
+        return (int)rounded;
+    }
+
+    public static float ReadDistanceDelta(BinaryReader reader, float prior)
+    {
+        var value = checked((long)QuantizeDistance(prior) + ReadVarInt64(reader));
+        if (value is < 0 or > 16_777_216)
+            throw new ArchiveFormatException("invalid_distance", "Player distance delta is outside its integer-meter range.");
+        return value;
+    }
+
     private static uint[] BuildCrcTable()
     {
         var table = new uint[256];
