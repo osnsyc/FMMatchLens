@@ -1,15 +1,17 @@
 import { describe, expect, it } from "vitest"
 
 import type { RealtimeFrame, RealtimePlayer } from "@/api/realtimeMatch"
+import { buildDribblePlayback } from "@/components/tactical/playback/builders/dribblePlayback"
 import {
-  buildDribblePlayback,
   buildShotChainPlayback,
-  interpolatePlaybackBall,
-  interpolatePlaybackPlayer,
   isShotChainPlaybackTrigger,
   shotChainPlaybackTickRange,
-  type TacticalPlaybackPlayer,
-} from "@/components/tactical/dribblePlayback"
+} from "@/components/tactical/playback/builders/shotChainPlayback"
+import {
+  interpolatePlaybackBall,
+  interpolatePlaybackPlayer,
+} from "@/components/tactical/playback/core/interpolation"
+import type { TacticalPlaybackPlayer } from "@/components/tactical/playback/core/types"
 import type { ShotChain } from "@/components/tactical/tacticalScene"
 import type { MatchPlayer, TacticalEventPoint } from "@/types/match"
 
@@ -117,7 +119,7 @@ describe("buildDribblePlayback", () => {
     expect(ballXPositions?.[3]).toBeCloseTo(30)
   })
 
-  it("uses speed-derived tangents and interpolates absolute angles across zero", () => {
+  it("interpolates positions linearly and absolute angles across zero", () => {
     const current = playbackPlayer({
       x: 0,
       angleDegrees: 350,
@@ -129,9 +131,9 @@ describe("buildDribblePlayback", () => {
       velocityXPerTick: 0,
     })
 
-    const midpoint = interpolatePlaybackPlayer(current, next, 0.5, 1)
+    const midpoint = interpolatePlaybackPlayer(current, next, 0.5)
 
-    expect(midpoint.x).toBeCloseTo(7.5)
+    expect(midpoint.x).toBeCloseTo(5)
     expect(midpoint.angleDegrees).toBeCloseTo(0)
   })
 
@@ -150,8 +152,7 @@ describe("buildDribblePlayback", () => {
       interpolatePlaybackPlayer(
         playbackPlayer({ angleDegrees: undefined }),
         playbackPlayer({ angleDegrees: 0 }),
-        0.5,
-        1
+        0.5
       ).angleDegrees
     ).toBeUndefined()
   })
@@ -217,7 +218,7 @@ describe("buildShotChainPlayback", () => {
 
     expect(playback?.id).toBe(chain.id)
     expect(playback?.frames.map((item) => item.tick)).toEqual([9, 10, 11, 12])
-    expect(playback?.trailPlayerId).toBeUndefined()
+    expect(playback?.trail).toEqual({ target: "ball" })
     expect(playback?.frames[0].ball).toMatchObject({
       x: 35,
       y: 37.5,

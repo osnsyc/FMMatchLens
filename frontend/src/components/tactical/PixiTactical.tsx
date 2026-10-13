@@ -11,7 +11,10 @@ import type {
   TacticalScene,
 } from "@/components/tactical/tacticalScene"
 import type { MatchPlayer } from "@/types/match"
-import type { TacticalPlayback } from "@/components/tactical/dribblePlayback"
+import type {
+  PlaybackTextResolver,
+  TacticalPlayback,
+} from "@/components/tactical/playback/core/types"
 
 type PixiTacticalProps = {
   scene: TacticalScene
@@ -20,6 +23,7 @@ type PixiTacticalProps = {
   selectedShotId: string | null
   shotChains: readonly ShotChain[]
   playback: TacticalPlayback | null
+  playbackTextResolver: PlaybackTextResolver
   onHover: (hit: TacticalHit | null, clientX: number, clientY: number) => void
   onPointClick: (hit: TacticalHit) => void
   onEmptyClick: () => void
@@ -32,6 +36,7 @@ export function PixiTactical({
   selectedShotId,
   shotChains,
   playback,
+  playbackTextResolver,
   onHover,
   onPointClick,
   onEmptyClick,
@@ -45,6 +50,7 @@ export function PixiTactical({
     selectedShotId,
     shotChains,
     playback,
+    playbackTextResolver,
     onHover,
     onPointClick,
     onEmptyClick,
@@ -58,6 +64,7 @@ export function PixiTactical({
       selectedShotId,
       shotChains,
       playback,
+      playbackTextResolver,
       onHover,
       onPointClick,
       onEmptyClick,
@@ -65,6 +72,7 @@ export function PixiTactical({
   }, [
     appearance,
     playback,
+    playbackTextResolver,
     onEmptyClick,
     onHover,
     onPointClick,
@@ -95,7 +103,8 @@ export function PixiTactical({
           host,
           fieldWidth,
           fieldHeight,
-          latestRef.current.appearance
+          latestRef.current.appearance,
+          latestRef.current.playbackTextResolver
         )
         if (disposed) {
           renderer.destroy()
@@ -157,6 +166,10 @@ export function PixiTactical({
   useEffect(() => {
     rendererRef.current?.updatePlayback(playback)
   }, [playback])
+
+  useEffect(() => {
+    rendererRef.current?.updatePlaybackTextResolver(playbackTextResolver)
+  }, [playbackTextResolver])
 
   const hitAtPointer = (
     event: React.PointerEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>

@@ -3,7 +3,6 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type CSSProperties,
 } from "react"
@@ -75,12 +74,16 @@ import { cssVizTokens } from "@/theme/vizTokens"
 import type { RealtimeFrame } from "@/api/realtimeMatch"
 import {
   buildDribblePlayback,
-  buildShotChainPlayback,
   DRIBBLE_PLAYBACK_SEARCH_RADIUS_TICKS,
+} from "@/components/tactical/playback/builders/dribblePlayback"
+import {
+  buildShotChainPlayback,
   isShotChainPlaybackTrigger,
   SHOT_CHAIN_PLAYBACK_PADDING_TICKS,
   shotChainPlaybackTickRange,
-} from "@/components/tactical/dribblePlayback"
+} from "@/components/tactical/playback/builders/shotChainPlayback"
+import { useTacticalPlayback } from "@/components/tactical/playback/hooks/useTacticalPlayback"
+import type { PlaybackText } from "@/components/tactical/playback/core/types"
 
 type TacticalBoardProps = {
   match: MatchSnapshot
@@ -128,92 +131,15 @@ export const TacticalBoard = memo(function TacticalBoard({
   const [showNumbers, setShowNumbers] = useState(true)
   const [showAttackFocus, setShowAttackFocus] = useState(true)
   const [selectedShotId, setSelectedShotId] = useState<string | null>(null)
-  const [selectedDribbleId, setSelectedDribbleId] = useState<string | null>(
-    null
-  )
-  const [selectedShotChainId, setSelectedShotChainId] = useState<string | null>(
-    null
-  )
-  const [loadedPlaybackFrames, setLoadedPlaybackFrames] = useState<{
-    source: TacticalBoardProps["loadTickFrames"]
-    requestId: string
-    frames: readonly RealtimeFrame[]
-  } | null>(null)
-  const playbackLoadAbortRef = useRef<AbortController | null>(null)
   const [selectedMetrics, setSelectedMetrics] = useState<
     Record<string, boolean>
   >(initialSelectedMetrics)
   const [hovered, setHovered] = useState<HoveredTacticalPoint | null>(null)
-
-  const clearPlayback = useCallback(() => {
-    playbackLoadAbortRef.current?.abort()
-    playbackLoadAbortRef.current = null
-    setSelectedDribbleId(null)
-    setSelectedShotChainId(null)
-    setLoadedPlaybackFrames(null)
-  }, [])
-
-  const loadPlaybackFrames = useCallback(
-    (requestId: string, fromTick: number, toTick: number) => {
-      playbackLoadAbortRef.current?.abort()
-      const controller = new AbortController()
-      playbackLoadAbortRef.current = controller
-      setLoadedPlaybackFrames(null)
-      void loadTickFrames(fromTick, toTick, controller.signal)
-        .then((frames) => {
-          if (!controller.signal.aborted) {
-            setLoadedPlaybackFrames({
-              source: loadTickFrames,
-              requestId,
-              frames,
-            })
-          }
-        })
-        .catch((error: unknown) => {
-          if (
-            !controller.signal.aborted &&
-            !(error instanceof DOMException && error.name === "AbortError")
-          ) {
-            console.error("Unable to load tactical playback frames", error)
-          }
-        })
-        .finally(() => {
-          if (playbackLoadAbortRef.current === controller) {
-            playbackLoadAbortRef.current = null
-          }
-        })
-    },
-    [loadTickFrames]
-  )
-
-  const selectDribble = useCallback(
-    (point: { id: string; tick: number }) => {
-      setSelectedShotChainId(null)
-      setSelectedDribbleId(point.id)
-      loadPlaybackFrames(
-        point.id,
-        Math.max(0, point.tick - DRIBBLE_PLAYBACK_SEARCH_RADIUS_TICKS),
-        point.tick + DRIBBLE_PLAYBACK_SEARCH_RADIUS_TICKS
-      )
-    },
-    [loadPlaybackFrames]
-  )
-
-  const selectShotChain = useCallback(
-    (chain: ShotChain) => {
-      const range = shotChainPlaybackTickRange(chain)
-      setSelectedDribbleId(null)
-      setSelectedShotChainId(chain.id)
-      loadPlaybackFrames(
-        chain.id,
-        Math.max(0, range.startTick - SHOT_CHAIN_PLAYBACK_PADDING_TICKS),
-        range.endTick + SHOT_CHAIN_PLAYBACK_PADDING_TICKS
-      )
-    },
-    [loadPlaybackFrames]
-  )
-
-  useEffect(() => () => playbackLoadAbortRef.current?.abort(), [loadTickFrames])
+  const {
+    playback: tacticalPlayback,
+    startPlayback,
+    clearPlayback,
+  } = useTacticalPlayback(loadTickFrames)
 
   useEffect(() => {
     const selectTourMetricGroup = (event: Event) => {
@@ -242,6 +168,11 @@ export const TacticalBoard = memo(function TacticalBoard({
     t(`dataMap.groups.${group.id}`, { defaultValue: group.label })
   const metricLabel = (metric: DataMetric) =>
     t(`dataMap.events.${metric.id}`, { defaultValue: metric.label })
+  const resolvePlaybackText = useCallback(
+    (text: PlaybackText) =>
+      t(text.key, { defaultValue: text.defaultValue, ...text.values }),
+    [t]
+  )
 
   const selectedMetricList = useMemo(
     () => metrics.filter((metric) => selectedMetrics[metric.id]),
@@ -295,51 +226,41 @@ export const TacticalBoard = memo(function TacticalBoard({
           ),
     [activeSelectedShotId, filteredTacticalEvents, selectedMetrics]
   )
-  const selectedDribble = useMemo(
-    () =>
-      selectedDribbleId == null
-        ? undefined
-        : filteredTacticalEvents.find(
-            (event) =>
-              event.id === selectedDribbleId &&
-              event.metricId === "dribblesCompleted"
-          ),
-    [filteredTacticalEvents, selectedDribbleId]
+  const selectDribble = useCallback(
+    (point: { id: string; tick: number }) => {
+      const event = filteredTacticalEvents.find(
+        (candidate) =>
+          candidate.id === point.id &&
+          candidate.metricId === "dribblesCompleted"
+      )
+      if (!event) return
+      startPlayback({
+        id: event.id,
+        fromTick: Math.max(
+          0,
+          event.tick - DRIBBLE_PLAYBACK_SEARCH_RADIUS_TICKS
+        ),
+        toTick: event.tick + DRIBBLE_PLAYBACK_SEARCH_RADIUS_TICKS,
+        build: (frames) => buildDribblePlayback(event, frames, playerById),
+      })
+    },
+    [filteredTacticalEvents, playerById, startPlayback]
   )
-  const dribblePlayback = useMemo(
-    () =>
-      selectedDribble &&
-      loadedPlaybackFrames?.source === loadTickFrames &&
-      loadedPlaybackFrames.requestId === selectedDribble.id
-        ? buildDribblePlayback(
-            selectedDribble,
-            loadedPlaybackFrames.frames,
-            playerById
-          )
-        : null,
-    [loadTickFrames, loadedPlaybackFrames, playerById, selectedDribble]
+  const selectShotChain = useCallback(
+    (chain: ShotChain) => {
+      const range = shotChainPlaybackTickRange(chain)
+      startPlayback({
+        id: chain.id,
+        fromTick: Math.max(
+          0,
+          range.startTick - SHOT_CHAIN_PLAYBACK_PADDING_TICKS
+        ),
+        toTick: range.endTick + SHOT_CHAIN_PLAYBACK_PADDING_TICKS,
+        build: (frames) => buildShotChainPlayback(chain, frames, playerById),
+      })
+    },
+    [playerById, startPlayback]
   )
-  const selectedShotChain = useMemo(
-    () =>
-      selectedShotChainId == null
-        ? undefined
-        : visibleShotChains.find((chain) => chain.id === selectedShotChainId),
-    [selectedShotChainId, visibleShotChains]
-  )
-  const shotChainPlayback = useMemo(
-    () =>
-      selectedShotChain &&
-      loadedPlaybackFrames?.source === loadTickFrames &&
-      loadedPlaybackFrames.requestId === selectedShotChain.id
-        ? buildShotChainPlayback(
-            selectedShotChain,
-            loadedPlaybackFrames.frames,
-            playerById
-          )
-        : null,
-    [loadTickFrames, loadedPlaybackFrames, playerById, selectedShotChain]
-  )
-  const tacticalPlayback = dribblePlayback ?? shotChainPlayback
   const momentumLaneShares = useMemo(
     () => calculateMomentumLaneShares(filteredTacticalEvents),
     [filteredTacticalEvents]
@@ -595,6 +516,7 @@ export const TacticalBoard = memo(function TacticalBoard({
                   selectedShotId={activeSelectedShotId}
                   shotChains={visibleShotChains}
                   playback={tacticalPlayback}
+                  playbackTextResolver={resolvePlaybackText}
                   onHover={(hit, clientX, clientY) => {
                     setHovered((current) => {
                       if (!hit) return null
