@@ -18,6 +18,7 @@ import type { ArchivePage, ArchiveSummary } from "@/api/archiveTypes"
 import type { RealtimeFrame, RealtimeMatchMetadata } from "@/api/realtimeMatch"
 import { parseLocalArchive } from "@/api/localArchive"
 import type { ReplayArchive } from "@/api/replay/replayTypes"
+import type { ReplayMotionSource } from "@/api/replay/replayMotionSource"
 import { useReplaySession } from "@/hooks/useReplaySession"
 import { AssistIcon } from "@/components/AssistIcon"
 import { ArchivePicker } from "@/components/ArchivePicker"
@@ -59,6 +60,7 @@ type MatchTimelineProps = {
   backendUrl: string
   onReplayFrame: (snapshot: MatchSnapshot) => void
   onReplayFramesChange: (frames: readonly RealtimeFrame[]) => void
+  replayMotionSource: ReplayMotionSource
   onLive: () => void
 }
 
@@ -83,6 +85,7 @@ export function MatchTimeline({
   backendUrl: apiBase,
   onReplayFrame,
   onReplayFramesChange,
+  replayMotionSource,
   onLive,
 }: MatchTimelineProps) {
   const { t, i18n } = useTranslation()
@@ -102,6 +105,13 @@ export function MatchTimeline({
   const [frameIndex, setFrameIndex] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [speed, setSpeed] = useState(1)
+  const seekFrameIndex = useCallback(
+    (index: number) => {
+      replayMotionSource.seek(index)
+      setFrameIndex(index)
+    },
+    [replayMotionSource]
+  )
   const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [pendingSourceId, setPendingSourceId] = useState<string>()
@@ -260,7 +270,7 @@ export function MatchTimeline({
           if (!cancelled && prepared) {
             activateReplay(prepared)
             setFrames(prepared.frames)
-            setFrameIndex(0)
+            seekFrameIndex(0)
             setSelectedArchive(loadedSummary)
             setSelectedId(targetId)
             setPendingSourceId(undefined)
@@ -287,29 +297,38 @@ export function MatchTimeline({
     localConnectionEnabled,
     pendingSourceId,
     prepareReplay,
+    seekFrameIndex,
     t,
   ])
 
   useEffect(() => {
-    if (!playing || frames.length === 0) return
+    replayMotionSource.setFrames(selectedId ? frames : [])
+    return () => replayMotionSource.clear()
+  }, [frames, selectedId, replayMotionSource])
+
+  useEffect(() => {
+    replayMotionSource.setPlaying(playing && selectedId !== "")
+  }, [playing, selectedId, replayMotionSource])
+
+  useEffect(() => {
+    if (!playing || !selectedId || frames.length === 0) return
 
     let animationFrame = 0
     let previousTimestamp = performance.now()
-    let frameCarry = 0
+    let previousIndex = Math.floor(replayMotionSource.getSnapshot().position)
 
     const advance = (timestamp: number) => {
       const elapsedMilliseconds = Math.min(250, timestamp - previousTimestamp)
       previousTimestamp = timestamp
-      frameCarry += (elapsedMilliseconds * speed) / 250
-      const frameStep = Math.floor(frameCarry)
-
-      if (frameStep > 0) {
-        frameCarry -= frameStep
-        setFrameIndex((current) => {
-          const next = Math.min(frames.length - 1, current + frameStep)
-          if (next >= frames.length - 1) setPlaying(false)
-          return next
-        })
+      const cursor = replayMotionSource.advance(elapsedMilliseconds, speed)
+      const nextIndex = Math.floor(cursor.position)
+      if (nextIndex !== previousIndex) {
+        previousIndex = nextIndex
+        setFrameIndex(nextIndex)
+      }
+      if (!cursor.playing) {
+        setPlaying(false)
+        return
       }
 
       animationFrame = window.requestAnimationFrame(advance)
@@ -317,7 +336,7 @@ export function MatchTimeline({
 
     animationFrame = window.requestAnimationFrame(advance)
     return () => window.cancelAnimationFrame(animationFrame)
-  }, [playing, speed, frames.length])
+  }, [playing, speed, frames.length, selectedId, replayMotionSource])
 
   useEffect(() => {
     if (selectedId && frames[frameIndex]) advanceReplayTo(frameIndex)
@@ -370,7 +389,7 @@ export function MatchTimeline({
       sliderRafRef.current = 0
       const pending = pendingSliderRef.current
       if (pending == null) return
-      setFrameIndex(replayFrameIndex(pending, frames))
+      seekFrameIndex(replayFrameIndex(pending, frames))
     })
   }
 
@@ -379,7 +398,7 @@ export function MatchTimeline({
     sliderRafRef.current = 0
     pendingSliderRef.current = undefined
     setDraftSliderPercent(undefined)
-    setFrameIndex(replayFrameIndex(percent, frames))
+    seekFrameIndex(replayFrameIndex(percent, frames))
   }
 
   useEffect(() => {
@@ -395,19 +414,19 @@ export function MatchTimeline({
       )
       setPlaying(false)
       setDraftSliderPercent(undefined)
-      setFrameIndex(targetIndex >= 0 ? targetIndex : frames.length - 1)
+      seekFrameIndex(targetIndex >= 0 ? targetIndex : frames.length - 1)
     }
     window.addEventListener(exploreTourTimelineSeekEventName, seekToMinute)
     return () =>
       window.removeEventListener(exploreTourTimelineSeekEventName, seekToMinute)
-  }, [busy, frames, replaying])
+  }, [busy, frames, replaying, seekFrameIndex])
 
   const selectSource = (matchId: string) => {
     localArchiveRequestRef.current += 1
     if (localArchive && matchId === localArchiveId(localArchive)) {
       setFrames(localArchive.frames)
       activateReplay(localArchive)
-      setFrameIndex(0)
+      seekFrameIndex(0)
       setPlaying(false)
       setLoading(false)
       setPendingSourceId(undefined)
@@ -460,7 +479,7 @@ export function MatchTimeline({
       activateReplay(prepared)
       setLocalArchive(prepared)
       setFrames(prepared.frames)
-      setFrameIndex(0)
+      seekFrameIndex(0)
       setSelectedArchive(undefined)
       setSelectedId(localArchiveId(prepared))
     } catch (error) {

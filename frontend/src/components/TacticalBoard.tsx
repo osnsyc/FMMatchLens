@@ -1,4 +1,8 @@
 import type { LiveMotionSource, LiveMotionStatus } from "@/api/liveMotionSource"
+import type {
+  ReplayMotionSource,
+  ReplayMotionStatus,
+} from "@/api/replay/replayMotionSource"
 import {
   memo,
   useCallback,
@@ -88,6 +92,7 @@ import type { PlaybackText } from "@/components/tactical/playback/core/types"
 
 type TacticalBoardProps = {
   liveMotionSource?: LiveMotionSource
+  replayMotionSource?: ReplayMotionSource
   isLiveSource?: boolean
   isPanelActive?: boolean
   match: MatchSnapshot
@@ -119,6 +124,7 @@ const emptyShotChains: readonly ShotChain[] = []
 
 export const TacticalBoard = memo(function TacticalBoard({
   liveMotionSource,
+  replayMotionSource,
   isLiveSource = false,
   isPanelActive = true,
   match,
@@ -136,8 +142,11 @@ export const TacticalBoard = memo(function TacticalBoard({
   } as CSSProperties
   const { settings, resolvedScheme } = useTheme()
   const [mode, setMode] = useState<"events" | "liveMotion">("events")
-  const [liveStatus, setLiveStatus] = useState<LiveMotionStatus>("buffering")
-  const liveMode = mode === "liveMotion" && isLiveSource
+  const [liveStatus, setLiveStatus] = useState<
+    LiveMotionStatus | ReplayMotionStatus
+  >("buffering")
+  const motionAvailable = isLiveSource || replayMotionSource != null
+  const liveMode = mode === "liveMotion" && motionAvailable
   const [showNumbers, setShowNumbers] = useState(true)
   const [showAttackFocus, setShowAttackFocus] = useState(true)
   const [selectedShotId, setSelectedShotId] = useState<string | null>(null)
@@ -348,7 +357,7 @@ export const TacticalBoard = memo(function TacticalBoard({
         <button
           type="button"
           className="shrink-0 rounded border px-2 py-1 text-[10px] disabled:opacity-50"
-          disabled={!isLiveSource}
+          disabled={!motionAvailable}
           aria-pressed={liveMode}
           onClick={() => {
             clearPlayback()
@@ -574,6 +583,7 @@ export const TacticalBoard = memo(function TacticalBoard({
                 <PixiTactical
                   liveMode={liveMode}
                   liveMotionSource={liveMotionSource}
+                  replayMotionSource={replayMotionSource}
                   isPanelActive={isPanelActive}
                   onLiveStatus={setLiveStatus}
                   scene={scene}

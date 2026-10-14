@@ -1,4 +1,9 @@
 import type { LiveMotionSource, LiveMotionStatus } from "@/api/liveMotionSource"
+import type {
+  ReplayMotionSource,
+  ReplayMotionStatus,
+} from "@/api/replay/replayMotionSource"
+import { useArchiveTacticalMotion } from "@/components/tactical/archive/hooks/useArchiveTacticalMotion"
 import {
   useDocumentVisible,
   useLiveTacticalMotion,
@@ -25,7 +30,8 @@ type PixiTacticalProps = {
   liveMode?: boolean
   isPanelActive?: boolean
   liveMotionSource?: LiveMotionSource
-  onLiveStatus?: (status: LiveMotionStatus) => void
+  replayMotionSource?: ReplayMotionSource
+  onLiveStatus?: (status: LiveMotionStatus | ReplayMotionStatus) => void
   scene: TacticalScene
   players: ReadonlyMap<number, MatchPlayer>
   appearance: TacticalAppearance
@@ -42,6 +48,7 @@ export function PixiTactical({
   liveMode = false,
   isPanelActive = true,
   liveMotionSource,
+  replayMotionSource,
   onLiveStatus,
   scene,
   players,
@@ -60,6 +67,13 @@ export function PixiTactical({
   useLiveTacticalMotion(
     renderer,
     liveMotionSource,
+    liveMode && active && !playback && !replayMotionSource,
+    players,
+    onLiveStatus
+  )
+  useArchiveTacticalMotion(
+    renderer,
+    replayMotionSource,
     liveMode && active && !playback,
     players,
     onLiveStatus

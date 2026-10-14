@@ -1,4 +1,5 @@
 import { LiveMotionSource } from "@/api/liveMotionSource"
+import { ReplayMotionSource } from "@/api/replay/replayMotionSource"
 import {
   lazy,
   Suspense,
@@ -161,6 +162,7 @@ export function App() {
   const liveConnectionEnabled =
     !__ONLINE_DEMO_ENABLED__ || experimentalLiveEnabled
   const [liveMotionSource] = useState(() => new LiveMotionSource())
+  const [replayMotionSource] = useState(() => new ReplayMotionSource())
   const realtimeMatch = useRealtimeMatch(
     replayMatch === null && liveConnectionEnabled,
     backendUrl,
@@ -898,6 +900,9 @@ export function App() {
                           focusedPanel == null || focusedPanel === "tactical"
                         }
                         liveMotionSource={liveMotionSource}
+                        replayMotionSource={
+                          isReplayMode ? replayMotionSource : undefined
+                        }
                         isLiveSource={
                           replayMatch === null && liveConnectionEnabled
                         }
@@ -984,6 +989,7 @@ export function App() {
                   backendUrl={backendUrl}
                   onReplayFrame={showReplayFrame}
                   onReplayFramesChange={setTacticalReplayFrames}
+                  replayMotionSource={replayMotionSource}
                   onLive={returnToLive}
                 />
               </Card>

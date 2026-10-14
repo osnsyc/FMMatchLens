@@ -673,6 +673,7 @@ const resources = {
           status: {
             buffering: "正在缓冲",
             playing: "实时演绎中",
+            paused: "回放已暂停",
             waiting: "等待数据",
             disconnected: "连接已断开",
             ended: "比赛已结束",
@@ -1443,6 +1444,7 @@ const resources = {
           status: {
             buffering: "Buffering",
             playing: "Live motion",
+            paused: "Replay paused",
             waiting: "Waiting for data",
             disconnected: "Disconnected",
             ended: "Match ended",
