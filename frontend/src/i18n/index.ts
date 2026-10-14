@@ -667,6 +667,18 @@ const resources = {
         blocked: "被封堵",
       },
       dataMap: {
+        liveMotion: {
+          enable: "实时",
+          backToEvents: "事件",
+          status: {
+            buffering: "正在缓冲",
+            playing: "实时演绎中",
+            waiting: "等待数据",
+            disconnected: "连接已断开",
+            ended: "比赛已结束",
+            suspended: "已暂停显示"
+          }
+        },
         points: "{{count}} 个点",
         eventFilter: "事件筛选",
         selectPlayers: "请在两侧阵容中选择球员",
@@ -1425,6 +1437,18 @@ const resources = {
         blocked: "Blocked",
       },
       dataMap: {
+        liveMotion: {
+          enable: "Live",
+          backToEvents: "Events",
+          status: {
+            buffering: "Buffering",
+            playing: "Live motion",
+            waiting: "Waiting for data",
+            disconnected: "Disconnected",
+            ended: "Match ended",
+            suspended: "Display suspended"
+          }
+        },
         points: "{{count}} points",
         eventFilter: "Event filter",
         selectPlayers: "Select players from either squad",

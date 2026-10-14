@@ -5,7 +5,6 @@ import {
   projectPositionToTacticalBoard,
   validPitchHalf,
 } from "@/components/tactical/playback/core/frameProjector"
-import { smoothHeldPositions } from "@/components/tactical/playback/core/interpolation"
 import { lowerBoundFrameTick } from "@/components/tactical/playback/core/playbackRange"
 import type { DribblePlayback } from "@/components/tactical/playback/core/types"
 import type { MatchPlayer, TacticalEventPoint } from "@/types/match"
@@ -30,16 +29,15 @@ export function buildDribblePlayback(
     rotateForDisplay
   )
   if (playbackFrames.length < 2) return null
-  const smoothedFrames = smoothHeldPositions(playbackFrames)
   return {
     id: event.id,
     dribblerPlayerId: event.playerId,
     team: event.team,
     range: {
-      startTick: smoothedFrames[0].tick,
-      endTick: smoothedFrames.at(-1)!.tick,
+      startTick: playbackFrames[0].tick,
+      endTick: playbackFrames.at(-1)!.tick,
     },
-    frames: smoothedFrames,
+    frames: playbackFrames,
     trail: { target: "player", playerId: event.playerId },
     overlays: [],
   }

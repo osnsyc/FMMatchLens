@@ -21,9 +21,15 @@ vi.mock("pixi.js", () => {
     clear() {
       return this
     }
-    circle() { return this }
-    stroke() { return this }
-    poly() { return this }
+    circle() {
+      return this
+    }
+    stroke() {
+      return this
+    }
+    poly() {
+      return this
+    }
     fill({ color }: { color: number }) {
       markerFills.push(color)
       return this
@@ -58,10 +64,18 @@ vi.mock(
 )
 
 import type { Texture } from "pixi.js"
+import type { MotionRenderer } from "@/components/tactical/shared/renderer/MotionRenderer"
 import type { TacticalPlayback } from "@/components/tactical/playback/core/types"
-import { PlaybackRenderer, type PlaybackRendererAppearance } from "@/components/tactical/playback/renderer/PlaybackRenderer"
+import {
+  PlaybackRenderer,
+  type PlaybackRendererAppearance,
+} from "@/components/tactical/playback/renderer/PlaybackRenderer"
 
-function createRenderer(reduceMotion: boolean, appearance: Partial<PlaybackRendererAppearance> = {}) {
+function createRenderer(
+  reduceMotion: boolean,
+  appearance: Partial<PlaybackRendererAppearance> = {},
+  motion?: MotionRenderer
+) {
   vi.stubGlobal("window", { matchMedia: () => ({ matches: reduceMotion }) })
   vi.stubGlobal(
     "requestAnimationFrame",
@@ -84,7 +98,9 @@ function createRenderer(reduceMotion: boolean, appearance: Partial<PlaybackRende
       ...appearance,
     },
     undefined,
-    vi.fn()
+    vi.fn(),
+    undefined,
+    motion
   )
 }
 
@@ -103,12 +119,52 @@ afterEach(() => {
   markerFills.length = 0
 })
 
+describe("shared motion renderer ownership", () => {
+  it("leaves an injected renderer available after playback is destroyed", () => {
+    const motion = {
+      container: {},
+      clear: vi.fn(),
+      renderFrame: vi.fn(),
+      resize: vi.fn(),
+      updateAppearance: vi.fn(),
+      destroy: vi.fn(),
+    }
+    const renderer = createRenderer(
+      true,
+      {},
+      motion as unknown as MotionRenderer
+    )
+    renderer.updatePlayback(playback)
+    expect(motion.renderFrame).toHaveBeenCalledWith(playback.frames.at(-1))
+    motion.clear.mockClear()
+    renderer.resize(200, 200)
+    renderer.destroy()
+    expect(motion.resize).not.toHaveBeenCalled()
+    expect(motion.clear).not.toHaveBeenCalled()
+    expect(motion.destroy).not.toHaveBeenCalled()
+    motion.renderFrame({ tick: 20, players: [] })
+    expect(motion.renderFrame).toHaveBeenLastCalledWith({
+      tick: 20,
+      players: [],
+    })
+  })
+})
+
 describe("playback goalkeeper colors", () => {
   const players = [
     { playerId: 1, team: "home", isGoalkeeper: true },
     { playerId: 2, team: "away", isGoalkeeper: true },
     { playerId: 3, team: "home", isGoalkeeper: false },
-  ].map((player) => ({ ...player, x: 50, y: 50, velocityXPerTick: 0, velocityYPerTick: 0 } as const))
+  ].map(
+    (player) =>
+      ({
+        ...player,
+        x: 50,
+        y: 50,
+        velocityXPerTick: 0,
+        velocityYPerTick: 0,
+      }) as const
+  )
   const goalkeeperPlayback: TacticalPlayback = {
     ...playback,
     frames: [{ tick: 10, players }],
@@ -123,28 +179,48 @@ describe("playback goalkeeper colors", () => {
     })
     try {
       renderer.updatePlayback(goalkeeperPlayback)
-      expect(markerFills).toEqual([0x00bb00, 0x00bb00, 0xffff00, 0xffff00, 0x880000, 0x880000])
+      expect(markerFills).toEqual([
+        0x00bb00, 0x00bb00, 0xffff00, 0xffff00, 0x880000, 0x880000,
+      ])
       markerFills.length = 0
       renderer.updateAppearance({
-        home: 0x880000, away: 0x000088, foreground: 0, important: 0,
-        negative: 0, neutral: 0, success: 0,
-        homeGoalkeeperColor: 0xffbb00bb, awayGoalkeeperColor: 0xff000000,
+        home: 0x880000,
+        away: 0x000088,
+        foreground: 0,
+        important: 0,
+        negative: 0,
+        neutral: 0,
+        success: 0,
+        homeGoalkeeperColor: 0xffbb00bb,
+        awayGoalkeeperColor: 0xff000000,
       })
-      expect(markerFills).toEqual([0xbb00bb, 0xbb00bb, 0, 0, 0x880000, 0x880000])
+      expect(markerFills).toEqual([
+        0xbb00bb, 0xbb00bb, 0, 0, 0x880000, 0x880000,
+      ])
     } finally {
       renderer.destroy()
     }
   })
 
-  it.each([undefined, 0, Number.NaN])("falls back to team color for invalid GK color %s", (color) => {
-    const renderer = createRenderer(true, { home: 0x880000, away: 0x000088, homeGoalkeeperColor: color, awayGoalkeeperColor: color })
-    try {
-      renderer.updatePlayback(goalkeeperPlayback)
-      expect(markerFills).toEqual([0x880000, 0x880000, 0x000088, 0x000088, 0x880000, 0x880000])
-    } finally {
-      renderer.destroy()
+  it.each([undefined, 0, Number.NaN])(
+    "falls back to team color for invalid GK color %s",
+    (color) => {
+      const renderer = createRenderer(true, {
+        home: 0x880000,
+        away: 0x000088,
+        homeGoalkeeperColor: color,
+        awayGoalkeeperColor: color,
+      })
+      try {
+        renderer.updatePlayback(goalkeeperPlayback)
+        expect(markerFills).toEqual([
+          0x880000, 0x880000, 0x000088, 0x000088, 0x880000, 0x880000,
+        ])
+      } finally {
+        renderer.destroy()
+      }
     }
-  })
+  )
 })
 
 describe("playback redraw state", () => {

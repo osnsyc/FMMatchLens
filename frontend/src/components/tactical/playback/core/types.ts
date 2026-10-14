@@ -1,29 +1,10 @@
 import type { TeamSide } from "@/types/match"
 
-export type TacticalPlaybackPlayer = {
-  playerId: number
-  team: TeamSide
-  shirtNumber?: number
-  isGoalkeeper?: boolean
-  x: number
-  y: number
-  angleDegrees?: number
-  velocityXPerTick: number
-  velocityYPerTick: number
-}
-
-export type TacticalPlaybackBall = {
-  x: number
-  y: number
-  zCentimeters: number
-}
-
-export type TacticalPlaybackFrame = {
-  tick: number
-  players: readonly TacticalPlaybackPlayer[]
-  ball?: TacticalPlaybackBall
-}
-
+import type {
+  TacticalMotionPlayer,
+  TacticalMotionBall,
+  TacticalMotionFrame,
+} from "@/components/tactical/shared/core/types"
 export type PlaybackRange = {
   startTick: number
   endTick: number
@@ -120,7 +101,7 @@ export type TacticalPlayback = {
   id: string
   team: TeamSide
   range: PlaybackRange
-  frames: readonly TacticalPlaybackFrame[]
+  frames: readonly TacticalMotionFrame[]
   trail?: PlaybackTrail
   overlays: readonly PlaybackOverlay[]
 }
@@ -131,6 +112,6 @@ export type DribblePlayback = TacticalPlayback & {
 
 export type PlaybackRenderFrame = {
   tick: number
-  players: readonly TacticalPlaybackPlayer[]
-  ball?: TacticalPlaybackBall
+  players: readonly TacticalMotionPlayer[]
+  ball?: TacticalMotionBall
 }

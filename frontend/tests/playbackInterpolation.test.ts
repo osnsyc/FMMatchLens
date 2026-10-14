@@ -1,12 +1,8 @@
 import { describe, expect, it } from "vitest"
+import { interpolateMotionFrame } from "@/components/tactical/shared/core/interpolation"
+import type { TacticalMotionFrame } from "@/components/tactical/shared/core/types"
 
-import {
-  interpolatePlaybackFrame,
-  smoothHeldPositions,
-} from "@/components/tactical/playback/core/interpolation"
-import type { TacticalPlaybackFrame } from "@/components/tactical/playback/core/types"
-
-function frame(tick: number, x: number, y = 50): TacticalPlaybackFrame {
+function frame(tick: number, x: number, y = 50): TacticalMotionFrame {
   return {
     tick,
     players: [
@@ -26,21 +22,16 @@ function frame(tick: number, x: number, y = 50): TacticalPlaybackFrame {
 }
 
 function position(
-  frames: readonly TacticalPlaybackFrame[],
+  frames: readonly TacticalMotionFrame[],
   index: number,
   t: number
 ) {
-  return interpolatePlaybackFrame(frames[index], frames[index + 1], t)
-    .players[0]
+  return interpolateMotionFrame(frames[index], frames[index + 1], t).players[0]
 }
 
 describe("playback position interpolation", () => {
   it("keeps uniform movement uniform despite conflicting movement telemetry", () => {
-    const frames = smoothHeldPositions([
-      frame(0, 20),
-      frame(1, 22),
-      frame(2, 24),
-    ])
+    const frames = [frame(0, 20), frame(1, 22), frame(2, 24)]
     for (let index = 0; index < 2; index += 1) {
       for (const t of [0.1, 0.25, 0.5, 0.75, 0.9]) {
         const player = position(frames, index, t)
@@ -52,15 +43,15 @@ describe("playback position interpolation", () => {
   })
 
   it("matches ball positions throughout segments with different tick spans", () => {
-    const frames = smoothHeldPositions([
+    const frames = [
       frame(0, 20, 40),
       frame(1, 22, 41),
       frame(4, 34, 45),
       frame(6, 36, 46),
-    ])
+    ]
     for (let index = 0; index < frames.length - 1; index += 1) {
       for (const t of [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1]) {
-        const rendered = interpolatePlaybackFrame(
+        const rendered = interpolateMotionFrame(
           frames[index],
           frames[index + 1],
           t
@@ -71,31 +62,25 @@ describe("playback position interpolation", () => {
     }
   })
 
-  it("fills held samples linearly", () => {
-    const frames = smoothHeldPositions([
+  it("preserves held tick positions and interpolates only adjacent frames", () => {
+    const frames = [
       frame(0, 20),
       frame(1, 20),
       frame(2, 20),
       frame(3, 26),
       frame(4, 28),
-    ])
-    for (let index = 0; index < 4; index += 1) {
-      expect(position(frames, index, 0.25).x).toBeCloseTo(
-        20 + 2 * (index + 0.25)
-      )
-      expect(position(frames, index, 0.75).x).toBeCloseTo(
-        20 + 2 * (index + 0.75)
-      )
+    ]
+    expect(frames.map((f) => f.players[0].x)).toEqual([20, 20, 20, 26, 28])
+    for (const t of [0.25, 0.75]) {
+      expect(position(frames, 0, t).x).toBe(20)
+      expect(position(frames, 1, t).x).toBe(20)
+      expect(position(frames, 2, t).x).toBeCloseTo(20 + 6 * t)
+      expect(position(frames, 3, t).x).toBeCloseTo(26 + 2 * t)
     }
   })
 
   it("does not overshoot at reversals, stops, or pitch boundaries", () => {
-    const frames = smoothHeldPositions([
-      frame(0, 95),
-      frame(1, 100),
-      frame(2, 96),
-      frame(3, 96),
-    ])
+    const frames = [frame(0, 95), frame(1, 100), frame(2, 96), frame(3, 96)]
     for (let index = 0; index < 3; index += 1) {
       const min = Math.min(
         frames[index].players[0].x,
@@ -116,22 +101,25 @@ describe("playback position interpolation", () => {
   it("preserves linear ball interpolation and does not mutate input frames", () => {
     const input = [frame(0, 20), frame(1, 20), frame(2, 24)]
     const original = structuredClone(input)
-    const frames = smoothHeldPositions(input)
-    expect(input).toEqual(original)
+    const frames = input
     expect(
-      interpolatePlaybackFrame(frames[0], frames[1], 0.25).ball?.x
-    ).toBeCloseTo(20.5)
+      interpolateMotionFrame(frames[0], frames[1], 0.25).ball?.x
+    ).toBeCloseTo(20)
+    expect(
+      interpolateMotionFrame(frames[1], frames[2], 0.5).ball?.x
+    ).toBeCloseTo(22)
+    expect(input).toEqual(original)
   })
 
-  it("does not smooth player tracks across absent frames", () => {
+  it("holds missing player tracks without interpolating across absent frames", () => {
     const absent = { ...frame(2, 60), players: [] }
-    const frames = smoothHeldPositions([
+    const frames = [
       frame(0, 20),
       frame(1, 20),
       absent,
       frame(3, 80),
       frame(4, 82),
-    ])
+    ]
     expect(position(frames, 0, 0.5).x).toBe(20)
     expect(position(frames, 3, 0.5).x).toBeCloseTo(81)
   })
@@ -140,7 +128,7 @@ describe("playback position interpolation", () => {
     const current = frame(0, 20)
     const next = frame(1, 22)
     next.players[0].playerId = 8
-    expect(interpolatePlaybackFrame(current, next, 1)).toEqual(next)
-    expect(interpolatePlaybackFrame(next, next, 0.5).tick).toBe(next.tick)
+    expect(interpolateMotionFrame(current, next, 1)).toEqual(next)
+    expect(interpolateMotionFrame(next, next, 0.5).tick).toBe(next.tick)
   })
 })

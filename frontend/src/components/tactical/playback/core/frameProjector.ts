@@ -1,9 +1,13 @@
+import {
+  projectPositionToTacticalBoard,
+  validPitchHalf,
+} from "@/components/tactical/shared/core/frameProjector"
 import type { RealtimeFrame } from "@/api/realtimeMatch"
 import type {
-  TacticalPlaybackBall,
-  TacticalPlaybackFrame,
-  TacticalPlaybackPlayer,
-} from "@/components/tactical/playback/core/types"
+  TacticalMotionBall,
+  TacticalMotionFrame,
+  TacticalMotionPlayer,
+} from "@/components/tactical/shared/core/types"
 import type { MatchPlayer, TacticalEventPoint } from "@/types/match"
 
 const SECONDS_PER_TICK = 0.25
@@ -15,7 +19,7 @@ export function buildPlaybackFrames(
   players: ReadonlyMap<number, MatchPlayer>,
   rotateForDisplay: boolean
 ) {
-  const playbackFrames: TacticalPlaybackFrame[] = []
+  const playbackFrames: TacticalMotionFrame[] = []
   for (let frameIndex = start; frameIndex <= end; frameIndex += 1) {
     const frame = frames[frameIndex]
     const halfWidth = validPitchHalf(frame.halfPitchWidth)
@@ -27,7 +31,7 @@ export function buildPlaybackFrames(
       halfWidth,
       halfLength
     )
-    const playbackPlayers: TacticalPlaybackPlayer[] = []
+    const playbackPlayers: TacticalMotionPlayer[] = []
     for (const player of frame.players) {
       if (
         !player.isOnPitch ||
@@ -53,11 +57,14 @@ export function buildPlaybackFrames(
         playerId: player.playerId,
         team: player.team,
         shirtNumber: details?.shirtNumber ?? details?.squadNumber,
-        isGoalkeeper: (
-          details?.inPossession?.position ??
-          details?.outOfPossession?.position ??
-          details?.position
-        )?.trim().toUpperCase() === "GK",
+        isGoalkeeper:
+          (
+            details?.inPossession?.position ??
+            details?.outOfPossession?.position ??
+            details?.position
+          )
+            ?.trim()
+            .toUpperCase() === "GK",
         x: position.x,
         y: position.y,
         angleDegrees: hasAngle
@@ -97,7 +104,7 @@ export function projectBallToTacticalBoard(
   rotate: boolean,
   halfWidth: number,
   halfLength: number
-): TacticalPlaybackBall | undefined {
+): TacticalMotionBall | undefined {
   if (
     !Number.isFinite(frame.ballXCentimeters) ||
     !Number.isFinite(frame.ballYCentimeters) ||
@@ -121,30 +128,10 @@ export function needsDisplayRotation(event: TacticalEventPoint) {
   return event.team === "home" ? !reverseDirection : reverseDirection
 }
 
-export function projectPositionToTacticalBoard(
-  rawLateralX: number,
-  rawLongitudinalY: number,
-  rotate: boolean,
-  halfWidth: number,
-  halfLength: number
-) {
-  const direction = rotate ? -1 : 1
-  return {
-    x: normalize(direction * rawLongitudinalY, -halfLength, halfLength),
-    y: normalize(direction * rawLateralX, -halfWidth, halfWidth),
-  }
-}
-
-export function validPitchHalf(value: number) {
-  return Number.isFinite(value) && value > 0 && value < 1_000
-    ? value
-    : undefined
-}
-
-function normalize(value: number, min: number, max: number) {
-  return Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100))
-}
-
+export {
+  projectPositionToTacticalBoard,
+  validPitchHalf,
+} from "@/components/tactical/shared/core/frameProjector"
 function normalizeAngle(value: number) {
   return ((value % 360) + 360) % 360
 }

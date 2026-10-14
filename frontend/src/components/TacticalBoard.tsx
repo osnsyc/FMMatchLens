@@ -1,3 +1,4 @@
+import type { LiveMotionSource, LiveMotionStatus } from "@/api/liveMotionSource"
 import {
   memo,
   useCallback,
@@ -86,6 +87,9 @@ import { useTacticalPlayback } from "@/components/tactical/playback/hooks/useTac
 import type { PlaybackText } from "@/components/tactical/playback/core/types"
 
 type TacticalBoardProps = {
+  liveMotionSource?: LiveMotionSource
+  isLiveSource?: boolean
+  isPanelActive?: boolean
   match: MatchSnapshot
   loadTickFrames: (
     fromTick: number,
@@ -114,6 +118,9 @@ type HoveredTacticalPoint = {
 const emptyShotChains: readonly ShotChain[] = []
 
 export const TacticalBoard = memo(function TacticalBoard({
+  liveMotionSource,
+  isLiveSource = false,
+  isPanelActive = true,
   match,
   loadTickFrames,
   isFocusMode,
@@ -128,6 +135,9 @@ export const TacticalBoard = memo(function TacticalBoard({
     "--pitch-frame-gap": `${TACTICAL_EVENT_OVERSCAN_PX}px`,
   } as CSSProperties
   const { settings, resolvedScheme } = useTheme()
+  const [mode, setMode] = useState<"events" | "liveMotion">("events")
+  const [liveStatus, setLiveStatus] = useState<LiveMotionStatus>("buffering")
+  const liveMode = mode === "liveMotion" && isLiveSource
   const [showNumbers, setShowNumbers] = useState(true)
   const [showAttackFocus, setShowAttackFocus] = useState(true)
   const [selectedShotId, setSelectedShotId] = useState<string | null>(null)
@@ -164,6 +174,10 @@ export const TacticalBoard = memo(function TacticalBoard({
       )
   }, [clearPlayback])
 
+  useEffect(() => {
+    if (!isPanelActive || liveMode) clearPlayback()
+  }, [isPanelActive, liveMode, clearPlayback])
+
   const groupLabel = (group: (typeof groups)[number]) =>
     t(`dataMap.groups.${group.id}`, { defaultValue: group.label })
   const metricLabel = (metric: DataMetric) =>
@@ -191,6 +205,7 @@ export const TacticalBoard = memo(function TacticalBoard({
     [selectedMetricList]
   )
   const filteredTacticalEvents = useMemo(() => {
+    if (liveMode || !isPanelActive) return []
     if (eventFilterMode === "all") return match.tacticalEvents
     if (eventFilterMode === "individual") {
       return match.tacticalEvents.filter((event) =>
@@ -200,10 +215,20 @@ export const TacticalBoard = memo(function TacticalBoard({
     return match.tacticalEvents.filter(
       (event) => event.team === eventFilterMode
     )
-  }, [eventFilterMode, match.tacticalEvents, selectedPlayerIds])
+  }, [
+    eventFilterMode,
+    match.tacticalEvents,
+    selectedPlayerIds,
+    liveMode,
+    isPanelActive,
+  ])
   const scene = useMemo(
-    () => buildTacticalScene(filteredTacticalEvents, selectedMetrics),
-    [filteredTacticalEvents, selectedMetrics]
+    () =>
+      buildTacticalScene(
+        liveMode || !isPanelActive ? [] : filteredTacticalEvents,
+        selectedMetrics
+      ),
+    [filteredTacticalEvents, selectedMetrics, liveMode, isPanelActive]
   )
   const playerById = useMemo(
     () => new Map(match.players.map((player) => [player.id, player])),
@@ -320,7 +345,33 @@ export const TacticalBoard = memo(function TacticalBoard({
           {t("panels.dataMap")}
         </CardTitle>
 
-        {isFocusMode && (
+        <button
+          type="button"
+          className="shrink-0 rounded border px-2 py-1 text-[10px] disabled:opacity-50"
+          disabled={!isLiveSource}
+          aria-pressed={liveMode}
+          onClick={() => {
+            clearPlayback()
+            setSelectedShotId(null)
+            setHovered(null)
+            setMode(liveMode ? "events" : "liveMotion")
+          }}
+        >
+          {t(
+            liveMode
+              ? "dataMap.liveMotion.backToEvents"
+              : "dataMap.liveMotion.enable"
+          )}
+        </button>
+        {liveMode && (
+          <span
+            role="status"
+            className="shrink-0 text-[10px] text-muted-foreground"
+          >
+            {t(`dataMap.liveMotion.status.${liveStatus}`)}
+          </span>
+        )}
+        {isFocusMode && !liveMode && (
           <MultiStateButton
             data-tour="tactical-event-filter"
             data-tour-state={eventFilterMode}
@@ -346,153 +397,159 @@ export const TacticalBoard = memo(function TacticalBoard({
           />
         )}
 
-        <Menubar className="ml-auto h-6 min-w-0 flex-1">
-          {groups.map((group) => {
-            const groupMetrics = metrics.filter(
-              (metric) => metric.group === group.id
-            )
-            const enabledCount = groupMetrics.filter(
-              (metric) => selectedMetrics[metric.id]
-            ).length
-            return (
-              <MenubarMenu key={group.id}>
-                <MenubarTrigger className="h-5 min-w-0 flex-1 justify-center gap-1 px-1.5 text-[10px]">
-                  <MarkerGlyph
-                    shape={group.shape}
-                    variant="solid"
-                    color="var(--primary)"
-                    size={15}
-                  />
-                  <span className="truncate">{groupLabel(group)}</span>
-                  <span className="text-[9px] text-muted-foreground tabular-nums">
-                    {enabledCount}/{groupMetrics.length}
-                  </span>
-                </MenubarTrigger>
-                <MenubarContent className="z-[100] min-w-52">
-                  <MenubarGroup>
-                    <MenubarLabel>{groupLabel(group)}</MenubarLabel>
-                    <MenubarSeparator />
-                    <MenubarItem
-                      onClick={() =>
-                        setGroupSelected(
-                          groupMetrics,
-                          enabledCount !== groupMetrics.length
-                        )
-                      }
-                    >
-                      {enabledCount === groupMetrics.length
-                        ? t("dataMap.clearAll")
-                        : t("dataMap.selectAll")}
-                    </MenubarItem>
-                    <MenubarItem onClick={() => invertGroup(groupMetrics)}>
-                      {t("dataMap.invertGroup")}
-                    </MenubarItem>
-                    <MenubarSeparator />
-                    {groupMetrics.map((metric) => (
-                      <MenubarCheckboxItem
-                        key={metric.id}
-                        checked={selectedMetrics[metric.id]}
-                        onCheckedChange={() => toggleMetric(metric)}
+        {!liveMode && (
+          <Menubar className="ml-auto h-6 min-w-0 flex-1">
+            {groups.map((group) => {
+              const groupMetrics = metrics.filter(
+                (metric) => metric.group === group.id
+              )
+              const enabledCount = groupMetrics.filter(
+                (metric) => selectedMetrics[metric.id]
+              ).length
+              return (
+                <MenubarMenu key={group.id}>
+                  <MenubarTrigger className="h-5 min-w-0 flex-1 justify-center gap-1 px-1.5 text-[10px]">
+                    <MarkerGlyph
+                      shape={group.shape}
+                      variant="solid"
+                      color="var(--primary)"
+                      size={15}
+                    />
+                    <span className="truncate">{groupLabel(group)}</span>
+                    <span className="text-[9px] text-muted-foreground tabular-nums">
+                      {enabledCount}/{groupMetrics.length}
+                    </span>
+                  </MenubarTrigger>
+                  <MenubarContent className="z-[100] min-w-52">
+                    <MenubarGroup>
+                      <MenubarLabel>{groupLabel(group)}</MenubarLabel>
+                      <MenubarSeparator />
+                      <MenubarItem
+                        onClick={() =>
+                          setGroupSelected(
+                            groupMetrics,
+                            enabledCount !== groupMetrics.length
+                          )
+                        }
                       >
-                        <MarkerGlyph
-                          shape={metric.shape}
-                          variant={metric.variant}
-                          decoration={metric.decoration}
-                          color="var(--primary)"
-                          size={16}
-                        />
-                        <span>{metricLabel(metric)}</span>
-                      </MenubarCheckboxItem>
-                    ))}
-                  </MenubarGroup>
-                </MenubarContent>
-              </MenubarMenu>
-            )
-          })}
-        </Menubar>
+                        {enabledCount === groupMetrics.length
+                          ? t("dataMap.clearAll")
+                          : t("dataMap.selectAll")}
+                      </MenubarItem>
+                      <MenubarItem onClick={() => invertGroup(groupMetrics)}>
+                        {t("dataMap.invertGroup")}
+                      </MenubarItem>
+                      <MenubarSeparator />
+                      {groupMetrics.map((metric) => (
+                        <MenubarCheckboxItem
+                          key={metric.id}
+                          checked={selectedMetrics[metric.id]}
+                          onCheckedChange={() => toggleMetric(metric)}
+                        >
+                          <MarkerGlyph
+                            shape={metric.shape}
+                            variant={metric.variant}
+                            decoration={metric.decoration}
+                            color="var(--primary)"
+                            size={16}
+                          />
+                          <span>{metricLabel(metric)}</span>
+                        </MenubarCheckboxItem>
+                      ))}
+                    </MenubarGroup>
+                  </MenubarContent>
+                </MenubarMenu>
+              )
+            })}
+          </Menubar>
+        )}
 
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                variant="outline"
-                size="sm"
-                className="shrink-0 px-1.5 text-[10px]"
-              />
-            }
-          >
-            {t("dataMap.displaySettings")}
-            <span className="ml-1 text-[9px] text-primary tabular-nums">
-              {Number(showNumbers) + Number(showAttackFocus)}
-            </span>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="z-[100] min-w-36">
-            <DropdownMenuCheckboxItem
-              checked={showNumbers}
-              onCheckedChange={(checked) => setShowNumbers(checked === true)}
-            >
-              {t("dataMap.showNumbers")}
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem
-              checked={showAttackFocus}
-              onCheckedChange={(checked) =>
-                setShowAttackFocus(checked === true)
+        {!liveMode && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 px-1.5 text-[10px]"
+                />
               }
             >
-              {t("dataMap.attackFocus")}
-            </DropdownMenuCheckboxItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              {t("dataMap.displaySettings")}
+              <span className="ml-1 text-[9px] text-primary tabular-nums">
+                {Number(showNumbers) + Number(showAttackFocus)}
+              </span>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="z-[100] min-w-36">
+              <DropdownMenuCheckboxItem
+                checked={showNumbers}
+                onCheckedChange={(checked) => setShowNumbers(checked === true)}
+              >
+                {t("dataMap.showNumbers")}
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={showAttackFocus}
+                onCheckedChange={(checked) =>
+                  setShowAttackFocus(checked === true)
+                }
+              >
+                {t("dataMap.attackFocus")}
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </CardHeader>
 
       <CardContent className="flex min-h-0 flex-1 flex-col p-0">
         <div className="flex min-h-0 min-w-0 flex-1 items-stretch gap-2 overflow-hidden p-3">
-          <aside className="w-28 shrink-0 overflow-y-auto py-1">
-            {selectedMetricGroups.length > 0 ? (
-              <ul className="space-y-2.5">
-                {selectedMetricGroups.map(
-                  ({ group, metrics: groupMetrics }) => (
-                    <li key={`legend-group-${group.id}`}>
-                      <div className="flex items-center gap-1.5 text-[10px] font-semibold text-foreground/90">
-                        <MarkerGlyph
-                          shape={group.shape}
-                          variant="solid"
-                          color="var(--primary)"
-                          size={15}
-                        />
-                        <span className="min-w-0 truncate leading-4">
-                          {groupLabel(group)}
-                        </span>
-                      </div>
-                      <ul className="mt-1 ml-[7px] space-y-1 border-l border-border/70 pl-2">
-                        {groupMetrics.map((metric) => (
-                          <li
-                            key={`legend-${metric.id}`}
-                            className="flex items-center gap-1.5 text-[9px] text-muted-foreground"
-                          >
-                            <MarkerGlyph
-                              shape={metric.shape}
-                              variant={metric.variant}
-                              decoration={metric.decoration}
-                              color="var(--primary)"
-                              size={13}
-                            />
-                            <span className="min-w-0 leading-tight">
-                              {metricLabel(metric)}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </li>
-                  )
-                )}
-              </ul>
-            ) : (
-              <span className="text-[9px] text-muted-foreground">
-                {t("dataMap.noSelection")}
-              </span>
-            )}
-          </aside>
+          {!liveMode && (
+            <aside className="w-28 shrink-0 overflow-y-auto py-1">
+              {selectedMetricGroups.length > 0 ? (
+                <ul className="space-y-2.5">
+                  {selectedMetricGroups.map(
+                    ({ group, metrics: groupMetrics }) => (
+                      <li key={`legend-group-${group.id}`}>
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold text-foreground/90">
+                          <MarkerGlyph
+                            shape={group.shape}
+                            variant="solid"
+                            color="var(--primary)"
+                            size={15}
+                          />
+                          <span className="min-w-0 truncate leading-4">
+                            {groupLabel(group)}
+                          </span>
+                        </div>
+                        <ul className="mt-1 ml-[7px] space-y-1 border-l border-border/70 pl-2">
+                          {groupMetrics.map((metric) => (
+                            <li
+                              key={`legend-${metric.id}`}
+                              className="flex items-center gap-1.5 text-[9px] text-muted-foreground"
+                            >
+                              <MarkerGlyph
+                                shape={metric.shape}
+                                variant={metric.variant}
+                                decoration={metric.decoration}
+                                color="var(--primary)"
+                                size={13}
+                              />
+                              <span className="min-w-0 leading-tight">
+                                {metricLabel(metric)}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </li>
+                    )
+                  )}
+                </ul>
+              ) : (
+                <span className="text-[9px] text-muted-foreground">
+                  {t("dataMap.noSelection")}
+                </span>
+              )}
+            </aside>
+          )}
 
           <div
             data-tour="tactical-pitch"
@@ -508,12 +565,17 @@ export const TacticalBoard = memo(function TacticalBoard({
                 <PitchGoals dimensions={pitchDimensions} />
 
                 {showAttackFocus &&
+                  !liveMode &&
                   activeSelectedShotId == null &&
                   !tacticalPlayback && (
                     <AttackFocus laneShares={momentumLaneShares} />
                   )}
 
                 <PixiTactical
+                  liveMode={liveMode}
+                  liveMotionSource={liveMotionSource}
+                  isPanelActive={isPanelActive}
+                  onLiveStatus={setLiveStatus}
                   scene={scene}
                   players={playerById}
                   appearance={appearance}
@@ -568,19 +630,20 @@ export const TacticalBoard = memo(function TacticalBoard({
                   }}
                 />
 
-                {(selectedMetricList.length === 0 ||
-                  scene.points.length === 0) && (
-                  <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center">
-                    <div className="rounded-md border bg-background/90 px-3 py-2 text-xs text-muted-foreground shadow-sm backdrop-blur-sm">
-                      {selectedMetricList.length === 0
-                        ? t("dataMap.noMetrics")
-                        : eventFilterMode === "individual" &&
-                            selectedPlayerIds.size === 0
-                          ? t("dataMap.selectPlayers")
-                          : t("dataMap.noData")}
+                {!liveMode &&
+                  (selectedMetricList.length === 0 ||
+                    scene.points.length === 0) && (
+                    <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center">
+                      <div className="rounded-md border bg-background/90 px-3 py-2 text-xs text-muted-foreground shadow-sm backdrop-blur-sm">
+                        {selectedMetricList.length === 0
+                          ? t("dataMap.noMetrics")
+                          : eventFilterMode === "individual" &&
+                              selectedPlayerIds.size === 0
+                            ? t("dataMap.selectPlayers")
+                            : t("dataMap.noData")}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
               </div>
             </div>
           </div>

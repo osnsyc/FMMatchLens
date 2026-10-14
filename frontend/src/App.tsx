@@ -1,3 +1,4 @@
+import { LiveMotionSource } from "@/api/liveMotionSource"
 import {
   lazy,
   Suspense,
@@ -159,9 +160,11 @@ export function App() {
   const [backendUrlError, setBackendUrlError] = useState("")
   const liveConnectionEnabled =
     !__ONLINE_DEMO_ENABLED__ || experimentalLiveEnabled
+  const [liveMotionSource] = useState(() => new LiveMotionSource())
   const realtimeMatch = useRealtimeMatch(
     replayMatch === null && liveConnectionEnabled,
-    backendUrl
+    backendUrl,
+    liveMotionSource
   )
   const [startupArchive, setStartupArchive] = useState<ReplayArchive>()
   const [tacticalReplayFrames, setTacticalReplayFrames] = useState<
@@ -891,6 +894,13 @@ export function App() {
                         match={match}
                         loadTickFrames={loadTacticalFrames}
                         isFocusMode={isTacticalFocusMode}
+                        isPanelActive={
+                          focusedPanel == null || focusedPanel === "tactical"
+                        }
+                        liveMotionSource={liveMotionSource}
+                        isLiveSource={
+                          replayMatch === null && liveConnectionEnabled
+                        }
                         eventFilterMode={tacticalEventFilterMode}
                         selectedPlayerIds={tacticalPlayerIds}
                         onEventFilterModeChange={setTacticalEventFilterMode}
@@ -990,10 +1000,7 @@ function colorSourceFromCss(color?: string) {
   return { backgroundColour: Number.parseInt(color.slice(1), 16) }
 }
 
-function lowerBoundFrameTick(
-  frames: readonly RealtimeFrame[],
-  tick: number
-) {
+function lowerBoundFrameTick(frames: readonly RealtimeFrame[], tick: number) {
   let low = 0
   let high = frames.length
   while (low < high) {

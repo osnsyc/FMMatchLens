@@ -1,3 +1,6 @@
+import { TacticalRenderScheduler } from "@/components/tactical/shared/runtime/tacticalRenderScheduler"
+import type { TacticalMotionFrame } from "@/components/tactical/shared/core/types"
+import { MotionRenderer } from "@/components/tactical/shared/renderer/MotionRenderer"
 import {
   Assets,
   autoDetectRenderer,
@@ -91,6 +94,7 @@ export class PixiTacticalRenderer {
   private readonly chainMarkerLayer = new Container()
   private readonly selectionRing = new Graphics()
   private readonly playbackRenderer: PlaybackRenderer
+  private readonly motionRenderer: MotionRenderer
   private readonly markerByEventId = new Map<string, MarkerRecord>()
   private readonly trajectoryByEventId = new Map<string, Graphics>()
   private readonly chainMarkerByEventId = new Map<string, MarkerRecord>()
@@ -109,7 +113,12 @@ export class PixiTacticalRenderer {
   private shotChains: readonly ShotChain[] = []
   private hoveredEventId: string | null = null
   private chainSignature = ""
-  private animationFrame: number | null = null
+  readonly scheduler = new TacticalRenderScheduler(() =>
+    this.renderer.render({ container: this.stage })
+  )
+  private liveMode = false
+  private panelActive = true
+  private disposed = false
   private readonly reduceMotion = window.matchMedia(
     "(prefers-reduced-motion: reduce)"
   ).matches
@@ -155,19 +164,30 @@ export class PixiTacticalRenderer {
     this.selectionLayer.interactiveChildren = false
     this.chainMarkerLayer.sortableChildren = true
     this.selectionLayer.addChild(this.selectionRing, this.chainMarkerLayer)
+    this.motionRenderer = new MotionRenderer(
+      width,
+      height,
+      ballTexture,
+      this.playbackAppearance()
+    )
+    this.motionRenderer.container.visible = false
     this.playbackRenderer = new PlaybackRenderer(
       width,
       height,
       ballTexture,
       this.playbackAppearance(),
       playbackTextResolver,
-      () => this.renderOnce()
+      () => this.renderOnce(),
+      this.scheduler,
+      this.motionRenderer
     )
     this.stage.addChild(
       this.trajectoryLayer,
       this.shotChainLayer,
       this.markerLayer,
       this.selectionLayer,
+      this.playbackRenderer.trailLayer,
+      this.motionRenderer.container,
       this.playbackRenderer.container
     )
   }
@@ -188,22 +208,28 @@ export class PixiTacticalRenderer {
       resolution: RENDER_RESOLUTION,
       autoDensity: true,
     })
-    const ballTexture = await Assets.load<Texture>("./goal.svg")
-    renderer.canvas.className = "pointer-events-none block size-full"
-    renderer.canvas.setAttribute("aria-hidden", "true")
-    host.appendChild(renderer.canvas)
-    return new PixiTacticalRenderer(
-      renderer,
-      host,
-      width,
-      height,
-      appearance,
-      ballTexture,
-      playbackTextResolver
-    )
+    try {
+      const ballTexture = await Assets.load<Texture>("./goal.svg")
+      renderer.canvas.className = "pointer-events-none block size-full"
+      renderer.canvas.setAttribute("aria-hidden", "true")
+      host.appendChild(renderer.canvas)
+      return new PixiTacticalRenderer(
+        renderer,
+        host,
+        width,
+        height,
+        appearance,
+        ballTexture,
+        playbackTextResolver
+      )
+    } catch (error) {
+      renderer.destroy({ removeView: true })
+      throw error
+    }
   }
 
   updateEvents(scene: TacticalScene) {
+    if (this.liveMode || !this.panelActive) return
     const nextVisibleIds = new Set<string>()
     for (const point of scene.points) {
       nextVisibleIds.add(point.id)
@@ -284,6 +310,7 @@ export class PixiTacticalRenderer {
     this.drawSelectionRing()
     this.drawShotChains(this.shotChains)
     this.playbackRenderer.updateAppearance(this.playbackAppearance())
+    this.motionRenderer.updateAppearance(this.playbackAppearance())
     this.renderOnce()
   }
 
@@ -305,10 +332,49 @@ export class PixiTacticalRenderer {
   updatePlayback(playback: TacticalPlayback | null) {
     const changed = this.playbackRenderer.updatePlayback(playback)
     if (!changed) return
-    this.setBaseLayersVisible(playback == null)
+    this.motionRenderer.container.visible = playback != null || this.liveMode
+    this.setBaseLayersVisible(playback == null && !this.liveMode)
     this.renderOnce()
   }
 
+  setLiveMode(enabled: boolean) {
+    if (this.liveMode === enabled) return
+    this.liveMode = enabled
+    this.motionRenderer.container.visible =
+      enabled || this.playbackRenderer.active
+    this.setBaseLayersVisible(!enabled && !this.playbackRenderer.active)
+    if (enabled) {
+      this.scheduler.removeTask("events")
+      for (const record of this.markerReveals.keys())
+        this.setMarkerReveal(record, 1)
+      this.markerReveals.clear()
+    } else {
+      this.scheduler.removeTask("live")
+      this.motionRenderer.clear()
+    }
+    this.renderOnce()
+  }
+  renderMotionFrame(frame: TacticalMotionFrame) {
+    this.motionRenderer.container.visible = true
+    this.motionRenderer.renderFrame(frame)
+    this.renderOnce()
+  }
+  clearMotion() {
+    this.scheduler.removeTask("live")
+    this.motionRenderer.clear()
+    this.renderOnce()
+  }
+  setPanelActive(active: boolean) {
+    this.panelActive = active
+    if (!active) {
+      this.scheduler.suspend()
+      this.playbackRenderer.updatePlayback(null)
+      this.clearMotion()
+    } else {
+      this.scheduleAnimationFrame()
+      this.renderOnce()
+    }
+  }
   updatePlaybackTextResolver(resolver: PlaybackTextResolver) {
     this.playbackRenderer.updateTextResolver(resolver)
   }
@@ -324,7 +390,8 @@ export class PixiTacticalRenderer {
   }
 
   hitTest(localX: number, localY: number): TacticalHit | null {
-    if (this.playbackRenderer.active) return null
+    if (this.playbackRenderer.active || this.liveMode || !this.panelActive)
+      return null
     if (this.width <= 0 || this.height <= 0) return null
     const fieldX = localX - TACTICAL_EVENT_OVERSCAN_PX
     const fieldY = localY - TACTICAL_EVENT_OVERSCAN_PX
@@ -394,12 +461,14 @@ export class PixiTacticalRenderer {
     this.drawSelectionRing()
     this.rebuildSpatialGrid()
     this.playbackRenderer.resize(width, height)
+    this.motionRenderer.resize(width, height)
     this.renderOnce()
   }
 
   destroy() {
-    if (this.animationFrame != null) cancelAnimationFrame(this.animationFrame)
-    this.animationFrame = null
+    if (this.disposed) return
+    this.disposed = true
+    this.scheduler.dispose()
     this.markerReveals.clear()
     for (const context of this.markerContextByKey.values()) context.destroy()
     this.markerContextByKey.clear()
@@ -409,7 +478,10 @@ export class PixiTacticalRenderer {
     this.spatialGrid.clear()
     this.shotChains = []
     this.stage.removeChild(this.playbackRenderer.container)
+    this.stage.removeChild(this.playbackRenderer.trailLayer)
     this.playbackRenderer.destroy()
+    this.stage.removeChild(this.motionRenderer.container)
+    this.motionRenderer.destroy()
     this.stage.destroy({ children: true })
     this.renderer.destroy({ removeView: true })
     this.colorProbe.remove()
@@ -673,12 +745,15 @@ export class PixiTacticalRenderer {
   }
 
   private scheduleAnimationFrame() {
-    if (this.animationFrame != null || this.markerReveals.size === 0) return
-    this.animationFrame = requestAnimationFrame(this.advanceMarkerReveals)
+    if (this.liveMode || !this.panelActive || this.markerReveals.size === 0)
+      return
+    this.scheduler.setTask("events", (now) => {
+      this.advanceMarkerReveals(now)
+      return this.markerReveals.size > 0
+    })
   }
 
   private readonly advanceMarkerReveals = (timestamp: number) => {
-    this.animationFrame = null
     for (const [record, reveal] of this.markerReveals) {
       const progress = Math.min(
         1,
@@ -867,7 +942,7 @@ export class PixiTacticalRenderer {
   }
 
   private renderOnce() {
-    this.renderer.render({ container: this.stage })
+    if (this.panelActive) this.scheduler.invalidate()
   }
 }
 

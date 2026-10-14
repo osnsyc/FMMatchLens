@@ -8,10 +8,10 @@ import {
   shotChainPlaybackTickRange,
 } from "@/components/tactical/playback/builders/shotChainPlayback"
 import {
-  interpolatePlaybackBall,
-  interpolatePlaybackPlayer,
-} from "@/components/tactical/playback/core/interpolation"
-import type { TacticalPlaybackPlayer } from "@/components/tactical/playback/core/types"
+  interpolateMotionBall,
+  interpolateMotionPlayer,
+} from "@/components/tactical/shared/core/interpolation"
+import type { TacticalMotionPlayer } from "@/components/tactical/shared/core/types"
 import type { ShotChain } from "@/components/tactical/tacticalScene"
 import type { MatchPlayer, TacticalEventPoint } from "@/types/match"
 
@@ -32,13 +32,34 @@ const event = {
 describe("buildDribblePlayback", () => {
   it("identifies goalkeepers by tactical assignment, with metadata position as fallback", () => {
     const players = new Map<number, MatchPlayer>([
-      [7, { id: 7, position: "ST", inPossession: { position: "GK" } } as MatchPlayer],
+      [
+        7,
+        {
+          id: 7,
+          position: "ST",
+          inPossession: { position: "GK" },
+        } as MatchPlayer,
+      ],
       [8, { id: 8, position: "GK" } as MatchPlayer],
     ])
-    const playback = buildDribblePlayback(event, [8, 9, 10, 11, 12].map((tick) => frame(tick)), players)
-    expect(playback?.frames[0].players.map((player) => player.isGoalkeeper)).toEqual([true, true])
-    players.set(7, { id: 7, position: "GK", inPossession: { position: "ST" } } as MatchPlayer)
-    const outfieldPlayback = buildDribblePlayback(event, [8, 9, 10, 11, 12].map((tick) => frame(tick)), players)
+    const playback = buildDribblePlayback(
+      event,
+      [8, 9, 10, 11, 12].map((tick) => frame(tick)),
+      players
+    )
+    expect(
+      playback?.frames[0].players.map((player) => player.isGoalkeeper)
+    ).toEqual([true, true])
+    players.set(7, {
+      id: 7,
+      position: "GK",
+      inPossession: { position: "ST" },
+    } as MatchPlayer)
+    const outfieldPlayback = buildDribblePlayback(
+      event,
+      [8, 9, 10, 11, 12].map((tick) => frame(tick)),
+      players
+    )
     expect(outfieldPlayback?.frames[0].players[0].isGoalkeeper).toBe(false)
   })
 
@@ -98,7 +119,7 @@ describe("buildDribblePlayback", () => {
     expect(playback?.frames[0].players[0].velocityYPerTick).toBeCloseTo(1)
   })
 
-  it("smooths held coordinates between real position updates", () => {
+  it("preserves raw held coordinates for adjacent-frame interpolation", () => {
     const heldFrames = [
       heldFrame(8, 10, 20),
       heldFrame(9, 10, 20),
@@ -121,13 +142,13 @@ describe("buildDribblePlayback", () => {
     expect(playback?.frames.map((item) => item.tick)).toEqual([8, 9, 10, 11])
     const xPositions = playback?.frames.map((item) => item.players[0].x)
     expect(xPositions?.[0]).toBeCloseTo(40)
-    expect(xPositions?.[1]).toBeLessThan(40)
-    expect(xPositions?.[2]).toBeLessThan(xPositions?.[1] ?? 100)
+    expect(xPositions?.[1]).toBeCloseTo(40)
+    expect(xPositions?.[2]).toBeCloseTo(40)
     expect(xPositions?.[3]).toBeCloseTo(30)
     const ballXPositions = playback?.frames.map((item) => item.ball?.x)
     expect(ballXPositions?.[0]).toBeCloseTo(40)
-    expect(ballXPositions?.[1]).toBeLessThan(40)
-    expect(ballXPositions?.[2]).toBeLessThan(ballXPositions?.[1] ?? 100)
+    expect(ballXPositions?.[1]).toBeCloseTo(40)
+    expect(ballXPositions?.[2]).toBeCloseTo(40)
     expect(ballXPositions?.[3]).toBeCloseTo(30)
   })
 
@@ -143,7 +164,7 @@ describe("buildDribblePlayback", () => {
       velocityXPerTick: 0,
     })
 
-    const midpoint = interpolatePlaybackPlayer(current, next, 0.5)
+    const midpoint = interpolateMotionPlayer(current, next, 0.5)
 
     expect(midpoint.x).toBeCloseTo(5)
     expect(midpoint.angleDegrees).toBeCloseTo(0)
@@ -161,7 +182,7 @@ describe("buildDribblePlayback", () => {
     expect(playback?.frames[0].players[0].angleDegrees).toBeUndefined()
     expect(playback?.frames[0].players[1].angleDegrees).toBe(0)
     expect(
-      interpolatePlaybackPlayer(
+      interpolateMotionPlayer(
         playbackPlayer({ angleDegrees: undefined }),
         playbackPlayer({ angleDegrees: 0 }),
         0.5
@@ -171,7 +192,7 @@ describe("buildDribblePlayback", () => {
 
   it("interpolates the football position and height between ticks", () => {
     expect(
-      interpolatePlaybackBall(
+      interpolateMotionBall(
         { x: 20, y: 30, zCentimeters: 0 },
         { x: 40, y: 50, zCentimeters: 100 },
         0.25
@@ -310,8 +331,8 @@ function heldFrame(tick: number, x: number, y: number): RealtimeFrame {
 }
 
 function playbackPlayer(
-  overrides: Partial<TacticalPlaybackPlayer>
-): TacticalPlaybackPlayer {
+  overrides: Partial<TacticalMotionPlayer>
+): TacticalMotionPlayer {
   return {
     playerId: 7,
     team: "home",

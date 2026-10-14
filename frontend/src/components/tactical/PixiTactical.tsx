@@ -1,4 +1,9 @@
-import { useEffect, useRef } from "react"
+import type { LiveMotionSource, LiveMotionStatus } from "@/api/liveMotionSource"
+import {
+  useDocumentVisible,
+  useLiveTacticalMotion,
+} from "@/components/tactical/live/hooks/useLiveTacticalMotion"
+import { useEffect, useRef, useState } from "react"
 
 import {
   PixiTacticalRenderer,
@@ -17,6 +22,10 @@ import type {
 } from "@/components/tactical/playback/core/types"
 
 type PixiTacticalProps = {
+  liveMode?: boolean
+  isPanelActive?: boolean
+  liveMotionSource?: LiveMotionSource
+  onLiveStatus?: (status: LiveMotionStatus) => void
   scene: TacticalScene
   players: ReadonlyMap<number, MatchPlayer>
   appearance: TacticalAppearance
@@ -30,6 +39,10 @@ type PixiTacticalProps = {
 }
 
 export function PixiTactical({
+  liveMode = false,
+  isPanelActive = true,
+  liveMotionSource,
+  onLiveStatus,
   scene,
   players,
   appearance,
@@ -41,9 +54,21 @@ export function PixiTactical({
   onPointClick,
   onEmptyClick,
 }: PixiTacticalProps) {
+  const visible = useDocumentVisible()
+  const active = isPanelActive && visible
+  const [renderer, setRenderer] = useState<PixiTacticalRenderer | null>(null)
+  useLiveTacticalMotion(
+    renderer,
+    liveMotionSource,
+    liveMode && active && !playback,
+    players,
+    onLiveStatus
+  )
   const hostRef = useRef<HTMLDivElement | null>(null)
   const rendererRef = useRef<PixiTacticalRenderer | null>(null)
   const latestRef = useRef({
+    liveMode,
+    active,
     scene,
     players,
     appearance,
@@ -58,6 +83,8 @@ export function PixiTactical({
 
   useEffect(() => {
     latestRef.current = {
+      liveMode,
+      active,
       scene,
       players,
       appearance,
@@ -70,6 +97,8 @@ export function PixiTactical({
       onEmptyClick,
     }
   }, [
+    liveMode,
+    active,
     appearance,
     playback,
     playbackTextResolver,
@@ -111,17 +140,22 @@ export function PixiTactical({
           return
         }
         rendererRef.current = renderer
+        renderer.setPanelActive(latestRef.current.active)
+        renderer.setLiveMode(latestRef.current.liveMode)
+        setRenderer(renderer)
         renderer.updatePlayers(latestRef.current.players)
         renderer.updateEvents(latestRef.current.scene)
         renderer.updateSelection(
           latestRef.current.selectedShotId,
           latestRef.current.shotChains
         )
-        renderer.updatePlayback(latestRef.current.playback)
+        if (latestRef.current.active)
+          renderer.updatePlayback(latestRef.current.playback)
       } catch (error) {
         renderer?.destroy()
         if (rendererRef.current === renderer) rendererRef.current = null
         if (!disposed) {
+          setRenderer(null)
           console.error(
             "Failed to initialize the Pixi tactical renderer",
             error
@@ -148,8 +182,8 @@ export function PixiTactical({
   }, [])
 
   useEffect(() => {
-    rendererRef.current?.updateEvents(scene)
-  }, [scene])
+    if (!liveMode && active) rendererRef.current?.updateEvents(scene)
+  }, [scene, liveMode, active])
 
   useEffect(() => {
     rendererRef.current?.updatePlayers(players)
@@ -164,12 +198,18 @@ export function PixiTactical({
   }, [selectedShotId, shotChains])
 
   useEffect(() => {
-    rendererRef.current?.updatePlayback(playback)
-  }, [playback])
+    if (active) rendererRef.current?.updatePlayback(playback)
+  }, [playback, active])
 
   useEffect(() => {
     rendererRef.current?.updatePlaybackTextResolver(playbackTextResolver)
   }, [playbackTextResolver])
+
+  useEffect(() => {
+    renderer?.setPanelActive(active)
+    renderer?.setLiveMode(liveMode)
+    if (!liveMode && active) renderer?.updateEvents(latestRef.current.scene)
+  }, [renderer, active, liveMode])
 
   const hitAtPointer = (
     event: React.PointerEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>

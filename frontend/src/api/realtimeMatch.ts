@@ -1,3 +1,4 @@
+import type { LiveMotionSource } from "@/api/liveMotionSource"
 import { startTransition, useEffect, useRef, useState } from "react"
 
 import { HeatmapDerivations } from "@/api/heatmap"
@@ -503,7 +504,8 @@ export class LegacyLiveDerivations {
 
 export function useRealtimeMatch(
   enabled = true,
-  backendUrl = defaultBackendUrl
+  backendUrl = defaultBackendUrl,
+  motionSource?: LiveMotionSource
 ): MatchSnapshot | null {
   const [match, setMatch] = useState<MatchSnapshot | null>(null)
   const metadata = useRef<RealtimeMatchMetadata | null>(null)
@@ -516,12 +518,17 @@ export function useRealtimeMatch(
   useEffect(() => {
     // Do not even create the localhost WebSocket or issue an API request until
     // the caller explicitly enables live connectivity.
+    motionSource?.reset()
     if (!enabled) return
 
     const apiBase = backendUrl
     const webSocketUrl = backendWebSocketUrl(backendUrl)
 
     let disposed = false
+    let connectionGeneration = 0
+    let controller = new AbortController()
+    const liveFetch: typeof fetch = (input, init) =>
+      fetch(input, { ...init, signal: controller.signal })
     let socket: WebSocket | null = null
     let reconnectTimer: number | undefined
     let latestFrame: RealtimeFrame | null = null
@@ -539,12 +546,21 @@ export function useRealtimeMatch(
     let formationSyncPending = false
 
     const fetchMetadata = async () => {
+      const generation = connectionGeneration
       try {
-        const response = await fetch(`${apiBase}/api/match/meta`, {
+        const response = await liveFetch(`${apiBase}/api/match/meta`, {
           cache: "no-store",
         })
         if (!response.ok) return false
         const next = (await response.json()) as RealtimeMatchMetadata | null
+        if (
+          disposed ||
+          generation !== connectionGeneration ||
+          (next?.matchId &&
+            latestFrame?.matchId &&
+            next.matchId !== latestFrame.matchId)
+        )
+          return false
         const changed =
           JSON.stringify(next) !== JSON.stringify(metadata.current)
         metadata.current = next
@@ -579,6 +595,8 @@ export function useRealtimeMatch(
 
     const resetFor = (matchId: string) => {
       if (historyMatchId === matchId) return
+      motionSource?.reset()
+      motionSource?.setStatus("buffering")
       historyMatchId = matchId
       historyLastTick = -1
       formationHistoryIndex = 0
@@ -632,15 +650,17 @@ export function useRealtimeMatch(
     }
 
     const fetchFormationHistory = async () => {
+      const generation = connectionGeneration
       let changed = false
       let keepLoading = true
       while (!disposed && enabledRef.current && keepLoading) {
-        const response = await fetch(
+        const response = await liveFetch(
           `${apiBase}/api/match/formation/history?fromIndex=${formationHistoryIndex}&limit=256`,
           { cache: "no-store" }
         )
         if (!response.ok) throw new Error("live formation history read failed")
         const slice = (await response.json()) as RealtimeFormationTimelineSlice
+        if (disposed || generation !== connectionGeneration) return false
         const accepted = acceptFormationSlice(slice)
         if (accepted.gap)
           throw new Error("live formation history has an index gap")
@@ -696,6 +716,7 @@ export function useRealtimeMatch(
         return
       }
 
+      const generation = connectionGeneration
       syncing = true
       syncPending = false
       try {
@@ -703,11 +724,12 @@ export function useRealtimeMatch(
         let changed = false
         while (!disposed && enabledRef.current && keepLoading) {
           const fromTick = historyLastTick + 1
-          const response = await fetch(
+          const response = await liveFetch(
             `${apiBase}/api/match/frames?fromTick=${fromTick}&stride=1&limit=${liveFramePageSize}`
           )
           if (!response.ok) throw new Error("live frame read failed")
           const slice = (await response.json()) as RealtimeFrameSlice
+          if (disposed || generation !== connectionGeneration) return
           // An old request may finish after the WebSocket has already switched
           // to a new match. Never let that response roll live state backwards.
           if (
@@ -717,6 +739,11 @@ export function useRealtimeMatch(
           )
             return
           if (slice.matchId) resetFor(slice.matchId)
+          if (
+            slice.status === "ended" &&
+            slice.matchId === latestFrame?.matchId
+          )
+            motionSource?.setStatus("ended")
           const additions = slice.frames.filter(
             (frame) => frame.tick > historyLastTick
           )
@@ -744,13 +771,22 @@ export function useRealtimeMatch(
     }
 
     const fetchCurrent = async () => {
+      const generation = connectionGeneration
       try {
-        const response = await fetch(`${apiBase}/api/match/current`)
+        const expected = latestFrame
+        const response = await liveFetch(`${apiBase}/api/match/current`)
         if (!response.ok) return
         const frame = (await response.json()) as RealtimeFrame | null
+        if (
+          disposed ||
+          generation !== connectionGeneration ||
+          latestFrame !== expected
+        )
+          return
         if (frame?.matchId) {
           resetFor(frame.matchId)
           latestFrame = frame
+          motionSource?.publish(frame, false)
           publish(frame, false)
         }
       } catch {
@@ -761,8 +797,14 @@ export function useRealtimeMatch(
     const connect = () => {
       if (disposed) return
 
+      connectionGeneration++
+      if (controller.signal.aborted) controller = new AbortController()
       socket = new WebSocket(webSocketUrl)
+      const connection = socket
       socket.onopen = () => {
+        if (disposed || socket !== connection) return
+        motionSource?.reset()
+        motionSource?.setStatus("buffering")
         if (enabledRef.current) {
           void fetchCurrent()
           void syncHistory()
@@ -770,13 +812,20 @@ export function useRealtimeMatch(
         }
       }
       socket.onmessage = (event: MessageEvent<string>) => {
+        if (disposed || socket !== connection) return
         try {
           const envelope = JSON.parse(event.data) as RealtimeEnvelope
           if (envelope.type === "realtime_tick") {
             const frame = envelope.payload as RealtimeFrame
             if (!frame?.matchId) return
+            if (
+              latestFrame?.matchId === frame.matchId &&
+              frame.tick < latestFrame.tick
+            )
+              return
             resetFor(frame.matchId)
             latestFrame = frame
+            motionSource?.publish(frame)
             // The 250ms WebSocket path only builds the current snapshot. No
             // historical scan, HTTP round-trip, or heatmap aggregation occurs.
             publish(frame, false)
@@ -798,6 +847,10 @@ export function useRealtimeMatch(
         }
       }
       socket.onclose = () => {
+        if (socket !== connection) return
+        connectionGeneration++
+        controller.abort()
+        motionSource?.setStatus("disconnected")
         if (!disposed) {
           reconnectTimer = window.setTimeout(connect, 2_000)
         }
@@ -812,11 +865,19 @@ export function useRealtimeMatch(
 
     return () => {
       disposed = true
+      controller.abort()
+      motionSource?.reset()
+      if (socket)
+        socket.onopen =
+          socket.onmessage =
+          socket.onclose =
+          socket.onerror =
+            null
       if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer)
       window.clearInterval(syncTimer)
       socket?.close()
     }
-  }, [backendUrl, enabled])
+  }, [backendUrl, enabled, motionSource])
 
   return enabled ? match : null
 }

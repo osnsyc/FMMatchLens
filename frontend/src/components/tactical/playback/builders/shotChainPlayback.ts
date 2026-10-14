@@ -3,7 +3,6 @@ import {
   buildPlaybackFrames,
   needsDisplayRotation,
 } from "@/components/tactical/playback/core/frameProjector"
-import { smoothHeldPositions } from "@/components/tactical/playback/core/interpolation"
 import {
   eventCompletionTick,
   frameIndexesForTickRange,
@@ -41,7 +40,7 @@ export function buildShotChainPlayback(
     id: chain.id,
     team: chain.team,
     range,
-    frames: smoothHeldPositions(playbackFrames),
+    frames: playbackFrames,
     trail: { target: "ball" },
     overlays: [],
   }
