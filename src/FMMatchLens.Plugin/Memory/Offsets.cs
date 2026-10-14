@@ -305,10 +305,11 @@ internal static class Offsets
         // Pointer to an inline FM UTF-8 string instance. The byte length is at
         // +0x0 and zero-terminated text begins at +0x4.
         public const int ShirtName = 0x38;
-        public const int PositionX = 0x80;
-        public const int PositionY = 0x84;
-        public const int PositionXAlt = 0x140;
-        public const int PositionYAlt = 0x144;
+        // Per-tick movement position; +0x80/+0x84 can hold a sparse path anchor.
+        public const int PositionX = 0x140;
+        public const int PositionY = 0x144;
+        public const int PositionXAlt = 0x80;
+        public const int PositionYAlt = 0x84;
         public const int PositionHistory = 0x170;
         public const int UnknownFloatArray = 0x180;
         public const int TimerStartTick = 0x200;
