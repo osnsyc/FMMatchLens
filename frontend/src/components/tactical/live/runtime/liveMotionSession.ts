@@ -2,10 +2,12 @@ import type { MotionSample, LiveMotionStatus } from "@/api/liveMotionSource"
 import { continuity } from "@/components/tactical/live/core/continuity"
 import {
   projectPositionToTacticalBoard,
+  projectPositionToPitchMeters,
   validPitchHalf,
 } from "@/components/tactical/shared/core/frameProjector"
 import { interpolateMotionFrame } from "@/components/tactical/shared/core/interpolation"
 import type { TacticalMotionFrame } from "@/components/tactical/shared/core/types"
+import { motionVelocity } from "@/components/tactical/shared/core/motionVelocity"
 import { LiveMotionBuffer } from "./liveMotionBuffer"
 import { LIVE_MOTION_DELAY_MS, sampleLiveClock } from "./liveMotionClock"
 import { continuousRate, LiveMotionRate } from "./liveMotionRate"
@@ -151,18 +153,49 @@ export class LiveMotionSession {
           )
         frame = {
           tick: s.tick,
+          pitchDimensions: {
+            length: s.halfPitchLength * 2,
+            width: s.halfPitchWidth * 2,
+          },
           players: s.players.map((p) => ({
             playerId: p.playerId,
             team: p.team,
             ...details.get(p.playerId),
             ...position(p.x, p.y),
+            positionMeters: projectPositionToPitchMeters(
+              p.x,
+              p.y,
+              false,
+              s.halfPitchWidth,
+              s.halfPitchLength
+            ),
             angleDegrees:
               p.angleDegrees == null ? undefined : (p.angleDegrees + 90) % 360,
+            velocity: motionVelocity(
+              p.speed,
+              p.angleDegrees,
+              s,
+              p,
+              this.buffer.samples[this.buffer.samples.indexOf(s) - 1],
+              this.buffer.samples[
+                this.buffer.samples.indexOf(s) - 1
+              ]?.players.find((other) => other.playerId === p.playerId)
+            ),
             velocityXPerTick: 0,
             velocityYPerTick: 0,
           })),
           ball: s.ball
-            ? { ...position(s.ball.x, s.ball.y), zCentimeters: s.ball.z }
+            ? {
+                ...position(s.ball.x, s.ball.y),
+                positionMeters: projectPositionToPitchMeters(
+                  s.ball.x,
+                  s.ball.y,
+                  false,
+                  s.halfPitchWidth,
+                  s.halfPitchLength
+                ),
+                zCentimeters: s.ball.z,
+              }
             : undefined,
         }
         this.projections.set(s, frame)

@@ -27,6 +27,7 @@ import type {
 } from "@/components/tactical/playback/core/types"
 
 type PixiTacticalProps = {
+  pitchControlEnabled?: boolean
   liveMode?: boolean
   isPanelActive?: boolean
   liveMotionSource?: LiveMotionSource
@@ -45,6 +46,7 @@ type PixiTacticalProps = {
 }
 
 export function PixiTactical({
+  pitchControlEnabled = false,
   liveMode = false,
   isPanelActive = true,
   liveMotionSource,
@@ -78,6 +80,9 @@ export function PixiTactical({
     players,
     onLiveStatus
   )
+  useEffect(() => {
+    renderer?.setPitchControlEnabled(pitchControlEnabled)
+  }, [renderer, pitchControlEnabled])
   const hostRef = useRef<HTMLDivElement | null>(null)
   const rendererRef = useRef<PixiTacticalRenderer | null>(null)
   const latestRef = useRef({

@@ -21,6 +21,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { MultiStateButton } from "@/components/ui/multi-state-button"
 import {
@@ -147,6 +148,7 @@ export const TacticalBoard = memo(function TacticalBoard({
   >("buffering")
   const motionAvailable = isLiveSource || replayMotionSource != null
   const liveMode = mode === "liveMotion" && motionAvailable
+  const [pitchControlEnabled, setPitchControlEnabled] = useState(false)
   const [showNumbers, setShowNumbers] = useState(true)
   const [showAttackFocus, setShowAttackFocus] = useState(true)
   const [selectedShotId, setSelectedShotId] = useState<string | null>(null)
@@ -354,9 +356,11 @@ export const TacticalBoard = memo(function TacticalBoard({
           {t("panels.dataMap")}
         </CardTitle>
 
-        <button
+        <Button
           type="button"
-          className="shrink-0 rounded border px-2 py-1 text-[10px] disabled:opacity-50"
+          variant="outline"
+          size="sm"
+          className="h-auto rounded px-2 py-1 text-[10px] active:translate-y-px"
           disabled={!motionAvailable}
           aria-pressed={liveMode}
           onClick={() => {
@@ -371,14 +375,28 @@ export const TacticalBoard = memo(function TacticalBoard({
               ? "dataMap.liveMotion.backToEvents"
               : "dataMap.liveMotion.enable"
           )}
-        </button>
+        </Button>
         {liveMode && (
-          <span
-            role="status"
-            className="shrink-0 text-[10px] text-muted-foreground"
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-pressed={pitchControlEnabled}
+            className={`h-auto rounded px-2 py-1 text-[10px] active:translate-y-px ${pitchControlEnabled ? "border-primary bg-primary/15 text-primary" : ""}`}
+            onClick={() => setPitchControlEnabled((current) => !current)}
           >
-            {t(`dataMap.liveMotion.status.${liveStatus}`)}
-          </span>
+            {t("dataMap.pitchControl.label")}
+          </Button>
+        )}
+        {liveMode && (
+          <div className="flex shrink-0 items-center gap-2">
+            <span role="status" className="text-[10px] text-muted-foreground">
+              {t(`dataMap.liveMotion.status.${liveStatus}`)}
+            </span>
+            <Badge variant="outline" className="px-1.5 py-0 text-[9px]">
+              {t("timeline.experimentalBadge")}
+            </Badge>
+          </div>
         )}
         {isFocusMode && !liveMode && (
           <MultiStateButton
@@ -582,6 +600,7 @@ export const TacticalBoard = memo(function TacticalBoard({
 
                 <PixiTactical
                   liveMode={liveMode}
+                  pitchControlEnabled={pitchControlEnabled}
                   liveMotionSource={liveMotionSource}
                   replayMotionSource={replayMotionSource}
                   isPanelActive={isPanelActive}

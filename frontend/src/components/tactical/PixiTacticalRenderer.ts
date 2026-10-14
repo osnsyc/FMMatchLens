@@ -1,5 +1,6 @@
 import { TacticalRenderScheduler } from "@/components/tactical/shared/runtime/tacticalRenderScheduler"
 import type { TacticalMotionFrame } from "@/components/tactical/shared/core/types"
+import { PitchControlRenderer } from "@/components/tactical/shared/renderer/PitchControlRenderer"
 import { MotionRenderer } from "@/components/tactical/shared/renderer/MotionRenderer"
 import {
   Assets,
@@ -94,6 +95,8 @@ export class PixiTacticalRenderer {
   private readonly chainMarkerLayer = new Container()
   private readonly selectionRing = new Graphics()
   private readonly playbackRenderer: PlaybackRenderer
+  private readonly pitchControlRenderer: PitchControlRenderer
+  private pitchControlEnabled = false
   private readonly motionRenderer: MotionRenderer
   private readonly markerByEventId = new Map<string, MarkerRecord>()
   private readonly trajectoryByEventId = new Map<string, Graphics>()
@@ -164,6 +167,12 @@ export class PixiTacticalRenderer {
     this.selectionLayer.interactiveChildren = false
     this.chainMarkerLayer.sortableChildren = true
     this.selectionLayer.addChild(this.selectionRing, this.chainMarkerLayer)
+    this.pitchControlRenderer = new PitchControlRenderer(
+      width,
+      height,
+      this.resolvedAppearance.homeColor,
+      this.resolvedAppearance.awayColor
+    )
     this.motionRenderer = new MotionRenderer(
       width,
       height,
@@ -182,6 +191,7 @@ export class PixiTacticalRenderer {
       this.motionRenderer
     )
     this.stage.addChild(
+      this.pitchControlRenderer.container,
       this.trajectoryLayer,
       this.shotChainLayer,
       this.markerLayer,
@@ -311,6 +321,10 @@ export class PixiTacticalRenderer {
     this.drawShotChains(this.shotChains)
     this.playbackRenderer.updateAppearance(this.playbackAppearance())
     this.motionRenderer.updateAppearance(this.playbackAppearance())
+    this.pitchControlRenderer.updateAppearance(
+      this.resolvedAppearance.homeColor,
+      this.resolvedAppearance.awayColor
+    )
     this.renderOnce()
   }
 
@@ -340,6 +354,7 @@ export class PixiTacticalRenderer {
   setLiveMode(enabled: boolean) {
     if (this.liveMode === enabled) return
     this.liveMode = enabled
+    this.pitchControlRenderer.setEnabled(enabled && this.pitchControlEnabled)
     this.motionRenderer.container.visible =
       enabled || this.playbackRenderer.active
     this.setBaseLayersVisible(!enabled && !this.playbackRenderer.active)
@@ -354,7 +369,13 @@ export class PixiTacticalRenderer {
     }
     this.renderOnce()
   }
+  setPitchControlEnabled(enabled: boolean) {
+    this.pitchControlEnabled = enabled
+    this.pitchControlRenderer.setEnabled(enabled && this.liveMode)
+    this.renderOnce()
+  }
   renderMotionFrame(frame: TacticalMotionFrame) {
+    this.pitchControlRenderer.renderFrame(frame)
     this.motionRenderer.container.visible = true
     this.motionRenderer.renderFrame(frame)
     this.renderOnce()
@@ -362,6 +383,11 @@ export class PixiTacticalRenderer {
   clearMotion() {
     this.scheduler.removeTask("live")
     this.motionRenderer.clear()
+    this.pitchControlRenderer.clear()
+    this.renderOnce()
+  }
+  clearPitchControl() {
+    this.pitchControlRenderer.clear()
     this.renderOnce()
   }
   setPanelActive(active: boolean) {
@@ -462,6 +488,7 @@ export class PixiTacticalRenderer {
     this.rebuildSpatialGrid()
     this.playbackRenderer.resize(width, height)
     this.motionRenderer.resize(width, height)
+    this.pitchControlRenderer.resize(width, height)
     this.renderOnce()
   }
 
@@ -482,6 +509,8 @@ export class PixiTacticalRenderer {
     this.playbackRenderer.destroy()
     this.stage.removeChild(this.motionRenderer.container)
     this.motionRenderer.destroy()
+    this.stage.removeChild(this.pitchControlRenderer.container)
+    this.pitchControlRenderer.destroy()
     this.stage.destroy({ children: true })
     this.renderer.destroy({ removeView: true })
     this.colorProbe.remove()

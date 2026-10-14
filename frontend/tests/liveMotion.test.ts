@@ -198,7 +198,12 @@ describe("live motion clock and bounded session", () => {
       shirtNumber: 7,
       angleDegrees: 359.5,
     })
-    expect(frame.ball).toEqual({ x: 75, y: 75, zCentimeters: 250 })
+    expect(frame.ball).toEqual({
+      x: 75,
+      y: 75,
+      positionMeters: { x: 78.75, y: 51 },
+      zCentimeters: 250,
+    })
   })
   it("does not keep missing entities or a missing ball beyond the next sample boundary", () => {
     const session = new LiveMotionSession()

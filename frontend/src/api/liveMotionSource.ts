@@ -21,7 +21,7 @@ export type MotionSample = {
     team: TeamSide
     x: number
     y: number
-    speed: number
+    speed?: number
     angleDegrees?: number
   }[]
 }
@@ -133,7 +133,7 @@ export class LiveMotionSource {
             Number.isFinite(p.speedCentimetersPerSecond) &&
             p.speedCentimetersPerSecond! >= 0
               ? p.speedCentimetersPerSecond! / 100
-              : 0,
+              : undefined,
           angleDegrees:
             Number.isFinite(p.angleDegrees) &&
             p.angleDegrees! >= 0 &&

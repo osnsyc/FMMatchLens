@@ -58,6 +58,12 @@ export function useLiveTacticalMotion(
       status: LiveMotionStatus | undefined
     const report = (next: LiveMotionStatus) => {
       if (status !== next) {
+        if (
+          next === "waiting" ||
+          next === "disconnected" ||
+          next === "buffering"
+        )
+          renderer.clearPitchControl()
         status = next
         notify.current?.(next)
       }

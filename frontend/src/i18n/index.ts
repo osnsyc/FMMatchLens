@@ -667,6 +667,9 @@ const resources = {
         blocked: "被封堵",
       },
       dataMap: {
+        pitchControl: {
+          label: "空间控制",
+        },
         liveMotion: {
           enable: "实时",
           backToEvents: "事件",
@@ -1438,6 +1441,9 @@ const resources = {
         blocked: "Blocked",
       },
       dataMap: {
+        pitchControl: {
+          label: "Pitch Control",
+        },
         liveMotion: {
           enable: "Live",
           backToEvents: "Events",

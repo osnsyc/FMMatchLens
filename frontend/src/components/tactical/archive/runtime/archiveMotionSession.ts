@@ -5,8 +5,10 @@ import type {
 } from "@/api/replay/replayMotionSource"
 import {
   projectPositionToTacticalBoard,
+  projectPositionToPitchMeters,
   validPitchHalf,
 } from "@/components/tactical/shared/core/frameProjector"
+import { motionVelocity } from "@/components/tactical/shared/core/motionVelocity"
 import { interpolateMotionFrame } from "@/components/tactical/shared/core/interpolation"
 import type { TacticalMotionFrame } from "@/components/tactical/shared/core/types"
 import type { MatchPlayer } from "@/types/match"
@@ -41,8 +43,16 @@ export class ArchiveMotionSession {
     }
     for (const key of this.projections.keys())
       if (key !== current && key !== next) this.projections.delete(key)
-    const from = this.project(current, details),
-      to = this.project(next, details)
+    const from = this.project(
+        current,
+        details,
+        snapshot.frames[index > 0 ? index - 1 : index + 1]
+      ),
+      to = this.project(
+        next,
+        details,
+        next === current ? snapshot.frames[index - 1] : current
+      )
     const continuous =
       current.matchId === next.matchId &&
       current.period === next.period &&
@@ -65,7 +75,8 @@ export class ArchiveMotionSession {
   }
   private project(
     raw: RealtimeFrame,
-    details: ReadonlyMap<number, MatchPlayer>
+    details: ReadonlyMap<number, MatchPlayer>,
+    neighbor?: RealtimeFrame
   ) {
     const cached = this.projections.get(raw)
     if (cached) return cached
@@ -76,6 +87,7 @@ export class ArchiveMotionSession {
       projectPositionToTacticalBoard(x, y, false, halfWidth, halfLength)
     const frame: TacticalMotionFrame = {
       tick: raw.tick,
+      pitchDimensions: { length: halfLength * 2, width: halfWidth * 2 },
       players: raw.players
         .filter(
           (p) => p.isOnPitch && Number.isFinite(p.x) && Number.isFinite(p.y)
@@ -96,9 +108,28 @@ export class ArchiveMotionSession {
                 ?.trim()
                 .toUpperCase() === "GK",
             ...project(p.x, p.y),
+            positionMeters: projectPositionToPitchMeters(
+              p.x,
+              p.y,
+              false,
+              halfWidth,
+              halfLength
+            ),
             angleDegrees: Number.isFinite(p.angleDegrees)
               ? (p.angleDegrees! + 90) % 360
               : undefined,
+            velocity: motionVelocity(
+              p.speedCentimetersPerSecond == null
+                ? undefined
+                : p.speedCentimetersPerSecond / 100,
+              p.angleDegrees,
+              raw,
+              p,
+              neighbor,
+              neighbor?.players.find(
+                (other) => other.playerId === p.playerId && other.isOnPitch
+              )
+            ),
             velocityXPerTick: 0,
             velocityYPerTick: 0,
           }
@@ -110,6 +141,13 @@ export class ArchiveMotionSession {
       ].every(Number.isFinite)
         ? {
             ...project(raw.ballXCentimeters / 100, raw.ballYCentimeters / 100),
+            positionMeters: projectPositionToPitchMeters(
+              raw.ballXCentimeters / 100,
+              raw.ballYCentimeters / 100,
+              false,
+              halfWidth,
+              halfLength
+            ),
             zCentimeters: raw.ballZCentimeters,
           }
         : undefined,

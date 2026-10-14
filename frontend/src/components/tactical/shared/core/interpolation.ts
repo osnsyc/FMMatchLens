@@ -13,6 +13,11 @@ export function interpolateMotionBall(
   return {
     x: lerp(current.x, next.x, t),
     y: lerp(current.y, next.y, t),
+    positionMeters: interpolatePositionMeters(
+      current.positionMeters,
+      next.positionMeters,
+      t
+    ),
     zCentimeters: lerp(current.zCentimeters, next.zCentimeters, t),
   }
 }
@@ -27,9 +32,21 @@ export function interpolateMotionPlayer(
     ...current,
     x: lerp(current.x, next.x, t),
     y: lerp(current.y, next.y, t),
+    positionMeters: interpolatePositionMeters(
+      current.positionMeters,
+      next.positionMeters,
+      t
+    ),
     angleDegrees: interpolateAngle(current.angleDegrees, next.angleDegrees, t),
     velocityXPerTick: lerp(current.velocityXPerTick, next.velocityXPerTick, t),
     velocityYPerTick: lerp(current.velocityYPerTick, next.velocityYPerTick, t),
+    velocity:
+      current.velocity && next.velocity
+        ? {
+            x: lerp(current.velocity.x, next.velocity.x, t),
+            y: lerp(current.velocity.y, next.velocity.y, t),
+          }
+        : undefined,
   }
 }
 
@@ -46,6 +63,7 @@ export function interpolateMotionFrame(
   const nextBall = next.ball ?? currentBall
   return {
     tick: current.tick + (next.tick - current.tick) * clamp(progress, 0, 1),
+    pitchDimensions: current.pitchDimensions,
     players: current.players.map((player) =>
       interpolateMotionPlayer(
         player,
@@ -58,6 +76,19 @@ export function interpolateMotionFrame(
         ? interpolateMotionBall(currentBall, nextBall, progress)
         : undefined,
   }
+}
+
+function interpolatePositionMeters(
+  current: { x: number; y: number } | undefined,
+  next: { x: number; y: number } | undefined,
+  progress: number
+) {
+  return current && next
+    ? {
+        x: lerp(current.x, next.x, progress),
+        y: lerp(current.y, next.y, progress),
+      }
+    : undefined
 }
 
 function interpolateAngle(

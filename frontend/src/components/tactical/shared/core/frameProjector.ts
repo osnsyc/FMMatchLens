@@ -1,3 +1,18 @@
+/** Physical coordinates must remain unclipped for distance-based analysis. */
+export function projectPositionToPitchMeters(
+  rawLateralX: number,
+  rawLongitudinalY: number,
+  rotate: boolean,
+  halfWidth: number,
+  halfLength: number
+) {
+  const direction = rotate ? -1 : 1
+  return {
+    x: direction * rawLongitudinalY + halfLength,
+    y: direction * rawLateralX + halfWidth,
+  }
+}
+
 export function projectPositionToTacticalBoard(
   rawLateralX: number,
   rawLongitudinalY: number,
