@@ -2,6 +2,7 @@ import { TacticalRenderScheduler } from "@/components/tactical/shared/runtime/ta
 import type { TacticalMotionFrame } from "@/components/tactical/shared/core/types"
 import { PitchControlRenderer } from "@/components/tactical/shared/renderer/PitchControlRenderer"
 import { MotionRenderer } from "@/components/tactical/shared/renderer/MotionRenderer"
+import ballSvg from "../../../public/goal.svg?raw"
 import {
   Assets,
   autoDetectRenderer,
@@ -79,6 +80,9 @@ const GRID_SIZE = 20
 const BASE_MARKER_SIZE = 20
 const HIT_DISTANCE_EPSILON = 0.001
 const RENDER_RESOLUTION = 2
+// Pixi's SVG loader fetches its source. Inline it so desktop file:// pages never
+// need a fetch against another local file (which browsers block).
+const BALL_TEXTURE_SOURCE = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(ballSvg)}`
 const TRAJECTORY_DASH_LENGTH_PX = 4
 const TRAJECTORY_DASH_GAP_PX = 5
 const MARKER_REVEAL_DURATION_MS = 250
@@ -219,7 +223,7 @@ export class PixiTacticalRenderer {
       autoDensity: true,
     })
     try {
-      const ballTexture = await Assets.load<Texture>("./goal.svg")
+      const ballTexture = await Assets.load<Texture>(BALL_TEXTURE_SOURCE)
       renderer.canvas.className = "pointer-events-none block size-full"
       renderer.canvas.setAttribute("aria-hidden", "true")
       host.appendChild(renderer.canvas)
