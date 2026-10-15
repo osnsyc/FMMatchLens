@@ -3,6 +3,32 @@
 
 This file records the project's important changes. Version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-10-15
+
+### Added
+
+- Added experimental Tactical Board live animation with interpolated player and ball movement, direction arrows, and connection and buffering status.
+- Added Tactical Board archive animation synchronized with the replay timeline, including playback speed changes, pause, and seeking.
+- Added an experimental Pitch Control overlay for live and archive animation, using velocity-aware Gaussian influence fields, smooth team-color shading, and equal-control contours.
+- Added animated dribble and shot-chain playback with player and ball tracking, tactical overlays, and Explore Tour guidance for shot-chain playback.
+- Added pre-match player status, morale, season statistics, and switching between match and season statistics in the player-data table.
+- Added authoritative match shirt names and numbers, team shirt and goalkeeper colors, and goal outlines on the pitch.
+- Added Epic game build detection and a fallback hook offset for unrecognized builds.
+
+### Changed
+
+- Extended `.fmlens` archive format to 2.7 with pre-match sharpness, season statistics, match shirt identity, team shirt colors, per-tick player speed and direction, and football XYZ coordinates; retained read compatibility with released formats 2.1–2.6.
+- Reduced archive frame size with signed centimeter player positions, integer-meter cumulative distance deltas, optional speed and cyclic angle deltas, and per-axis football change flags.
+- Separated tactical playback builders, shared motion projection, rendering, and overlay components, with a shared demand-driven animation scheduler and bounded frame caches.
+- Brightened the Opta-inspired dark theme and refined Momentum and xG timeline presentation.
+
+### Fixed
+
+- Corrected native ball-position offsets, per-tick player movement coordinates, and pre-match player-status offsets.
+- Corrected legacy archive decoding so running-distance fields do not misalign condition, sharpness, and goalkeeper statistics.
+- Preserved unclipped physical positions for Pitch Control calculations and corrected saddle contour topology when switching team labels.
+- Fixed Tactical Board initialization on local `file://` pages by embedding the football SVG texture instead of fetching a local file.
+
 ## [0.5.0] - 2026-09-30
 
 ### Added
@@ -157,7 +183,8 @@ This file records the project's important changes. Version numbers follow [Seman
 - Two plugin logging modes: release and debug.
 - Centralized project metadata, CI checks, and an automated tag-based release pipeline.
 
-[Unreleased]: https://github.com/osnsyc/FMMatchLens/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/osnsyc/FMMatchLens/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/osnsyc/FMMatchLens/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/osnsyc/FMMatchLens/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/osnsyc/FMMatchLens/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/osnsyc/FMMatchLens/compare/v0.2.2...v0.3.0
