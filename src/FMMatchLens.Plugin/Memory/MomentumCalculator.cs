@@ -77,6 +77,7 @@ internal sealed class MomentumCalculator : IDisposable
 
     private readonly ConcurrentQueue<Work> _jobs = new();
     private readonly AutoResetEvent _jobReady = new(false);
+    private readonly object _captureGate = new();
     private readonly object _outputGate = new();
     private readonly Queue<MomentumTickData> _nativeOutput = new();
     private readonly Queue<MomentumTickData> _rollingOutput = new();
@@ -99,6 +100,19 @@ internal sealed class MomentumCalculator : IDisposable
 
     /// <remarks>Runs on the native callback and never waits for calculation.</remarks>
     public void Capture(
+        nint match,
+        MomentumTickData[] nativeDestination,
+        out byte nativeCount,
+        MomentumTickData[] rollingDestination,
+        out byte rollingCount)
+    {
+        lock (_captureGate)
+        {
+            CaptureLocked(match, nativeDestination, out nativeCount, rollingDestination, out rollingCount);
+        }
+    }
+
+    private void CaptureLocked(
         nint match,
         MomentumTickData[] nativeDestination,
         out byte nativeCount,
@@ -174,9 +188,12 @@ internal sealed class MomentumCalculator : IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-        _jobReady.Set();
+        lock (_captureGate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _jobReady.Set();
+        }
         _worker.Join(TimeSpan.FromSeconds(1));
         _jobReady.Dispose();
     }
