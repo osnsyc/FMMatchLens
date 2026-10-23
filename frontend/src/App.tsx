@@ -179,6 +179,7 @@ export function App() {
     null
   )
   const [isChromeHidden, setIsChromeHidden] = useState(false)
+  const [ratingBreakdownDetailed, setRatingBreakdownDetailed] = useState(false)
   const isTacticalFocusMode = focusedPanel === "tactical"
   const [tacticalEventFilterMode, setTacticalEventFilterMode] =
     useState<TacticalEventFilterMode>("all")
@@ -374,6 +375,19 @@ export function App() {
     preset,
   ])
   const hasMatch = match !== null
+  const ratingBreakdownMaximum = useMemo(() => {
+    if (!match) return 1_000
+
+    return Math.max(1_000, ...match.players.flatMap((player) => {
+      const contribution = player.ratingContribution ?? player.resolveRatingContribution?.()
+      if (!contribution) return []
+      const isGoalkeeper = (player.positionFamiliarities?.GK ?? 0) >= 15 || player.position === "GK"
+      const groups = isGoalkeeper
+        ? (["Goalkeeping", "Creativity", "Passing", "Defence"] as const)
+        : (["Shooting", "Creativity", "Passing", "Defence"] as const)
+      return groups.map((group) => Math.abs(contribution.groupContributionsPostFactor[group] ?? 0))
+    }))
+  }, [match])
 
   const setPinnedPlayer = useCallback((side: TeamSide, playerId?: number) => {
     setPinnedPlayers((current) => updatePinnedPlayer(current, side, playerId))
@@ -790,6 +804,9 @@ export function App() {
                       : undefined
                   }
                   profilePopupSuppressed={comparisonOpen}
+                  ratingBreakdownDetailed={ratingBreakdownDetailed}
+                  ratingBreakdownMaximum={ratingBreakdownMaximum}
+                  onRatingBreakdownDetailedChange={setRatingBreakdownDetailed}
                   onPinnedPlayerChange={setPinnedHomePlayer}
                   tacticalSelectionActive={
                     isTacticalFocusMode &&
@@ -957,6 +974,9 @@ export function App() {
                       : undefined
                   }
                   profilePopupSuppressed={comparisonOpen}
+                  ratingBreakdownDetailed={ratingBreakdownDetailed}
+                  ratingBreakdownMaximum={ratingBreakdownMaximum}
+                  onRatingBreakdownDetailedChange={setRatingBreakdownDetailed}
                   onPinnedPlayerChange={setPinnedAwayPlayer}
                   tacticalSelectionActive={
                     isTacticalFocusMode &&

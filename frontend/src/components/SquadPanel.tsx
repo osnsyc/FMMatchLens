@@ -1,6 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowDataTransferHorizontalIcon, FootballIcon, Pin02Icon, SidebarLeft01Icon } from "@hugeicons/core-free-icons"
+import { ArrowDataTransferHorizontalIcon, ArrowDown01Icon, ArrowUp01Icon, FootballIcon, HelpCircleIcon, Pin02Icon, SidebarLeft01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { AssistIcon } from "@/components/AssistIcon"
@@ -46,7 +46,7 @@ import { findNearestPositionPlayerIds } from "@/lib/playerPositionMatch"
 import { decodePlayerTraits } from "@/lib/playerTraits"
 import { sameSquadPlayers } from "@/lib/matchRenderEquality"
 import { exploreTourCloseOverlaysEventName } from "@/features/explore-tour/exploreTourEvents"
-import type { RatingContribution, RatingContributionGroup } from "@/api/realtimeMatch"
+import type { RatingContributionGroup } from "@/api/realtimeMatch"
 
 type SquadPanelProps = {
   title: string
@@ -59,6 +59,9 @@ type SquadPanelProps = {
   pinnedPlayerId?: number
   attackingOpponent?: MatchPlayer
   profilePopupSuppressed?: boolean
+  ratingBreakdownDetailed: boolean
+  ratingBreakdownMaximum: number
+  onRatingBreakdownDetailedChange: (detailed: boolean) => void
   onPinnedPlayerChange: (playerId?: number) => void
   tacticalSelectionActive?: boolean
   tacticalSelectedPlayerIds?: ReadonlySet<number>
@@ -226,6 +229,13 @@ function ratingClass(
   return "text-foreground"
 }
 
+function inverseRatingClass(rating?: number) {
+  if (rating == null) return "bg-muted text-muted-foreground"
+  if (rating >= 7.5) return "bg-status-positive text-background"
+  if (rating < 6.5) return "bg-status-negative text-background"
+  return "bg-foreground text-background"
+}
+
 export const SquadPanel = memo(function SquadPanel({
   title,
   teamUid,
@@ -237,6 +247,9 @@ export const SquadPanel = memo(function SquadPanel({
   pinnedPlayerId,
   attackingOpponent,
   profilePopupSuppressed = false,
+  ratingBreakdownDetailed,
+  ratingBreakdownMaximum,
+  onRatingBreakdownDetailedChange,
   onPinnedPlayerChange,
   tacticalSelectionActive = false,
   tacticalSelectedPlayerIds = emptyPlayerIdSet,
@@ -671,26 +684,14 @@ export const SquadPanel = memo(function SquadPanel({
         <PlayerStatusStrip statuses={statuses} />
 
         {/* Rating */}
-        <span
-          className={`
-            col-start-5
-            flex h-6 w-9 shrink-0
-            items-center justify-center
-            justify-self-end
-            rounded-md
-            bg-muted/35
-            text-sm font-semibold
-            tabular-nums
-            sm:w-10
-            ${ratingClass(
-              player.rating
-            )}
-          `}
-        >
-          {player.rating?.toFixed(
-            1
-          ) ?? "-"}
-        </span>
+        <RatingBreakdownHover
+          player={player}
+          side={side}
+          panelRef={panelRef}
+          detailed={ratingBreakdownDetailed}
+          maximum={ratingBreakdownMaximum}
+          onDetailedChange={onRatingBreakdownDetailedChange}
+        />
       </li>
     )
   }
@@ -840,6 +841,9 @@ function sameSquadPanelProps(previous: SquadPanelProps, next: SquadPanelProps) {
     && previous.pinnedPlayerId === next.pinnedPlayerId
     && previous.attackingOpponent === next.attackingOpponent
     && previous.profilePopupSuppressed === next.profilePopupSuppressed
+    && previous.ratingBreakdownDetailed === next.ratingBreakdownDetailed
+    && previous.ratingBreakdownMaximum === next.ratingBreakdownMaximum
+    && previous.onRatingBreakdownDetailedChange === next.onRatingBreakdownDetailedChange
     && previous.onPinnedPlayerChange === next.onPinnedPlayerChange
     && previous.tacticalSelectionActive === next.tacticalSelectionActive
     && previous.tacticalSelectedPlayerIds === next.tacticalSelectedPlayerIds
@@ -880,9 +884,6 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   const [hoverOpen, setHoverOpen] = useState(false)
   const pinRequestedRef = useRef(false)
   const open = !popupSuppressed && (pinned || (hoverEnabled && hoverOpen))
-  const ratingContribution = open
-    ? player.ratingContribution ?? player.resolveRatingContribution?.()
-    : undefined
   const isGoalkeeper = (player.positionFamiliarities?.GK ?? 0) >= 15 || player.position === "GK"
   const attributeColumns = player.attributes
     ? buildAttributeColumns(isGoalkeeper)
@@ -1034,9 +1035,6 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
                 {t("playerProfile.noAttributes")}
               </div>
             )}
-            {ratingContribution && (
-              <RatingContributionPanel contribution={ratingContribution} teamColor={teamColor} />
-            )}
           </CardContent>
         </Card>
       </TooltipContent>}
@@ -1058,103 +1056,231 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   previous.player.inPossession === next.player.inPossession &&
   previous.player.portraitUrl === next.player.portraitUrl &&
   previous.player.profile === next.player.profile &&
-  previous.player.attributes === next.player.attributes &&
-  previous.player.ratingContribution === next.player.ratingContribution &&
-  previous.player.resolveRatingContribution === next.player.resolveRatingContribution
+  previous.player.attributes === next.player.attributes
 )
 
-const ratingContributionGroups: RatingContributionGroup[] = [
-  "BaseContext", "Shooting", "Creativity", "Passing", "Defence", "Goalkeeping",
+const outfieldRatingContributionGroups: RatingContributionGroup[] = [
+  "Shooting", "Creativity", "Passing", "Defence",
 ]
 
-const ratingGroupLabels: Record<RatingContributionGroup, { zh: string; en: string }> = {
-  BaseContext: { zh: "基础评分与上下文", en: "Base & Context" },
-  Shooting: { zh: "射门", en: "Shooting" },
-  Creativity: { zh: "创造力", en: "Creativity" },
-  Passing: { zh: "传球", en: "Passing" },
-  Defence: { zh: "防守", en: "Defence" },
-  Goalkeeping: { zh: "门将", en: "Goalkeeping" },
+const goalkeeperRatingContributionGroups: RatingContributionGroup[] = [
+  "Goalkeeping", "Creativity", "Passing", "Defence",
+]
+
+function RatingBreakdownHover({
+  player,
+  side,
+  panelRef,
+  detailed,
+  maximum,
+  onDetailedChange,
+}: {
+  player: MatchPlayer
+  side: TeamSide
+  panelRef: React.RefObject<HTMLElement | null>
+  detailed: boolean
+  maximum: number
+  onDetailedChange: (detailed: boolean) => void
+}) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const [sideOffset, setSideOffset] = useState(8)
+
+  useLayoutEffect(() => {
+    if (!open) return
+    setPlayerProfileBackdrop(true)
+    return () => setPlayerProfileBackdrop(false)
+  }, [open])
+
+  const isGoalkeeper = (player.positionFamiliarities?.GK ?? 0) >= 15 || player.position === "GK"
+  const groups = isGoalkeeper
+    ? goalkeeperRatingContributionGroups
+    : outfieldRatingContributionGroups
+  const contribution = open
+    ? player.ratingContribution ?? player.resolveRatingContribution?.()
+    : player.ratingContribution
+  const timeAdjustment = contribution?.groupContributionsPostFactor.BaseContext ?? 0
+  const penaltyShootout = contribution?.terms
+    .filter((term) => term.index >= 44 && term.index <= 49)
+    .reduce((sum, term) => sum + term.postFactorContribution, 0) ?? 0
+  const hasBreakdown = player.ratingContribution != null || player.resolveRatingContribution != null
+  const score = player.rating ?? contribution?.nativeRating
+  const ratingText = score?.toFixed(1) ?? "-"
+  const ratingClassName = `
+    col-start-5
+    flex h-6 w-9 shrink-0
+    items-center justify-center
+    justify-self-end
+    rounded-md
+    bg-muted/35
+    text-sm font-semibold
+    tabular-nums
+    sm:w-10
+    ${ratingClass(score)}
+  `
+  const ratingElement = (
+    <span className={ratingClassName}>
+      {ratingText}
+    </span>
+  )
+
+  if (!hasBreakdown) return ratingElement
+
+  const updateOffset = (trigger: HTMLElement) => {
+    const panel = panelRef.current?.getBoundingClientRect()
+    const anchor = trigger.getBoundingClientRect()
+    if (!panel) return
+    setSideOffset(side === "home" ? Math.max(8, panel.right - anchor.right + 8) : Math.max(8, anchor.left - panel.left + 8))
+  }
+
+  return (
+    <HoverCard open={open} onOpenChange={setOpen}>
+      <HoverCardTrigger
+        render={(
+          <span
+            className={ratingClassName}
+            onPointerEnter={(event) => updateOffset(event.currentTarget)}
+          />
+        )}
+      >
+        {ratingText}
+      </HoverCardTrigger>
+      {contribution && (
+        <HoverCardContent
+          side={side === "home" ? "right" : "left"}
+          sideOffset={sideOffset}
+          align="center"
+          className="w-80 bg-card p-3 text-card-foreground shadow-xl ring-1 ring-border"
+        >
+          <div className="mb-3 flex items-center justify-between gap-3 border-b border-border/70 pb-2">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <h3 className="truncate text-xs font-bold tracking-wide">
+                {t("ratingBreakdown.title")}
+              </h3>
+              <Tooltip>
+                <TooltipTrigger
+                  render={(
+                    <button
+                      type="button"
+                      className="flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                      aria-label={t("ratingBreakdown.about")}
+                    />
+                  )}
+                >
+                  <HugeiconsIcon icon={HelpCircleIcon} className="size-3.5" strokeWidth={2} />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-64">
+                  {t("ratingBreakdown.description")}
+                </TooltipContent>
+              </Tooltip>
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                className="h-5 px-1.5 text-[10px] text-muted-foreground"
+                aria-expanded={detailed}
+                aria-label={t(detailed ? "ratingBreakdown.showSummary" : "ratingBreakdown.showDetails")}
+                onClick={() => onDetailedChange(!detailed)}
+              >
+                {t(detailed ? "ratingBreakdown.summary" : "ratingBreakdown.details")}
+                <HugeiconsIcon
+                  icon={detailed ? ArrowUp01Icon : ArrowDown01Icon}
+                  className="size-2.5"
+                  strokeWidth={2}
+                />
+              </Button>
+            </div>
+            <span className={`flex h-6 min-w-9 shrink-0 items-center justify-center rounded-md px-1.5 text-xs font-bold tabular-nums ${inverseRatingClass(score)}`}>
+              {ratingText}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-x-5 gap-y-3">
+            {groups.map((group) => {
+              const value = contribution.groupContributionsPostFactor[group] ?? 0
+              return (
+                <RatingBreakdownMetric
+                  key={group}
+                  label={t(`ratingBreakdown.groups.${group}`)}
+                  description={t(`ratingBreakdown.groupDescriptions.${group}`)}
+                  value={value}
+                  maximum={maximum}
+                />
+              )
+            })}
+            {detailed && (
+              <>
+                <RatingBreakdownMetric
+                  label={t("ratingBreakdown.groups.TimeAdjustment")}
+                  description={t("ratingBreakdown.groupDescriptions.TimeAdjustment")}
+                  value={timeAdjustment}
+                  maximum={maximum}
+                />
+                <RatingBreakdownMetric
+                  label={t("ratingBreakdown.groups.PenaltyShootout")}
+                  description={t("ratingBreakdown.groupDescriptions.PenaltyShootout")}
+                  value={penaltyShootout}
+                  maximum={maximum}
+                />
+              </>
+            )}
+          </div>
+          {detailed && (
+            <div className="mt-3 flex items-center gap-x-3 whitespace-nowrap border-t border-border/70 pt-2 text-[9px] leading-4 text-muted-foreground tabular-nums">
+              <span>{t("ratingBreakdown.debug.residual")}: {contribution.reconstructionResidual}‰</span>
+              <span>{t("ratingBreakdown.debug.resultFactor")}: {contribution.selectedBaseFactor.toFixed(2)}</span>
+            </div>
+          )}
+        </HoverCardContent>
+      )}
+    </HoverCard>
+  )
 }
 
-function RatingContributionPanel({
-  contribution,
-  teamColor,
+function RatingBreakdownMetric({
+  label,
+  description,
+  value,
+  maximum,
 }: {
-  contribution: RatingContribution
-  teamColor: string
+  label: string
+  description: string
+  value: number
+  maximum: number
 }) {
-  const { i18n } = useTranslation()
-  const zh = (i18n.resolvedLanguage ?? i18n.language).startsWith("zh")
-  const values = ratingContributionGroups.map((group) => contribution.groupContributionsPostFactor[group] ?? 0)
-  const maximum = Math.max(1, ...values.map((value) => Math.abs(value)))
   return (
-    <section className="col-span-3 mt-3 border-t pt-3">
-      <div className="mb-2 flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-xs font-bold uppercase tracking-wide" style={{ color: teamColor }}>
-            {zh ? "球员评分构成" : "Rating contribution"}
-          </h3>
-          <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">
-            {zh
-              ? "按活动基础值、全局系数与时长插值重建；各分类显示最终评分增减。"
-              : "Reconstructed with the active baseline, global factor, and duration interpolation; groups show final rating-point changes."}
-          </p>
-        </div>
-        <div className="shrink-0 text-right text-[10px] tabular-nums text-muted-foreground">
-          <div>{zh ? "原生评分" : "Native rating"} <span className="font-semibold text-foreground">{contribution.nativeRating.toFixed(2)}</span></div>
-          <div>{zh ? "内部评分" : "Internal score"} <span className="font-semibold text-foreground">{contribution.internalScore}</span></div>
-        </div>
+    <div className="min-w-0">
+      <div className="flex items-center justify-between gap-2 text-[11px]">
+        <span className="flex min-w-0 items-center gap-1 text-muted-foreground">
+          <span className="truncate">{label}</span>
+          <Tooltip>
+            <TooltipTrigger
+              render={(
+                <button
+                  type="button"
+                  className="flex size-3.5 shrink-0 items-center justify-center rounded-full transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                  aria-label={description}
+                />
+              )}
+            >
+              <HugeiconsIcon icon={HelpCircleIcon} className="size-3" strokeWidth={2} />
+            </TooltipTrigger>
+            <TooltipContent className="max-w-64">{description}</TooltipContent>
+          </Tooltip>
+        </span>
+        <span className={`font-medium tabular-nums ${value > 0 ? "text-status-positive" : value < 0 ? "text-status-negative" : "text-muted-foreground"}`}>
+          {value > 0 ? "+" : ""}{(value / 1000).toFixed(2)}
+        </span>
       </div>
-      <div className="grid grid-cols-3 gap-x-4 gap-y-1.5">
-        {ratingContributionGroups.map((group) => {
-          const value = contribution.groupContributionsPostFactor[group] ?? 0
-          const topTerms = contribution.terms
-            .filter((term) => term.group === group)
-            .sort((left, right) => Math.abs(right.postFactorContribution) - Math.abs(left.postFactorContribution))
-            .slice(0, 5)
-          return (
-            <Tooltip key={group}>
-              <TooltipTrigger render={<div className="min-w-0" />}>
-                <div className="flex items-center justify-between gap-2 text-[10px]">
-                  <span className="truncate text-muted-foreground">{ratingGroupLabels[group][zh ? "zh" : "en"]}</span>
-                  <span className={value > 0 ? "text-emerald-600" : value < 0 ? "text-rose-600" : "text-muted-foreground"}>
-                    {value > 0 ? "+" : ""}{(value / 1000).toFixed(2)}
-                  </span>
-                </div>
-                <div className="relative mt-0.5 h-1.5 overflow-hidden rounded bg-muted">
-                  <span className="absolute inset-y-0 left-1/2 w-px bg-border" />
-                  {value !== 0 && <span
-                    className={`absolute inset-y-0 rounded ${value > 0 ? "left-1/2 bg-emerald-500" : "right-1/2 bg-rose-500"}`}
-                    style={{ width: `${Math.max(1, Math.abs(value) / maximum * 50)}%` }}
-                  />}
-                </div>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-80 text-[10px]">
-                <div className="font-semibold">{ratingGroupLabels[group][zh ? "zh" : "en"]}: {value > 0 ? "+" : ""}{(value / 1000).toFixed(3)}</div>
-                <div className="mb-1 text-muted-foreground">{zh ? "最终评分点；明细依次为因子前与因子后内部值" : "Final rating points; terms show pre-factor then post-factor internal values."}</div>
-                {topTerms.length > 0 ? topTerms.map((term) => (
-                  <div key={`${term.categoryBit}-${term.index}`} className="tabular-nums">
-                    W{term.index.toString(16).toUpperCase().padStart(2, "0")} · Bit {term.categoryBit}: {term.input} × {term.coefficient} → {term.contribution.toFixed(1)} → {term.postFactorContribution.toFixed(1)}
-                  </div>
-                )) : <div>{zh ? "无非零项" : "No non-zero terms"}</div>}
-              </TooltipContent>
-            </Tooltip>
-          )
-        })}
+      <div className="relative mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+        <span className="absolute inset-y-0 left-1/2 w-px bg-border" />
+        {value !== 0 && (
+          <span
+            className={`absolute inset-y-0 rounded-full ${value > 0 ? "left-1/2 bg-status-positive" : "right-1/2 bg-status-negative"}`}
+            style={{ width: `${Math.min(50, Math.max(1, Math.abs(value) / maximum * 50))}%` }}
+          />
+        )}
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[9px] text-muted-foreground">
-        <span>{zh ? "重建残差" : "Reconstruction residual"}: {contribution.reconstructionResidual}</span>
-        <span>{zh ? "全局系数" : "Global factor"}: {contribution.effectiveFactor.toFixed(4)} (#{contribution.selectedFactorIndex})</span>
-        <span>{zh ? "预测内部评分" : "Predicted internal"}: {contribution.predictedInternalScore}</span>
-        <span>{zh ? "分类时长" : "Classified duration"}: {contribution.classificationDurations.map((item) => `Bit ${item.categoryBit}=${item.duration}`).join(", ") || "-"}</span>
-      </div>
-      {contribution.qualityFlags.some((flag) => flag.startsWith("missing_") || flag.startsWith("unmapped_")) && (
-        <p className="mt-1 text-[9px] text-amber-600">
-          {zh ? "数据来源/完整性提示：" : "Source/data warning: "}
-          {contribution.qualityFlags.filter((flag) => flag.startsWith("missing_") || flag.startsWith("unmapped_")).join(", ")}
-        </p>
-      )}
-    </section>
+    </div>
   )
 }
 
