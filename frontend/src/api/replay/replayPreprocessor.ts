@@ -9,6 +9,7 @@ import {
   sameMomentumEventSemanticContent,
 } from "@/api/momentumEventReconciler"
 import type { LocalArchiveSummary } from "@/api/localArchive"
+import type { RatingWeightConfiguration } from "@/lib/ratingCalculator"
 import type {
   ReplayArchive,
   ReplayFrame,
@@ -21,6 +22,7 @@ export type ReplayPreprocessInput = {
   metadata?: RealtimeMatchMetadata
   metadataTimeline?: readonly RealtimeMatchMetadata[]
   frames: readonly RealtimeFrame[]
+  ratingConfiguration?: RatingWeightConfiguration
 }
 
 export type ReplayPreprocessOptions = {
@@ -88,6 +90,7 @@ export async function preprocessReplayArchive(
     metadataTimeline,
     frames,
     streamRevisions,
+    ratingConfiguration: input.ratingConfiguration,
   }
 }
 

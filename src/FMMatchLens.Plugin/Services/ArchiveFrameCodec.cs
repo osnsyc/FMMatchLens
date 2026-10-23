@@ -1,4 +1,5 @@
 using FMMatchLens.Plugin.Domain;
+using FMMatchLens.Plugin.Memory;
 using System.Text;
 
 namespace FMMatchLens.Plugin.Services;
@@ -27,6 +28,8 @@ internal static class ArchiveFrameCodec
     // Must match GameMatchTickHook.MaxStoredMomentumTrajectoryPoints. Lowering
     // this wire limit later requires a new archive minor version or migration.
     private const int MaxTrajectoryPoints = 4;
+    private const int RatingStatsInputSize = 28;
+    private const ulong AllRatingPlayerFields = ((1UL << 23) - 1) & ~((1UL << 10) | (1UL << 12) | (1UL << 17));
 
     public static byte[] Encode(IReadOnlyList<RealtimeTickFrame> frames)
     {
@@ -115,6 +118,7 @@ internal static class ArchiveFrameCodec
             WriteTail(writer, previous?.MomentumEvents, frame.MomentumEvents, WriteEvent, MomentumEventEquals);
             WriteTail(writer, previous?.Momentum, frame.Momentum, WriteMomentum);
             WriteTail(writer, previous?.RollingMomentum, frame.RollingMomentum, WriteMomentum);
+            WriteRatingResearch(writer, previous, frame);
             previous = frame;
         }
         return stream.ToArray();
@@ -124,7 +128,8 @@ internal static class ArchiveFrameCodec
         ReadOnlyMemory<byte> payload,
         string matchId,
         int expectedFrameCount,
-        ushort structureMinor)
+        ushort structureMinor,
+        RatingModelMetadata? ratingModelMetadata = null)
     {
         if (expectedFrameCount is < 1 or > MaxFramesPerChunk) throw new ArchiveFormatException("invalid_count", "Chunk frame count is invalid.");
         if (structureMinor < ArchiveWireFormat.FirstSupportedStructureMinor ||
@@ -251,14 +256,296 @@ internal static class ArchiveFrameCodec
             var events = ReadTail(reader, previous?.MomentumEvents, value => ReadEvent(value, structureMinor));
             var momentum = ReadTail(reader, previous?.Momentum, ReadMomentum);
             var rolling = ReadTail(reader, previous?.RollingMomentum, ReadMomentum);
+            RatingResearchMatchData? ratingResearch = null;
+            if (structureMinor >= 8)
+            {
+                ratingResearch = ReadRatingResearch(reader, previous, players, ratingModelMetadata);
+            }
             var frame = new RealtimeTickFrame(sequence, matchId, tick, displayTick, period, captured, possession, holderPlayerId,
                 ballXCentimeters, ballYCentimeters, ballZCentimeters,
-                halfWidth, halfLength, events, momentum, rolling, home, away, players);
+                halfWidth, halfLength, events, momentum, rolling, home, away, players)
+            {
+                RatingResearch = ratingResearch,
+            };
             frames[frameIndex] = frame;
             previous = frame;
         }
         if (stream.Position != stream.Length) throw new ArchiveFormatException("trailing_data", "Chunk payload contains trailing bytes.");
         return frames;
+    }
+
+    private static void WriteRatingResearch(BinaryWriter writer, RealtimeTickFrame? previous, RealtimeTickFrame frame)
+    {
+        var match = frame.RatingResearch;
+        writer.Write(match is not null);
+        if (match is null) return;
+        var priorMatch = previous?.RatingResearch;
+        ulong matchMask = 0;
+        if (priorMatch is null || priorMatch.RatingBaseCondition != match.RatingBaseCondition) matchMask |= 1UL << 0;
+        if (priorMatch is null || priorMatch.MatchPhase != match.MatchPhase) matchMask |= 1UL << 1;
+        if (priorMatch is null || priorMatch.EventRewardBranch != match.EventRewardBranch) matchMask |= 1UL << 2;
+        ArchiveBinary.WriteVarUInt64(writer, matchMask);
+        if ((matchMask & (1UL << 0)) != 0) ArchiveBinary.WriteVarUInt64(writer, match.RatingBaseCondition ^ (priorMatch?.RatingBaseCondition ?? 0));
+        if ((matchMask & (1UL << 1)) != 0) writer.Write(match.MatchPhase);
+        if ((matchMask & (1UL << 2)) != 0) writer.Write(match.EventRewardBranch);
+
+        for (var index = 0; index < frame.Players.Count; index++)
+        {
+            var player = frame.Players[index];
+            var research = player.RatingResearch;
+            var priorResearch = previous is not null && index < previous.Players.Count &&
+                                previous.Players[index].Slot == player.Slot
+                ? previous.Players[index].RatingResearch
+                : null;
+            if (research is null) throw new ArchiveFormatException("invalid_rating_research", "A rating-enabled frame contains a player without rating data.");
+            ulong mask = 0;
+            if (priorResearch is null || !PackRatingStats(research.Stats).AsSpan().SequenceEqual(PackRatingStats(priorResearch.Stats))) mask |= 1UL << 0;
+            if (priorResearch is null || priorResearch.InternalW25 != research.InternalW25) mask |= 1UL << 1;
+            if (priorResearch is null || priorResearch.InternalW24 != research.InternalW24) mask |= 1UL << 2;
+            if (priorResearch is null || priorResearch.SpecialW2C != research.SpecialW2C) mask |= 1UL << 3;
+            if (priorResearch is null || priorResearch.SpecialW2D != research.SpecialW2D) mask |= 1UL << 4;
+            if (priorResearch is null || priorResearch.SpecialW2E != research.SpecialW2E) mask |= 1UL << 5;
+            if (priorResearch is null || priorResearch.SpecialW2F != research.SpecialW2F) mask |= 1UL << 6;
+            if (priorResearch is null || priorResearch.SpecialW30 != research.SpecialW30) mask |= 1UL << 7;
+            if (priorResearch is null || priorResearch.SpecialW31 != research.SpecialW31) mask |= 1UL << 8;
+            if (priorResearch is null || priorResearch.RawInternalRating != research.RawInternalRating) mask |= 1UL << 9;
+            if (priorResearch is null || priorResearch.InPossessionRoleDuty != research.InPossessionRoleDuty) mask |= 1UL << 11;
+            if (priorResearch is null || priorResearch.OutOfPossessionRoleDuty != research.OutOfPossessionRoleDuty) mask |= 1UL << 13;
+            if (priorResearch is null || priorResearch.SpecialConditionA != research.SpecialConditionA) mask |= 1UL << 14;
+            if (priorResearch is null || priorResearch.SpecialConditionB != research.SpecialConditionB) mask |= 1UL << 15;
+            if (priorResearch is null || priorResearch.TotalEligibleDuration != research.TotalEligibleDuration) mask |= 1UL << 16;
+            if (priorResearch is null || !RawRecordsEqual(priorResearch.RatingEventsRaw, research.RatingEventsRaw)) mask |= 1UL << 18;
+            if (priorResearch is null || priorResearch.TeamAEventCounterCandidate != research.TeamAEventCounterCandidate) mask |= 1UL << 19;
+            if (priorResearch is null || priorResearch.TeamBEventCounterCandidate != research.TeamBEventCounterCandidate) mask |= 1UL << 20;
+            if (priorResearch is null || priorResearch.TeamAEventAdjustmentCandidate != research.TeamAEventAdjustmentCandidate) mask |= 1UL << 21;
+            if (priorResearch is null || priorResearch.TeamBEventAdjustmentCandidate != research.TeamBEventAdjustmentCandidate) mask |= 1UL << 22;
+            ArchiveBinary.WriteVarUInt64(writer, mask);
+            if ((mask & (1UL << 0)) != 0) WriteRatingStatsDelta(writer, priorResearch?.Stats, research.Stats);
+            WriteInt(1, research.InternalW25, priorResearch?.InternalW25 ?? 0);
+            WriteInt(2, research.InternalW24, priorResearch?.InternalW24 ?? 0);
+            WriteSByte(3, research.SpecialW2C); WriteSByte(4, research.SpecialW2D); WriteSByte(5, research.SpecialW2E);
+            WriteByte(6, research.SpecialW2F); WriteByte(7, research.SpecialW30); WriteByte(8, research.SpecialW31);
+            WriteInt(9, research.RawInternalRating, priorResearch?.RawInternalRating ?? 0);
+            WriteULong(11, research.InPossessionRoleDuty, priorResearch?.InPossessionRoleDuty ?? 0);
+            WriteULong(13, research.OutOfPossessionRoleDuty, priorResearch?.OutOfPossessionRoleDuty ?? 0);
+            WriteSByte(14, research.SpecialConditionA); WriteSByte(15, research.SpecialConditionB);
+            WriteInt(16, research.TotalEligibleDuration, priorResearch?.TotalEligibleDuration ?? 0);
+            if ((mask & (1UL << 18)) != 0) WriteRawRecordTail(writer, priorResearch?.RatingEventsRaw, research.RatingEventsRaw, Offsets.RatingEvent.Size);
+            WriteByte(19, research.TeamAEventCounterCandidate);
+            WriteByte(20, research.TeamBEventCounterCandidate);
+            WriteByte(21, research.TeamAEventAdjustmentCandidate);
+            WriteByte(22, research.TeamBEventAdjustmentCandidate);
+
+            void WriteInt(int bit, int value, int oldValue) { if ((mask & (1UL << bit)) != 0) ArchiveBinary.WriteVarInt64(writer, value - oldValue); }
+            void WriteULong(int bit, ulong value, ulong oldValue) { if ((mask & (1UL << bit)) != 0) ArchiveBinary.WriteVarUInt64(writer, value ^ oldValue); }
+            void WriteSByte(int bit, sbyte value) { if ((mask & (1UL << bit)) != 0) writer.Write(value); }
+            void WriteByte(int bit, byte value) { if ((mask & (1UL << bit)) != 0) writer.Write(value); }
+        }
+    }
+
+    private static RatingResearchMatchData? ReadRatingResearch(
+        BinaryReader reader,
+        RealtimeTickFrame? previous,
+        PlayerTickData[] players,
+        RatingModelMetadata? ratingModelMetadata)
+    {
+        if (!reader.ReadBoolean()) return null;
+        if (ratingModelMetadata is null)
+            throw new ArchiveFormatException("missing_rating_model", "Rating research data has no archive-level rating model metadata.");
+        var priorMatch = previous?.RatingResearch;
+        var matchMask = ArchiveBinary.ReadVarUInt64(reader);
+        if ((matchMask >> 3) != 0) throw new ArchiveFormatException("invalid_rating_research", "Rating match mask contains unknown fields.");
+        if (priorMatch is null && matchMask != 0x7UL)
+            throw new ArchiveFormatException("missing_keyframe", "Rating match chunk keyframe is incomplete.");
+        uint ReadMatchUInt(int bit, uint oldValue) => (matchMask & (1UL << bit)) == 0 ? oldValue : oldValue ^ checked((uint)ArchiveBinary.ReadVarUInt64(reader, 5));
+        byte ReadMatchByte(int bit, byte oldValue) => (matchMask & (1UL << bit)) == 0 ? oldValue : reader.ReadByte();
+        var match = new RatingResearchMatchData(
+            ReadMatchUInt(0, priorMatch?.RatingBaseCondition ?? 0),
+            ReadMatchByte(1, priorMatch?.MatchPhase ?? 0),
+            ReadMatchByte(2, priorMatch?.EventRewardBranch ?? 0),
+            ratingModelMetadata.ActiveBaseline,
+            ratingModelMetadata.HomeBackgroundInput,
+            ratingModelMetadata.AwayBackgroundInput);
+
+        for (var index = 0; index < players.Length; index++)
+        {
+            var priorResearch = previous is not null && index < previous.Players.Count &&
+                                previous.Players[index].Slot == players[index].Slot
+                ? previous.Players[index].RatingResearch
+                : null;
+            var mask = ArchiveBinary.ReadVarUInt64(reader);
+            if ((mask & ~AllRatingPlayerFields) != 0) throw new ArchiveFormatException("invalid_rating_research", "Rating player mask contains unknown fields.");
+            if (priorResearch is null && mask != AllRatingPlayerFields)
+                throw new ArchiveFormatException("missing_keyframe", "Rating player chunk keyframe is incomplete.");
+            var stats = (mask & 1) != 0 ? ReadRatingStatsDelta(reader, priorResearch?.Stats, players[index]) : priorResearch!.Stats;
+            int ReadInt(int bit, int oldValue) => (mask & (1UL << bit)) == 0 ? oldValue : checked(oldValue + (int)ArchiveBinary.ReadVarInt64(reader));
+            ulong ReadULong(int bit, ulong oldValue) => (mask & (1UL << bit)) == 0 ? oldValue : oldValue ^ ArchiveBinary.ReadVarUInt64(reader);
+            sbyte ReadSByte(int bit, sbyte oldValue) => (mask & (1UL << bit)) == 0 ? oldValue : reader.ReadSByte();
+            byte ReadByte(int bit, byte oldValue) => (mask & (1UL << bit)) == 0 ? oldValue : reader.ReadByte();
+            var internalW25 = ReadInt(1, priorResearch?.InternalW25 ?? 0);
+            var internalW24 = ReadInt(2, priorResearch?.InternalW24 ?? 0);
+            var specialW2C = ReadSByte(3, priorResearch?.SpecialW2C ?? 0);
+            var specialW2D = ReadSByte(4, priorResearch?.SpecialW2D ?? 0);
+            var specialW2E = ReadSByte(5, priorResearch?.SpecialW2E ?? 0);
+            var specialW2F = ReadByte(6, priorResearch?.SpecialW2F ?? 0);
+            var specialW30 = ReadByte(7, priorResearch?.SpecialW30 ?? 0);
+            var specialW31 = ReadByte(8, priorResearch?.SpecialW31 ?? 0);
+            var rawInternalRating = ReadInt(9, priorResearch?.RawInternalRating ?? 0);
+            var inRole = ReadULong(11, priorResearch?.InPossessionRoleDuty ?? 0);
+            var outRole = ReadULong(13, priorResearch?.OutOfPossessionRoleDuty ?? 0);
+            var conditionA = ReadSByte(14, priorResearch?.SpecialConditionA ?? 0);
+            var conditionB = ReadSByte(15, priorResearch?.SpecialConditionB ?? 0);
+            var totalEligibleDuration = ReadInt(16, priorResearch?.TotalEligibleDuration ?? 0);
+            var events = (mask & (1UL << 18)) != 0
+                ? ReadRawRecordTail(reader, priorResearch?.RatingEventsRaw, Offsets.RatingEvent.Size)
+                : priorResearch!.RatingEventsRaw;
+            var teamAEventCounter = ReadByte(19, priorResearch?.TeamAEventCounterCandidate ?? 0);
+            var teamBEventCounter = ReadByte(20, priorResearch?.TeamBEventCounterCandidate ?? 0);
+            var teamAEventAdjustment = ReadByte(21, priorResearch?.TeamAEventAdjustmentCandidate ?? 0);
+            var teamBEventAdjustment = ReadByte(22, priorResearch?.TeamBEventAdjustmentCandidate ?? 0);
+            var research = new RatingResearchPlayerData(
+                stats,
+                internalW25, internalW24,
+                specialW2C, specialW2D, specialW2E, specialW2F, specialW30, specialW31,
+                rawInternalRating,
+                inRole, outRole,
+                conditionA, conditionB,
+                teamAEventCounter, teamBEventCounter,
+                teamAEventAdjustment, teamBEventAdjustment,
+                totalEligibleDuration,
+                events);
+            players[index] = players[index] with { RatingResearch = research };
+        }
+        return match;
+    }
+
+    internal static byte[] EncodeRatingModelMetadata(RatingModelMetadata value)
+    {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
+        ArchiveBinary.WriteVarInt64(writer, value.ActiveBaseline);
+        writer.Write(value.HomeBackgroundInput);
+        writer.Write(value.AwayBackgroundInput);
+        return stream.ToArray();
+    }
+
+    internal static RatingModelMetadata DecodeRatingModelMetadata(byte[] payload)
+    {
+        using var stream = new MemoryStream(payload, writable: false);
+        using var reader = new BinaryReader(stream, Encoding.UTF8);
+        var baseline = checked((int)ArchiveBinary.ReadVarInt64(reader));
+        var home = reader.ReadSingle();
+        var away = reader.ReadSingle();
+        if (stream.Position != stream.Length)
+            throw new ArchiveFormatException("trailing_data", "Rating model metadata contains trailing bytes.");
+        if (baseline is < 0 or > 10_000 || !float.IsFinite(home) || !float.IsFinite(away))
+            throw new ArchiveFormatException("invalid_rating_model", "Rating model metadata is invalid.");
+        return new RatingModelMetadata(baseline, home, away);
+    }
+
+    private static void WriteRatingStatsDelta(BinaryWriter writer, RatingStatsInputs? previous, RatingStatsInputs current)
+    {
+        var prior = PackRatingStats(previous ?? default);
+        var next = PackRatingStats(current);
+        ulong changed = 0;
+        for (var index = 0; index < next.Length; index++)
+        {
+            if (next[index] != prior[index]) changed |= 1UL << index;
+        }
+        ArchiveBinary.WriteVarUInt64(writer, changed);
+        for (var index = 0; index < next.Length; index++)
+        {
+            if ((changed & (1UL << index)) != 0) writer.Write((byte)(next[index] ^ prior[index]));
+        }
+    }
+
+    private static RatingStatsInputs ReadRatingStatsDelta(BinaryReader reader, RatingStatsInputs? previous, PlayerTickData player)
+    {
+        var bytes = PackRatingStats(previous ?? default);
+        var changed = ArchiveBinary.ReadVarUInt64(reader);
+        if ((changed >> RatingStatsInputSize) != 0)
+            throw new ArchiveFormatException("invalid_rating_research", "Rating stats delta contains unknown bits.");
+        for (var index = 0; index < bytes.Length; index++)
+        {
+            if ((changed & (1UL << index)) != 0) bytes[index] ^= reader.ReadByte();
+        }
+        return UnpackRatingStats(bytes, player);
+    }
+
+    private static byte[] PackRatingStats(RatingStatsInputs value)
+        => RatingResearchPlayerWireData.PackStats(value);
+
+    private static RatingStatsInputs UnpackRatingStats(byte[] bytes, PlayerTickData player)
+    {
+        if (bytes.Length != RatingStatsInputSize) throw new ArchiveFormatException("invalid_rating_research", "Rating stats payload has an invalid size.");
+        using var stream = new MemoryStream(bytes, writable: false);
+        using var reader = new BinaryReader(stream, Encoding.UTF8);
+        return new RatingStatsInputs(
+            player.Xg, reader.ReadSingle(),
+            (byte)player.Goals, reader.ReadByte(), (byte)player.Penalties, (byte)player.OwnGoals, (byte)player.Shots, (byte)player.ShotsOnTarget,
+            (byte)player.SavesHeld, (byte)player.SavesParried, (byte)player.SavesTipped,
+            reader.ReadByte(), reader.ReadByte(), reader.ReadByte(),
+            (byte)player.Assists, reader.ReadByte(), (byte)player.Dribbles, (byte)player.Fouls, (byte)player.Fouled,
+            reader.ReadByte(), reader.ReadByte(), reader.ReadByte(),
+            (byte)player.TacklesAttempted, (byte)player.TacklesWon, (byte)player.Aerials, (byte)player.AerialsWon, (byte)player.Interceptions,
+            reader.ReadByte(), reader.ReadByte(), reader.ReadByte(), reader.ReadByte(),
+            (byte)player.Clearances,
+            reader.ReadByte(), reader.ReadByte(), reader.ReadByte(), reader.ReadByte(),
+            reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16());
+    }
+
+    private static bool RawRecordsEqual(IReadOnlyList<byte[]> left, IReadOnlyList<byte[]> right)
+    {
+        if (left.Count != right.Count) return false;
+        for (var index = 0; index < left.Count; index++)
+            if (!left[index].AsSpan().SequenceEqual(right[index])) return false;
+        return true;
+    }
+
+    private static void WriteRawRecordTail(
+        BinaryWriter writer,
+        IReadOnlyList<byte[]>? previous,
+        IReadOnlyList<byte[]> records,
+        int recordSize)
+    {
+        if (records.Count > 4_096)
+            throw new ArchiveFormatException("invalid_rating_research", "Rating research record count exceeds the wire limit.");
+        var common = 0;
+        if (previous is not null)
+        {
+            var limit = Math.Min(previous.Count, records.Count);
+            while (common < limit && previous[common].AsSpan().SequenceEqual(records[common])) common++;
+        }
+        ArchiveBinary.WriteVarUInt64(writer, checked((ulong)common));
+        ArchiveBinary.WriteVarUInt64(writer, checked((ulong)(records.Count - common)));
+        for (var index = common; index < records.Count; index++)
+        {
+            var record = records[index];
+            if (record.Length != recordSize)
+                throw new ArchiveFormatException("invalid_rating_research", "Rating research record has an invalid size.");
+            writer.Write(record);
+        }
+    }
+
+    private static IReadOnlyList<byte[]> ReadRawRecordTail(
+        BinaryReader reader,
+        IReadOnlyList<byte[]>? previous,
+        int recordSize)
+    {
+        var prior = previous ?? Array.Empty<byte[]>();
+        var common = checked((int)ArchiveBinary.ReadVarUInt64(reader, 2));
+        var tail = checked((int)ArchiveBinary.ReadVarUInt64(reader, 2));
+        if (common > prior.Count || common + tail > 4_096)
+            throw new ArchiveFormatException("invalid_rating_research", "Rating research record count exceeds the wire limit.");
+        if (common + tail == 0) return Array.Empty<byte[]>();
+        var records = new byte[common + tail][];
+        for (var index = 0; index < common; index++) records[index] = prior[index];
+        for (var index = common; index < records.Length; index++)
+        {
+            records[index] = reader.ReadBytes(recordSize);
+            if (records[index].Length != recordSize) throw new EndOfStreamException("Rating research record is truncated.");
+        }
+        return records;
     }
 
     private static bool RosterMatches(IReadOnlyList<PlayerTickData> left, IReadOnlyList<PlayerTickData> right)

@@ -151,6 +151,7 @@ internal sealed class RawRealtimeTickFrame
     public int MomentumMaxBackfillDepth;
     public TeamTickData Home;
     public TeamTickData Away;
+    public RatingResearchMatchData? RatingResearch;
     public PlayerTickData[] Players { get; }
     public MomentumTickData[] Momentum { get; }
     public MomentumTickData[] RollingMomentum { get; }

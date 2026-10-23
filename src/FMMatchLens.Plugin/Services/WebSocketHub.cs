@@ -16,6 +16,7 @@ internal sealed class WebSocketHub : IDisposable
     };
 
     private readonly object _gate = new();
+    private readonly SemaphoreSlim _sendGate = new(1, 1);
     private readonly List<WebSocket> _connections = new();
 
     public int ConnectionCount
@@ -34,17 +35,34 @@ internal sealed class WebSocketHub : IDisposable
         PluginLogger.Debug("WebSocket hub started.");
     }
 
-    public async Task AddAsync(WebSocket socket, CancellationToken cancellationToken)
+    public async Task AddAsync(
+        WebSocket socket,
+        Func<object?> initialRealtimeFrame,
+        CancellationToken cancellationToken)
     {
-        await SendEnvelopeAsync(socket, "connection_status", new
+        await _sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            status = "connected",
-            connectionCount = ConnectionCount + 1
-        }, cancellationToken).ConfigureAwait(false);
+            await SendEnvelopeAsync(socket, "connection_status", new
+            {
+                status = "connected",
+                connectionCount = ConnectionCount + 1
+            }, cancellationToken).ConfigureAwait(false);
 
-        lock (_gate)
+            var initial = initialRealtimeFrame();
+            if (initial is not null)
+            {
+                await SendEnvelopeAsync(socket, "realtime_tick", initial, cancellationToken).ConfigureAwait(false);
+            }
+
+            lock (_gate)
+            {
+                _connections.Add(socket);
+            }
+        }
+        finally
         {
-            _connections.Add(socket);
+            _sendGate.Release();
         }
 
         _ = Task.Run(() => ReceiveUntilClosedAsync(socket, cancellationToken), cancellationToken);
@@ -52,29 +70,37 @@ internal sealed class WebSocketHub : IDisposable
 
     public async Task BroadcastAsync(string type, object payload, CancellationToken cancellationToken)
     {
-        WebSocket[] sockets;
-        lock (_gate)
+        await _sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            sockets = _connections.ToArray();
+            WebSocket[] sockets;
+            lock (_gate)
+            {
+                sockets = _connections.ToArray();
+            }
+
+            foreach (var socket in sockets)
+            {
+                if (socket.State != WebSocketState.Open)
+                {
+                    Remove(socket);
+                    continue;
+                }
+
+                try
+                {
+                    await SendEnvelopeAsync(socket, type, payload, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    PluginLogger.Warning($"WebSocket send failed: {ex.Message}");
+                    Remove(socket);
+                }
+            }
         }
-
-        foreach (var socket in sockets)
+        finally
         {
-            if (socket.State != WebSocketState.Open)
-            {
-                Remove(socket);
-                continue;
-            }
-
-            try
-            {
-                await SendEnvelopeAsync(socket, type, payload, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                PluginLogger.Warning($"WebSocket send failed: {ex.Message}");
-                Remove(socket);
-            }
+            _sendGate.Release();
         }
     }
 

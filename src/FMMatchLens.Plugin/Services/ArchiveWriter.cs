@@ -31,6 +31,7 @@ internal sealed class ArchiveWriter : IDisposable
     internal const byte FinalIndexRecord = 3;
     internal const byte EndRecord = 4;
     internal const byte MetadataDeltaRecord = 5;
+    internal const byte RatingModelMetadataRecord = 7;
     internal const uint BlockMagic = 0x324b4c42;
     internal const int MaxUncompressedChunkBytes = 16 * 1024 * 1024;
     internal const int MaxCompressedChunkBytes = 16 * 1024 * 1024;
@@ -250,6 +251,7 @@ internal sealed class ArchiveWriter : IDisposable
         var awayGoals = 0;
         var encodeTimes = new List<double>();
         var compressionTimes = new List<double>();
+        var ratingModelMetadataWritten = false;
         try
         {
             using var stream = new FileStream(_path, FileMode.Append, FileAccess.Write, FileShare.Read, 64 * 1024, FileOptions.SequentialScan);
@@ -263,6 +265,17 @@ internal sealed class ArchiveWriter : IDisposable
                         writer.Flush();
                         break;
                     case ChunkWorkItem chunk:
+                        if (!ratingModelMetadataWritten)
+                        {
+                            var model = chunk.Frames.Select(frame => frame.RatingResearch).FirstOrDefault(value => value is not null);
+                            if (model is not null)
+                            {
+                                ArchiveBinary.WriteLengthPrefixedRecord(writer, RatingModelMetadataRecord,
+                                    ArchiveFrameCodec.EncodeRatingModelMetadata(new RatingModelMetadata(
+                                        model.ActiveBaseline, model.HomeBackgroundInput, model.AwayBackgroundInput)));
+                                ratingModelMetadataWritten = true;
+                            }
+                        }
                         var stopwatch = Stopwatch.StartNew();
                         var raw = ArchiveFrameCodec.Encode(chunk.Frames);
                         var encodeMilliseconds = stopwatch.Elapsed.TotalMilliseconds;

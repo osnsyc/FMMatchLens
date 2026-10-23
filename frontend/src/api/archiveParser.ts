@@ -1,5 +1,6 @@
 import type {
   RealtimeFrame,
+  ArchiveRatingInputs,
   RealtimeMatchMetadata,
   RealtimeMomentumEvent,
   RealtimeMomentumPoint,
@@ -11,11 +12,16 @@ import type {
 import type { ParsedLocalArchive } from "@/api/localArchive"
 import type { PlayerAttributes, PlayerPositionFamiliarities, PlayerProfile, PlayerSeasonDetailedStats, PlayerSeasonStats, PlayerSeasonStatsSlot, PlayerTacticalAssignment, TeamSide } from "@/types/match"
 import { playerPositionLabels } from "@/types/match"
+import {
+  deriveRatingClassification,
+  observedRatingWeightConfiguration,
+  type RatingClassificationState,
+} from "@/lib/ratingCalculator"
 
 const magic = "FMLENS2\0"
 const archiveStructureMajor = 2
 const firstSupportedStructureMinor = 1
-const archiveStructureMinor = 7
+const archiveStructureMinor = 8
 const legacy21FramePayloadMarker = 1
 const legacy21BlockStructure = 1
 const metadataRecord = 1
@@ -23,6 +29,7 @@ const chunkRecord = 2
 const finalIndexRecord = 3
 const endRecord = 4
 const metadataDeltaRecord = 5
+const ratingModelMetadataRecord = 7
 const blockMagic = 0x324b4c42
 const maxRecordBytes = 4 * 1024 * 1024
 const maxChunkBytes = 16 * 1024 * 1024
@@ -69,6 +76,7 @@ export async function parseArchiveFile(buffer: ArrayBuffer, fileName: string): P
   let metadataRevision = 0
   let finalSummary: FinalSummary | undefined
   let endedUnixMilliseconds: number | undefined
+  let ratingModelMetadata: RatingModelMetadata | undefined
 
   while (!reader.atEnd) {
     const recordStart = reader.offset
@@ -95,6 +103,9 @@ export async function parseArchiveFile(buffer: ArrayBuffer, fileName: string): P
         metadataTimeline.push(decoded.metadata)
       } else if (recordType === chunkRecord) {
         blocks.push(readBlock(reader, recordStart, header.structureMinor))
+      } else if (recordType === ratingModelMetadataRecord) {
+        if (ratingModelMetadata != null) throw new ArchiveError("Rating model metadata is duplicated")
+        ratingModelMetadata = readRatingModelMetadata(new ArchiveBufferReader(readRecordPayload(reader, 32)))
       } else if (recordType === finalIndexRecord) {
         finalSummary = readFinalIndex(readRecordPayload(reader, maxRecordBytes), blocks)
       } else if (recordType === endRecord) {
@@ -112,11 +123,15 @@ export async function parseArchiveFile(buffer: ArrayBuffer, fileName: string): P
   }
 
   const frames: RealtimeFrame[] = []
+  const ratingClassificationBySlot = new Map<number, RatingClassificationState>()
   let blockError: unknown
   for (const block of blocks) {
     try {
       const payload = await decompressBlock(block)
-      frames.push(...readFrames(payload, header.matchId, block.frameCount, block.startTick, block.endTick, header.structureMinor))
+      frames.push(...readFrames(
+        payload, header.matchId, block.frameCount, block.startTick, block.endTick,
+        header.structureMinor, ratingModelMetadata, ratingClassificationBySlot,
+      ))
     } catch (error) {
       blockError = error
       break
@@ -147,6 +162,7 @@ export async function parseArchiveFile(buffer: ArrayBuffer, fileName: string): P
     metadata,
     metadataTimeline,
     frames,
+    ratingConfiguration: observedRatingWeightConfiguration,
   }
 }
 
@@ -239,6 +255,8 @@ function readFrames(
   startTick: number,
   endTick: number,
   structureMinor: number,
+  ratingModelMetadata: RatingModelMetadata | undefined,
+  ratingClassificationBySlot: Map<number, RatingClassificationState>,
 ) {
   const reader = new ArchiveBufferReader(payload)
   const supportedTeamFields = structureMinor >= 6 ? allTeamFields : legacyTeamFields
@@ -248,6 +266,8 @@ function readFrames(
   }
   const frames: RealtimeFrame[] = []
   let previous: RealtimeFrame | undefined
+  const previousRatingPlayers = new Map<number, RatingWirePlayerState>()
+  let previousRatingMatch: RatingWireMatchState | undefined
   for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
     const flags = reader.readByte()
     if ((flags & ~(structureMinor >= 7 ? 31 : 3)) !== 0) throw new ArchiveError("帧变化标记无效")
@@ -335,10 +355,18 @@ function readFrames(
     const momentumEvents = readTail(reader, previous?.momentumEvents, (value) => readEvent(value, structureMinor))
     const momentum = readTail(reader, previous?.momentum, readMomentum)
     const rollingMomentum = readTail(reader, previous?.rollingMomentum, readMomentum)
+    if (structureMinor >= 8) previousRatingMatch = readRatingResearch(
+      reader, players, ratingModelMetadata,
+      previousRatingPlayers, previous?.players, previousRatingMatch, ratingClassificationBySlot,
+    )
     const frame: RealtimeFrame = {
       sequence, matchId, tick, displayTick, period, capturedUnixMilliseconds, possessionTeam, ballHolderPlayerId,
       ballXCentimeters, ballYCentimeters, ballZCentimeters,
       halfPitchWidth, halfPitchLength, momentumEvents, momentum, rollingMomentum, home, away, players,
+      ratingModel: previousRatingMatch && ratingModelMetadata ? {
+        ...previousRatingMatch,
+        ...ratingModelMetadata,
+      } : undefined,
     }
     frames.push(frame)
     previous = frame
@@ -347,6 +375,165 @@ function readFrames(
   if (frames[0].tick !== startTick || frames.at(-1)!.tick !== endTick) throw new ArchiveError("数据块 Tick 范围不匹配")
   return frames
 }
+
+type RatingModelMetadata = {
+  activeBaseline: number
+  homeBackgroundInput: number
+  awayBackgroundInput: number
+}
+
+type RatingWireMatchState = {
+  ratingBaseCondition: number
+  matchPhase: number
+  eventRewardBranch: number
+}
+
+type RatingWirePlayerState = {
+  packedStats: Uint8Array
+  internalW25: number
+  internalW24: number
+  specialW2C: number
+  specialW2D: number
+  specialW2E: number
+  specialW2F: number
+  specialW30: number
+  specialW31: number
+  internalScore: number
+  inPossessionRoleDuty: bigint
+  outOfPossessionRoleDuty: bigint
+  specialConditionA: number
+  specialConditionB: number
+  teamAEventCounterCandidate: number
+  teamBEventCounterCandidate: number
+  teamAEventAdjustmentCandidate: number
+  teamBEventAdjustmentCandidate: number
+  totalEligibleDuration: number
+  ratingEvents: Uint8Array[]
+}
+
+function readRatingResearch(
+  reader: ArchiveBufferReader,
+  players: RealtimePlayer[],
+  modelMetadata: RatingModelMetadata | undefined,
+  previousPlayers: Map<number, RatingWirePlayerState>,
+  previousFramePlayers: RealtimePlayer[] | undefined,
+  previousMatch: RatingWireMatchState | undefined,
+  classificationBySlot: Map<number, RatingClassificationState>,
+) {
+  if (!reader.readBoolean()) {
+    previousPlayers.clear()
+    return undefined
+  }
+  if (!modelMetadata) throw new ArchiveError("Rating research data has no archive-level rating model metadata")
+  const matchMask = reader.readVarUintBig()
+  if ((matchMask >> 3n) !== 0n) throw new ArchiveError("Rating match mask contains unknown fields")
+  if (!previousMatch && matchMask !== 0x7n) throw new ArchiveError("Rating match chunk keyframe is incomplete")
+  const match: RatingWireMatchState = {
+    ratingBaseCondition: readXorUint(0, previousMatch?.ratingBaseCondition ?? 0),
+    matchPhase: readByte(1, previousMatch?.matchPhase ?? 0),
+    eventRewardBranch: readByte(2, previousMatch?.eventRewardBranch ?? 0),
+  }
+  for (let index = 0; index < players.length; index += 1) {
+    const prior = previousFramePlayers?.[index]?.slot === players[index].slot
+      ? previousPlayers.get(players[index].slot)
+      : undefined
+    const mask = reader.readVarUintBig()
+    const supportedMask = ((1n << 23n) - 1n) & ~((1n << 10n) | (1n << 12n) | (1n << 17n))
+    if ((mask & ~supportedMask) !== 0n) throw new ArchiveError("Rating player mask contains unknown fields")
+    if (!prior && mask !== supportedMask) throw new ArchiveError("Rating player chunk keyframe is incomplete")
+    const changed = (bit: number) => (mask & (1n << BigInt(bit))) !== 0n
+    const readPlayerInt = (bit: number, oldValue: number) => changed(bit) ? addSafe(oldValue, reader.readVarInt()) : oldValue
+    const readPlayerByte = (bit: number, oldValue: number) => changed(bit) ? reader.readByte() : oldValue
+    const readPlayerSByte = (bit: number, oldValue: number) => changed(bit) ? reader.readSByte() : oldValue
+    const readPlayerXorBig = (bit: number, oldValue: bigint) => changed(bit) ? oldValue ^ reader.readVarUintBig() : oldValue
+    const packedStats = changed(0) ? readRatingStatsDelta(reader, prior?.packedStats) : prior!.packedStats
+    const state: RatingWirePlayerState = {
+      packedStats,
+      internalW25: readPlayerInt(1, prior?.internalW25 ?? 0),
+      internalW24: readPlayerInt(2, prior?.internalW24 ?? 0),
+      specialW2C: readPlayerSByte(3, prior?.specialW2C ?? 0),
+      specialW2D: readPlayerSByte(4, prior?.specialW2D ?? 0),
+      specialW2E: readPlayerSByte(5, prior?.specialW2E ?? 0),
+      specialW2F: readPlayerByte(6, prior?.specialW2F ?? 0),
+      specialW30: readPlayerByte(7, prior?.specialW30 ?? 0),
+      specialW31: readPlayerByte(8, prior?.specialW31 ?? 0),
+      internalScore: readPlayerInt(9, prior?.internalScore ?? 0),
+      inPossessionRoleDuty: readPlayerXorBig(11, prior?.inPossessionRoleDuty ?? 0n),
+      outOfPossessionRoleDuty: readPlayerXorBig(13, prior?.outOfPossessionRoleDuty ?? 0n),
+      specialConditionA: readPlayerSByte(14, prior?.specialConditionA ?? 0),
+      specialConditionB: readPlayerSByte(15, prior?.specialConditionB ?? 0),
+      totalEligibleDuration: readPlayerInt(16, prior?.totalEligibleDuration ?? 0),
+      ratingEvents: [],
+      teamAEventCounterCandidate: 0,
+      teamBEventCounterCandidate: 0,
+      teamAEventAdjustmentCandidate: 0,
+      teamBEventAdjustmentCandidate: 0,
+    }
+    state.ratingEvents = changed(18) ? readRawRecordTail(reader, prior?.ratingEvents, 16) : prior!.ratingEvents
+    state.teamAEventCounterCandidate = readPlayerByte(19, prior?.teamAEventCounterCandidate ?? 0)
+    state.teamBEventCounterCandidate = readPlayerByte(20, prior?.teamBEventCounterCandidate ?? 0)
+    state.teamAEventAdjustmentCandidate = readPlayerByte(21, prior?.teamAEventAdjustmentCandidate ?? 0)
+    state.teamBEventAdjustmentCandidate = readPlayerByte(22, prior?.teamBEventAdjustmentCandidate ?? 0)
+    previousPlayers.set(players[index].slot, state)
+    const classification = deriveRatingClassification(
+      classificationBySlot.get(players[index].slot),
+      state.totalEligibleDuration,
+      state.inPossessionRoleDuty,
+      state.outOfPossessionRoleDuty,
+    )
+    classificationBySlot.set(players[index].slot, classification)
+    const archiveRatingInputs: ArchiveRatingInputs = {
+      statsPacked: state.packedStats,
+      internalW25: state.internalW25, internalW24: state.internalW24,
+      specialW2C: state.specialW2C, specialW2D: state.specialW2D, specialW2E: state.specialW2E,
+      specialW2F: state.specialW2F, specialW30: state.specialW30, specialW31: state.specialW31,
+      internalScore: state.internalScore,
+      specialConditionA: state.specialConditionA, specialConditionB: state.specialConditionB,
+      inPossessionRoleDuty: state.inPossessionRoleDuty,
+      outOfPossessionRoleDuty: state.outOfPossessionRoleDuty,
+      totalEligibleDuration: state.totalEligibleDuration,
+      classificationDurations: classification.classificationDurations,
+      qualityFlags: classification.qualityFlags,
+      ratingEvents: state.ratingEvents,
+    }
+    players[index].archiveRatingInputs = archiveRatingInputs
+  }
+  return match
+
+  function readByte(bit: number, oldValue: number) { return (matchMask & (1n << BigInt(bit))) === 0n ? oldValue : reader.readByte() }
+  function readXorUint(bit: number, oldValue: number) { return (matchMask & (1n << BigInt(bit))) === 0n ? oldValue : (oldValue ^ reader.readVarUint()) >>> 0 }
+}
+
+function readRatingModelMetadata(reader: ArchiveBufferReader): RatingModelMetadata {
+  const activeBaseline = reader.readVarInt()
+  const homeBackgroundInput = reader.readFloat32()
+  const awayBackgroundInput = reader.readFloat32()
+  if (activeBaseline < 0 || activeBaseline > 10_000) throw new ArchiveError("Rating active baseline is invalid")
+  if (!Number.isFinite(homeBackgroundInput) || !Number.isFinite(awayBackgroundInput)) {
+    throw new ArchiveError("Rating background input is invalid")
+  }
+  if (!reader.atEnd) throw new ArchiveError("Rating model metadata contains trailing bytes")
+  return { activeBaseline, homeBackgroundInput, awayBackgroundInput }
+}
+
+function readRatingStatsDelta(reader: ArchiveBufferReader, previous?: Uint8Array) {
+  const result = previous?.slice() ?? new Uint8Array(28)
+  const changed = reader.readVarUintBig()
+  if ((changed >> 28n) !== 0n) throw new ArchiveError("Rating stats delta contains unknown bits")
+  for (let index = 0; index < result.length; index += 1) {
+    if ((changed & (1n << BigInt(index))) !== 0n) result[index] ^= reader.readByte()
+  }
+  return result
+}
+
+function readRawRecordTail(reader: ArchiveBufferReader, previous: Uint8Array[] | undefined, recordSize: number) {
+  const prior = previous ?? []
+  const common = reader.readVarUint()
+  const tail = reader.readVarUint()
+  if (common > prior.length || common + tail > 4_096) throw new ArchiveError("Rating research record count exceeds the wire limit")
+  return [...prior.slice(0, common), ...Array.from({ length: tail }, () => reader.readBytes(recordSize))]
+}
+
 
 function readTeamDelta(reader: ArchiveBufferReader, previous: RealtimeTeam | undefined, supportedTeamFields: bigint): RealtimeTeam {
   const mask = reader.readVarUintBig()
@@ -918,6 +1105,7 @@ class ArchiveBufferReader {
   get length() { return this.bytes.byteLength }
 
   readByte() { this.ensure(1); return this.view.getUint8(this.offset++) }
+  readSByte() { this.ensure(1); return this.view.getInt8(this.offset++) }
   readBoolean() { return this.readByte() !== 0 }
   readInt16() { this.ensure(2); const value = this.view.getInt16(this.offset, true); this.offset += 2; return value }
   readUint16() { this.ensure(2); const value = this.view.getUint16(this.offset, true); this.offset += 2; return value }

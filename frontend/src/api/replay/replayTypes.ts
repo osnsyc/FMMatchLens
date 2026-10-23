@@ -5,6 +5,7 @@ import type {
   RealtimeMomentumPoint,
 } from "@/api/realtimeMatch"
 import type { LocalArchiveSummary } from "@/api/localArchive"
+import type { RatingWeightConfiguration } from "@/lib/ratingCalculator"
 import type {
   HeatmapSnapshot,
   MatchEvent,
@@ -39,6 +40,7 @@ export type ReplayArchive = {
   metadataTimeline: readonly RealtimeMatchMetadata[]
   frames: readonly ReplayFrame[]
   streamRevisions: readonly ReplayStreamRevision[]
+  ratingConfiguration?: RatingWeightConfiguration
 }
 
 export type HistoricalDerivationSnapshot = {

@@ -36,6 +36,7 @@ internal static class ArchiveReader
             var blocks = new List<BlockReference>();
             var metadataTimeline = new List<RealtimeMatchMetadata>();
             RealtimeMatchMetadata? metadata = null;
+            RatingModelMetadata? ratingModelMetadata = null;
             uint metadataRevision = 0;
             FinalSummary? finalSummary = null;
             long? endedAt = null;
@@ -87,6 +88,12 @@ internal static class ArchiveReader
                             metadata = decodedDelta.Metadata;
                             metadataTimeline.Add(metadata);
                             break;
+                        case ArchiveWriter.RatingModelMetadataRecord:
+                            if (ratingModelMetadata is not null)
+                                throw new ArchiveFormatException("duplicate_rating_model", "Archive contains more than one rating model metadata record.");
+                            ratingModelMetadata = ArchiveFrameCodec.DecodeRatingModelMetadata(
+                                ArchiveBinary.ReadLengthPrefixedPayload(reader, 32));
+                            break;
                         case ArchiveWriter.ChunkRecord:
                             var block = ReadBlockReference(stream, reader, recordStart, header.StructureMinor);
                             blocks.Add(block);
@@ -129,7 +136,7 @@ internal static class ArchiveReader
                 IReadOnlyList<RealtimeTickFrame> decoded;
                 try
                 {
-                    decoded = DecodeBlock(stream, block, header);
+                    decoded = DecodeBlock(stream, block, header, ratingModelMetadata);
                 }
                 catch (Exception ex) when (ex is InvalidDataException or EndOfStreamException or IOException)
                 {
@@ -161,7 +168,7 @@ internal static class ArchiveReader
             {
                 try
                 {
-                    var lastFrames = DecodeBlock(stream, summaryBlocks[^1], header);
+                    var lastFrames = DecodeBlock(stream, summaryBlocks[^1], header, ratingModelMetadata);
                     homeGoals = lastFrames[^1].Home.Goals;
                     awayGoals = lastFrames[^1].Away.Goals;
                 }
@@ -267,7 +274,11 @@ internal static class ArchiveReader
         return new BlockReference(recordStart, startTick, endTick, frameCount, rawLength, compressedLength, payloadCrc, (ArchiveCompression)compressionValue, payloadOffset);
     }
 
-    private static IReadOnlyList<RealtimeTickFrame> DecodeBlock(Stream stream, BlockReference block, ArchiveHeader header)
+    private static IReadOnlyList<RealtimeTickFrame> DecodeBlock(
+        Stream stream,
+        BlockReference block,
+        ArchiveHeader header,
+        RatingModelMetadata? ratingModelMetadata)
     {
         stream.Position = block.PayloadOffset;
         var compressed = new byte[block.CompressedLength];
@@ -299,7 +310,9 @@ internal static class ArchiveReader
         }
         if (raw.Length != block.UncompressedLength) throw new ArchiveFormatException("decompressed_length_mismatch", "Archive block decompressed length does not match its header.");
         if (ArchiveBinary.Crc32(raw) != block.PayloadCrc) throw new ArchiveFormatException("payload_crc_mismatch", "Archive block payload CRC does not match.");
-        var frames = ArchiveFrameCodec.Decode(raw, header.MatchId, block.FrameCount, header.StructureMinor);
+        var frames = ArchiveFrameCodec.Decode(
+            raw, header.MatchId, block.FrameCount, header.StructureMinor,
+            ratingModelMetadata);
         if (frames[0].Tick != block.StartTick || frames[^1].Tick != block.EndTick) throw new ArchiveFormatException("block_range_mismatch", "Decoded block range does not match its header.");
         return frames;
     }

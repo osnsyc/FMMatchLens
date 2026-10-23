@@ -205,6 +205,7 @@ export function App() {
         metadata: parsed.metadata,
         metadataTimeline: parsed.metadataTimeline,
         frames: parsed.frames,
+        ratingConfiguration: parsed.ratingConfiguration,
       })
     },
     [t]

@@ -4,7 +4,11 @@ import {
 } from "@/api/replay/replayDerivations"
 import { metadataAtTick } from "@/api/archiveMetadata"
 import type { ReplayArchive } from "@/api/replay/replayTypes"
-import { toMatchSnapshot } from "@/api/realtimeMatch"
+import {
+  calculateFrameRatingContributions,
+  toMatchSnapshot,
+  type RatingContribution,
+} from "@/api/realtimeMatch"
 import type { MatchSnapshot } from "@/types/match"
 
 type ReplayCheckpoint = {
@@ -24,6 +28,7 @@ export class ReplaySession {
   private readonly maxCheckpoints: number
   private readonly derivations = new HistoricalDerivations()
   private readonly checkpoints = new Map<number, ReplayCheckpoint>()
+  private readonly ratingKeyframes = new Map<number, readonly (RatingContribution | undefined)[]>()
   private index = -1
   private cachedSnapshot?: MatchSnapshot
   private disposed = false
@@ -107,6 +112,7 @@ export class ReplaySession {
     this.assertActive()
     this.derivations.reset()
     this.checkpoints.clear()
+    this.ratingKeyframes.clear()
     this.index = -1
     this.processedFrames = 0
     this.cachedSnapshot = undefined
@@ -117,18 +123,45 @@ export class ReplaySession {
     this.disposed = true
     this.derivations.reset()
     this.checkpoints.clear()
+    this.ratingKeyframes.clear()
     this.cachedSnapshot = undefined
   }
 
   private buildSnapshot() {
+    const ratingContributions = this.ratingContributionsAt(this.index)
     this.cachedSnapshot = replaySnapshot(
       this.archive,
       this.index,
       this.derivations,
       this.cachedSnapshot,
-      this.allowLocalAssets
+      this.allowLocalAssets,
+      ratingContributions,
     )
     return this.cachedSnapshot
+  }
+
+  private ratingContributionsAt(index: number) {
+    const isKeyframe = index === 0 || index % this.checkpointInterval === 0
+    if (!isKeyframe) return undefined
+    const cached = this.ratingKeyframes.get(index)
+    if (cached) {
+      if (index !== 0) {
+        this.ratingKeyframes.delete(index)
+        this.ratingKeyframes.set(index, cached)
+      }
+      return cached
+    }
+    const calculated = calculateFrameRatingContributions(
+      this.archive.frames[index],
+      this.archive.ratingConfiguration,
+    )
+    this.ratingKeyframes.set(index, calculated)
+    while (this.ratingKeyframes.size > this.maxCheckpoints) {
+      const removable = [...this.ratingKeyframes.keys()].find((key) => key !== 0)
+      if (removable == null) break
+      this.ratingKeyframes.delete(removable)
+    }
+    return calculated
   }
 
   private saveCheckpoint(index: number) {
@@ -204,7 +237,8 @@ function replaySnapshot(
   index: number,
   derivations: HistoricalDerivations,
   previous?: MatchSnapshot,
-  allowLocalAssets = true
+  allowLocalAssets = true,
+  ratingContributions?: readonly (RatingContribution | undefined)[],
 ) {
   const frame = archive.frames[index]
   const historical = derivations.snapshot(frame.tick)
@@ -224,7 +258,9 @@ function replaySnapshot(
     historical.rollingMomentum,
     undefined,
     previous,
-    allowLocalAssets
+    allowLocalAssets,
+    archive.ratingConfiguration,
+    ratingContributions,
   )
 }
 

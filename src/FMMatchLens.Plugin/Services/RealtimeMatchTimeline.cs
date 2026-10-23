@@ -141,7 +141,10 @@ internal sealed class RealtimeMatchTimeline
                 Home: raw.Home,
                 Away: raw.Away,
                 Players: players,
-                MomentumEventUpdates: momentumEventUpdates);
+                MomentumEventUpdates: momentumEventUpdates)
+            {
+                RatingResearch = raw.RatingResearch,
+            };
 
             if (_chunks.Count == 0 || _lastChunkCount == ChunkSize)
             {
@@ -293,6 +296,34 @@ internal sealed class RealtimeMatchTimeline
         }
     }
 
+    public RealtimeTickFrame? GetCurrentWireFrame()
+    {
+        lock (_gate)
+        {
+            return _current is null ? null : ToWireFrame(_current, null);
+        }
+    }
+
+    internal static RealtimeTickFrame ToWireFrame(
+        RealtimeTickFrame frame,
+        RealtimeTickFrame? previous)
+    {
+        var previousBySlot = previous?.Players.ToDictionary(player => player.Slot);
+        var players = frame.Players.Select(player =>
+        {
+            RatingResearchPlayerData? priorResearch = null;
+            if (previousBySlot is not null && previousBySlot.TryGetValue(player.Slot, out var prior))
+            {
+                priorResearch = prior.RatingResearch;
+            }
+            var ratingInputs = player.RatingResearch is null
+                ? null
+                : RatingResearchPlayerWireData.From(player.RatingResearch, priorResearch);
+            return player with { RatingInputs = ratingInputs };
+        }).ToArray();
+        return frame with { Players = players };
+    }
+
     public RealtimeMatchMetadata? GetMetadata()
     {
         lock (_gate)
@@ -397,7 +428,14 @@ internal sealed class RealtimeMatchTimeline
                 }
             }
 
-            return new RealtimeFrameSlice(_matchId, _status, _frameCount, result);
+            RealtimeTickFrame? previousWireSource = null;
+            var wireFrames = result.Select(frame =>
+            {
+                var wire = ToWireFrame(frame, previousWireSource);
+                previousWireSource = frame;
+                return wire;
+            }).ToArray();
+            return new RealtimeFrameSlice(_matchId, _status, _frameCount, wireFrames);
         }
     }
 

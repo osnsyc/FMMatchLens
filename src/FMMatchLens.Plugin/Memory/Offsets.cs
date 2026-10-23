@@ -9,6 +9,7 @@ internal static class Offsets
         public const int CompetitionPrimaryColour = 0x68C;
         public const int CompetitionSecondaryColour = 0x690;
         public const int CompetitionTertiaryColour = 0x694;
+        public const int EventRewardBranch = 0x740;
         public const int BallPosition = 0x126B0;
         // public const int MatchPlayersCount = 0x13A20; //deprecated
         // public const int FirstMatchPlayer = 0x13A28;  //deprecated
@@ -16,17 +17,18 @@ internal static class Offsets
         public const int WaitingReceiver = 0x13D10;
         public const int HomeTeam = 0x14100;
         public const int AwayTeam = 0x14108;
-        public const int StadiumColourObject = 0x14178;
         public const int PreviousBallHolder = 0x14118;
         public const int CurrentBallHolder = 0x14120;
         public const int Referee = 0x14170;
+        public const int StadiumColourObject = 0x14178;
         public const int PossessionTeam = 0x141C0;
-        public const int DisplayTick = 0x141EC;
         public const int AssistantRefereeOne = 0x141D0;
         public const int AssistantRefereeTwo = 0x141D8;
         public const int FourthOfficialOne = 0x141E0;
         public const int FourthOfficialTwo = 0x141E8;
+        public const int DisplayTick = 0x141EC;
         public const int Tick = 0x14278;
+        public const int RatingBaseCondition = 0x1428C;
         public const int Period = 0x142D4;
         public const int LifecycleStateA = 0x142F8;
         public const int LifecycleStateB = 0x142F9;
@@ -306,14 +308,18 @@ internal static class Offsets
         // +0x0 and zero-terminated text begins at +0x4.
         public const int ShirtName = 0x38;
         // Per-tick movement position; +0x80/+0x84 can hold a sparse path anchor.
-        public const int PositionX = 0x140;
-        public const int PositionY = 0x144;
         public const int PositionXAlt = 0x80;
         public const int PositionYAlt = 0x84;
+        public const int PositionX = 0x140;
+        public const int PositionY = 0x144;
+        public const int Match = 0x160;
         public const int PositionHistory = 0x170;
         public const int UnknownFloatArray = 0x180;
         public const int TimerStartTick = 0x200;
         public const int TimerEndTick = 0x208;
+        public const int RatingContext288 = 0x288;
+        public const int RatingContext290 = 0x290;
+        public const int RatingContext298 = 0x298;
         public const int MatchTick = 0x2A8;
         public const int ShirtNumber = 0xC9C;
         public const int InPossessionPosition = 0xD50;
@@ -321,6 +327,40 @@ internal static class Offsets
         public const int OutOfPossessionPosition = 0xDE0;
         public const int OutOfPossessionRoleDuty = 0xE20;
         public const int Stats = 0x1800;
+        public const int RatingEventsBegin = 0x1A88;
+        public const int RatingEventsEnd = 0x1A90;
+        public const int CategoryHistoryBegin = 0x1AA0;
+        public const int CategoryHistoryEnd = 0x1AA8;
+        public const int SpecialW2C = 0x1ACD;
+        public const int SpecialW2E = 0x1ACE;
+        public const int SpecialW2D = 0x1ACF;
+        public const int InternalW25 = 0x1B88;
+        public const int InternalW24 = 0x1C14;
+        public const int RawInternalRating = 0x1D24;
+        public const int SpecialW2F = 0x1E20;
+        public const int SpecialW30 = 0x1E21;
+        public const int SpecialW31 = 0x1E22;
+    }
+
+    public static class RatingContext
+    {
+        // Raw team-context inputs used by the W04/W05 event-reward branch.
+        // Their football semantics and the exact mode-dependent expression are
+        // still candidates, so retain the original bytes without relabelling.
+        public const int EventAdjustmentCandidate = 0x116;
+        public const int SpecialCondition = 0x62D;
+        public const int EventCounterCandidate = 0x62E;
+        public const int MatchBackgroundInput = 0x2A48;
+    }
+
+    public static class RatingEvent
+    {
+        public const int Size = 0x10;
+    }
+
+    public static class RatingCategoryHistory
+    {
+        public const int Size = 0x28;
     }
 
     public static class PositionHistory
@@ -665,7 +705,7 @@ internal static class Offsets
         public const int Xg = 0x1C;
         public const int XgRelatedUnconfirmed = 0x20;
         public const int Xa = 0x24;
-        public const int XaRelatedUnconfirmed = 0x28;
+        public const int OpenPlayXa = 0x28;
         public const int StarterSubstituteFlag = 0x5C;
         public const int DistanceM = 0x68;
         public const int EventTimestamp = 0x78;
@@ -676,6 +716,7 @@ internal static class Offsets
         public const int OverallPhysicalCondition = 0x89;
         public const int MatchSharpness = 0x8A;
         public const int Goals = 0x8B;
+        public const int PenaltyAttempts = 0x8D;
         public const int Penalties = 0x8E;
         public const int OwnGoals = 0x8F;
         public const int Shots = 0x90;
@@ -686,10 +727,16 @@ internal static class Offsets
         public const int SavesHeld = 0x99;
         public const int SavesParried = 0x9A;
         public const int SavesTipped = 0x9B;
+        public const int DefensiveBlocks = 0x9C;
+        public const int PenaltiesFaced = 0x9D;
+        public const int PenaltiesSaved = 0x9E;
         public const int Assists = 0x9F;
+        public const int ChanceInvolvementsCandidate = 0xA0;
         public const int Dribbles = 0xA1;
         public const int Fouls = 0xA3;
         public const int Fouled = 0xA4;
+        public const int YellowCards = 0xA6;
+        public const int RedCards = 0xA7;
         public const int SubbedOffMinute = 0xAA;
         public const int SubbedOnMinute = 0xAF;
         public const int Crosses = 0xB5;
@@ -697,17 +744,33 @@ internal static class Offsets
         public const int Passes = 0xBA;
         public const int PassesCompleted = 0xBB;
         public const int KeyPasses = 0xBC;
+        public const int OpenPlayKeyPasses = 0xBD;
         public const int TacklesAttempted = 0xBE;
         public const int TacklesWon = 0xBF;
         public const int KeyTackles = 0xC0;
         public const int Aerials = 0xC2;
         public const int AerialsWon = 0xC3;
         public const int Interceptions = 0xC7;
+        public const int ErrorsLeadingToShotOrGoalCandidate = 0xC8;
+        public const int TeamGoalsWhileOnPitch = 0xC9;
+        public const int TeamConcededWhileOnPitch = 0xCA;
         public const int ThrowIns = 0xCB;
         public const int Corners = 0xCC;
         public const int DefensiveFreeKicks = 0xCD;
         public const int AttackingFreeKicks = 0xCE;
+        public const int PossessionWon = 0xCF;
         public const int Clearances = 0xD1;
         public const int ShotsFaced = 0xD5;
+        public const int CrossAttemptsTypeOne = 0xD7;
+        public const int CrossAttemptsTypeTwo = 0xD8;
+        public const int CrossCompletionsTypeOne = 0xD9;
+        public const int CrossCompletionsTypeTwo = 0xDA;
+        public const int ShortPassesAttemptedCandidate = 0xDC;
+        public const int LongPassesAttemptedCandidate = 0xDE;
+        public const int ShortPassesCompletedCandidate = 0xE0;
+        public const int LongPassesCompletedCandidate = 0xE2;
+
+        // Inclusive of the highest-address rating input above (an Int16 at +0xE2).
+        public const int RatingInputReadableSize = 0xE4;
     }
 }

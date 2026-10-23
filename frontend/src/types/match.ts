@@ -380,6 +380,8 @@ export type MatchPlayer = {
   inPossession?: PlayerTacticalAssignment
   outOfPossession?: PlayerTacticalAssignment
   rating?: number
+  ratingContribution?: import("@/api/realtimeMatch").RatingContribution
+  resolveRatingContribution?: () => import("@/api/realtimeMatch").RatingContribution | undefined
   age?: number
   isStarter: boolean
   isOnPitch: boolean

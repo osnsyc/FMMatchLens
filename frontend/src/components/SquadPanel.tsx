@@ -46,6 +46,7 @@ import { findNearestPositionPlayerIds } from "@/lib/playerPositionMatch"
 import { decodePlayerTraits } from "@/lib/playerTraits"
 import { sameSquadPlayers } from "@/lib/matchRenderEquality"
 import { exploreTourCloseOverlaysEventName } from "@/features/explore-tour/exploreTourEvents"
+import type { RatingContribution, RatingContributionGroup } from "@/api/realtimeMatch"
 
 type SquadPanelProps = {
   title: string
@@ -879,6 +880,9 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   const [hoverOpen, setHoverOpen] = useState(false)
   const pinRequestedRef = useRef(false)
   const open = !popupSuppressed && (pinned || (hoverEnabled && hoverOpen))
+  const ratingContribution = open
+    ? player.ratingContribution ?? player.resolveRatingContribution?.()
+    : undefined
   const isGoalkeeper = (player.positionFamiliarities?.GK ?? 0) >= 15 || player.position === "GK"
   const attributeColumns = player.attributes
     ? buildAttributeColumns(isGoalkeeper)
@@ -1030,6 +1034,9 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
                 {t("playerProfile.noAttributes")}
               </div>
             )}
+            {ratingContribution && (
+              <RatingContributionPanel contribution={ratingContribution} teamColor={teamColor} />
+            )}
           </CardContent>
         </Card>
       </TooltipContent>}
@@ -1051,8 +1058,105 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   previous.player.inPossession === next.player.inPossession &&
   previous.player.portraitUrl === next.player.portraitUrl &&
   previous.player.profile === next.player.profile &&
-  previous.player.attributes === next.player.attributes
+  previous.player.attributes === next.player.attributes &&
+  previous.player.ratingContribution === next.player.ratingContribution &&
+  previous.player.resolveRatingContribution === next.player.resolveRatingContribution
 )
+
+const ratingContributionGroups: RatingContributionGroup[] = [
+  "BaseContext", "Shooting", "Creativity", "Passing", "Defence", "Goalkeeping",
+]
+
+const ratingGroupLabels: Record<RatingContributionGroup, { zh: string; en: string }> = {
+  BaseContext: { zh: "基础评分与上下文", en: "Base & Context" },
+  Shooting: { zh: "射门", en: "Shooting" },
+  Creativity: { zh: "创造力", en: "Creativity" },
+  Passing: { zh: "传球", en: "Passing" },
+  Defence: { zh: "防守", en: "Defence" },
+  Goalkeeping: { zh: "门将", en: "Goalkeeping" },
+}
+
+function RatingContributionPanel({
+  contribution,
+  teamColor,
+}: {
+  contribution: RatingContribution
+  teamColor: string
+}) {
+  const { i18n } = useTranslation()
+  const zh = (i18n.resolvedLanguage ?? i18n.language).startsWith("zh")
+  const values = ratingContributionGroups.map((group) => contribution.groupContributionsPostFactor[group] ?? 0)
+  const maximum = Math.max(1, ...values.map((value) => Math.abs(value)))
+  return (
+    <section className="col-span-3 mt-3 border-t pt-3">
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-xs font-bold uppercase tracking-wide" style={{ color: teamColor }}>
+            {zh ? "球员评分构成" : "Rating contribution"}
+          </h3>
+          <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">
+            {zh
+              ? "按活动基础值、全局系数与时长插值重建；各分类显示最终评分增减。"
+              : "Reconstructed with the active baseline, global factor, and duration interpolation; groups show final rating-point changes."}
+          </p>
+        </div>
+        <div className="shrink-0 text-right text-[10px] tabular-nums text-muted-foreground">
+          <div>{zh ? "原生评分" : "Native rating"} <span className="font-semibold text-foreground">{contribution.nativeRating.toFixed(2)}</span></div>
+          <div>{zh ? "内部评分" : "Internal score"} <span className="font-semibold text-foreground">{contribution.internalScore}</span></div>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-x-4 gap-y-1.5">
+        {ratingContributionGroups.map((group) => {
+          const value = contribution.groupContributionsPostFactor[group] ?? 0
+          const topTerms = contribution.terms
+            .filter((term) => term.group === group)
+            .sort((left, right) => Math.abs(right.postFactorContribution) - Math.abs(left.postFactorContribution))
+            .slice(0, 5)
+          return (
+            <Tooltip key={group}>
+              <TooltipTrigger render={<div className="min-w-0" />}>
+                <div className="flex items-center justify-between gap-2 text-[10px]">
+                  <span className="truncate text-muted-foreground">{ratingGroupLabels[group][zh ? "zh" : "en"]}</span>
+                  <span className={value > 0 ? "text-emerald-600" : value < 0 ? "text-rose-600" : "text-muted-foreground"}>
+                    {value > 0 ? "+" : ""}{(value / 1000).toFixed(2)}
+                  </span>
+                </div>
+                <div className="relative mt-0.5 h-1.5 overflow-hidden rounded bg-muted">
+                  <span className="absolute inset-y-0 left-1/2 w-px bg-border" />
+                  {value !== 0 && <span
+                    className={`absolute inset-y-0 rounded ${value > 0 ? "left-1/2 bg-emerald-500" : "right-1/2 bg-rose-500"}`}
+                    style={{ width: `${Math.max(1, Math.abs(value) / maximum * 50)}%` }}
+                  />}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-80 text-[10px]">
+                <div className="font-semibold">{ratingGroupLabels[group][zh ? "zh" : "en"]}: {value > 0 ? "+" : ""}{(value / 1000).toFixed(3)}</div>
+                <div className="mb-1 text-muted-foreground">{zh ? "最终评分点；明细依次为因子前与因子后内部值" : "Final rating points; terms show pre-factor then post-factor internal values."}</div>
+                {topTerms.length > 0 ? topTerms.map((term) => (
+                  <div key={`${term.categoryBit}-${term.index}`} className="tabular-nums">
+                    W{term.index.toString(16).toUpperCase().padStart(2, "0")} · Bit {term.categoryBit}: {term.input} × {term.coefficient} → {term.contribution.toFixed(1)} → {term.postFactorContribution.toFixed(1)}
+                  </div>
+                )) : <div>{zh ? "无非零项" : "No non-zero terms"}</div>}
+              </TooltipContent>
+            </Tooltip>
+          )
+        })}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[9px] text-muted-foreground">
+        <span>{zh ? "重建残差" : "Reconstruction residual"}: {contribution.reconstructionResidual}</span>
+        <span>{zh ? "全局系数" : "Global factor"}: {contribution.effectiveFactor.toFixed(4)} (#{contribution.selectedFactorIndex})</span>
+        <span>{zh ? "预测内部评分" : "Predicted internal"}: {contribution.predictedInternalScore}</span>
+        <span>{zh ? "分类时长" : "Classified duration"}: {contribution.classificationDurations.map((item) => `Bit ${item.categoryBit}=${item.duration}`).join(", ") || "-"}</span>
+      </div>
+      {contribution.qualityFlags.some((flag) => flag.startsWith("missing_") || flag.startsWith("unmapped_")) && (
+        <p className="mt-1 text-[9px] text-amber-600">
+          {zh ? "数据来源/完整性提示：" : "Source/data warning: "}
+          {contribution.qualityFlags.filter((flag) => flag.startsWith("missing_") || flag.startsWith("unmapped_")).join(", ")}
+        </p>
+      )}
+    </section>
+  )
+}
 
 export function PlayerComparisonPopup({
   leftPlayer,

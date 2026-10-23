@@ -1,4 +1,5 @@
 using FMMatchLens.Plugin.Diagnostics;
+using FMMatchLens.Plugin.Domain;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -25,6 +26,7 @@ internal sealed class LocalApiServer : IDisposable
     private CancellationTokenSource? _cancellation;
     private Timer? _realtimePublishTimer;
     private int _lastPublishedRealtimeTick = -1;
+    private RealtimeTickFrame? _lastPublishedRealtimeFrame;
     private string? _publishedFormationMatchId;
     private int _nextPublishedFormationIndex;
     private int _isPublishingRealtime;
@@ -52,6 +54,7 @@ internal sealed class LocalApiServer : IDisposable
         _listener.Start();
         _webSockets.Start();
         _lastPublishedRealtimeTick = -1;
+        _lastPublishedRealtimeFrame = null;
         _publishedFormationMatchId = null;
         _nextPublishedFormationIndex = 0;
         _realtimePublishTimer = new Timer(
@@ -131,7 +134,10 @@ internal sealed class LocalApiServer : IDisposable
             if (context.Request.IsWebSocketRequest && context.Request.Url?.AbsolutePath == "/ws")
             {
                 var webSocketContext = await context.AcceptWebSocketAsync(null).ConfigureAwait(false);
-                await _webSockets.AddAsync(webSocketContext.WebSocket, cancellationToken).ConfigureAwait(false);
+                await _webSockets.AddAsync(
+                    webSocketContext.WebSocket,
+                    () => _timeline.GetCurrentWireFrame(),
+                    cancellationToken).ConfigureAwait(false);
                 return;
             }
 
@@ -170,7 +176,7 @@ internal sealed class LocalApiServer : IDisposable
                     }, cancellationToken).ConfigureAwait(false);
                     break;
                 case "/api/match/current":
-                    await WriteJsonAsync(context.Response, _timeline.GetCurrent(), cancellationToken).ConfigureAwait(false);
+                    await WriteJsonAsync(context.Response, _timeline.GetCurrentWireFrame(), cancellationToken).ConfigureAwait(false);
                     break;
                 case "/api/match/meta":
                     await WriteJsonAsync(context.Response, _timeline.GetMetadata(), cancellationToken).ConfigureAwait(false);
@@ -337,8 +343,14 @@ internal sealed class LocalApiServer : IDisposable
             var frame = _timeline.GetCurrent();
             if (frame is not null && frame.Tick != _lastPublishedRealtimeTick)
             {
+                if (_lastPublishedRealtimeFrame?.MatchId != frame.MatchId)
+                {
+                    _lastPublishedRealtimeFrame = null;
+                }
                 _lastPublishedRealtimeTick = frame.Tick;
-                await _webSockets.BroadcastAsync("realtime_tick", frame, CancellationToken.None).ConfigureAwait(false);
+                var wireFrame = RealtimeMatchTimeline.ToWireFrame(frame, _lastPublishedRealtimeFrame);
+                _lastPublishedRealtimeFrame = frame;
+                await _webSockets.BroadcastAsync("realtime_tick", wireFrame, CancellationToken.None).ConfigureAwait(false);
             }
 
             await PublishFormationChangesAsync().ConfigureAwait(false);

@@ -88,6 +88,8 @@ function sameSquadPlayer(left: MatchPlayer, right: MatchPlayer) {
     left.inPossession === right.inPossession &&
     left.outOfPossession === right.outOfPossession &&
     left.rating === right.rating &&
+    left.ratingContribution === right.ratingContribution &&
+    left.resolveRatingContribution === right.resolveRatingContribution &&
     left.age === right.age &&
     left.isStarter === right.isStarter &&
     left.isOnPitch === right.isOnPitch &&

@@ -39,12 +39,20 @@ internal static class ArchiveWireFormat
     // XY, integer-meter cumulative distance deltas, and separate distance/stats
     // change flags, optional speed/angle deltas with cyclic angle encoding,
     // VarUInt movement keyframes, and per-axis football change flags define
-    // the current 2.7. Earlier 2.7 layouts are not supported.
+    // the 2.7 layout. The compact player-rating payload defines 2.8: rating-only
+    // PlayerStats fields are byte-delta encoded while fields already present in
+    // PlayerTickData are reused; raw rating events, IP/OOP RoleDuty, and total eligible duration
+    // let the frontend reconstruct classification durations along the timeline;
+    // raw per-team W04/W05 context candidates are byte-delta encoded;
+    // match-level inputs are change-masked; the active 6700 baseline, both
+    // per-team +0x2A48 background inputs are stored once per archive. Role-to-
+    // category mappings and observed coefficients are frontend interpretation
+    // rules and are not stored in the archive.
     // The file-header version is the sole authority for payload decoding; do not
     // add an independent version byte inside ArchiveFrameCodec payloads.
     internal const ushort StructureMajor = 2;
     internal const ushort FirstSupportedStructureMinor = 1;
-    internal const ushort StructureMinor = 7;
+    internal const ushort StructureMinor = 8;
     internal const byte Legacy21BlockStructure = 1;
     internal const byte Legacy21FramePayloadMarker = 1;
 }

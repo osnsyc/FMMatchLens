@@ -1,5 +1,6 @@
 import type { RealtimeFrame, RealtimeMatchMetadata } from "@/api/realtimeMatch"
 import { parseArchiveFile } from "@/api/archiveParser"
+import type { RatingWeightConfiguration } from "@/lib/ratingCalculator"
 
 export type LocalArchiveSummary = {
   matchId: string
@@ -21,6 +22,7 @@ export type ParsedLocalArchive = {
   metadata?: RealtimeMatchMetadata
   metadataTimeline: RealtimeMatchMetadata[]
   frames: RealtimeFrame[]
+  ratingConfiguration?: RatingWeightConfiguration
 }
 
 export function parseLocalArchive(buffer: ArrayBuffer, fileName: string): Promise<ParsedLocalArchive> {

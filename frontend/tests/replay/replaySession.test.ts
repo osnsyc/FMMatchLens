@@ -14,6 +14,8 @@ import {
   buildRollingMomentumTimeline,
   buildTacticalEvents,
   buildXgTimeline,
+  RatingContributionResolverCache,
+  toMatchSnapshot,
 } from "@/api/realtimeMatch"
 import { preprocessReplayArchive } from "@/api/replay/replayPreprocessor"
 import {
@@ -23,6 +25,109 @@ import {
 import { frame, replayFixture } from "./replayTestFixtures"
 
 describe("ReplaySession", () => {
+  it("defers live contribution work and reuses the resolver for unchanged inputs", () => {
+    const current = frame(0)
+    const weights = Array<number>(52).fill(0)
+    weights[10] = 100
+    current.ratingModel = {
+      ratingBaseCondition: 0, matchPhase: 0, eventRewardBranch: 0,
+      activeBaseline: 6_700, homeBackgroundInput: 0, awayBackgroundInput: 0,
+    }
+    current.players[0].shots = 2
+    current.players[0].archiveRatingInputs = {
+      statsPacked: new Uint8Array(28),
+      internalW25: 0, internalW24: 0,
+      specialW2C: 0, specialW2D: 0, specialW2E: 0,
+      specialW2F: 0, specialW30: 0, specialW31: 0,
+      internalScore: 6_900,
+      specialConditionA: 0, specialConditionB: 0,
+      inPossessionRoleDuty: 0x80n, outOfPossessionRoleDuty: 0n,
+      totalEligibleDuration: 10_800,
+      classificationDurations: [{ categoryBit: 7, duration: 10_800 }],
+      qualityFlags: [], ratingEvents: [],
+    }
+    const configuration = {
+      weightsByCategoryBit: new Map([[7, weights]]),
+    }
+    const cache = new RatingContributionResolverCache()
+    const first = toMatchSnapshot(
+      current, undefined, undefined, [], undefined, [], [], [], [], [],
+      undefined, true, configuration, undefined, cache,
+    ).players[0]
+    const second = toMatchSnapshot(
+      { ...current, tick: 1 }, undefined, undefined, [], undefined, [], [], [], [], [],
+      undefined, true, configuration, undefined, cache,
+    ).players[0]
+
+    expect(first.ratingContribution).toBeUndefined()
+    expect(first.resolveRatingContribution).toBe(second.resolveRatingContribution)
+    const contribution = first.resolveRatingContribution?.()
+    expect(contribution?.groupContributionsPreFactor.Shooting).toBe(200)
+    expect(second.resolveRatingContribution?.()).toBe(contribution)
+  })
+
+  it("recalculates compact archive rating inputs at the selected timeline frame", async () => {
+    const fixture = replayFixture()
+    fixture.frames = fixture.frames.slice(0, 2)
+    const weights = Array<number>(52).fill(0)
+    weights[10] = 100
+    fixture.frames.forEach((current, index) => {
+      const packed = new Uint8Array(28)
+      current.players[0].shots = index * 2
+      current.ratingModel = {
+        ratingBaseCondition: 0,
+        matchPhase: 0,
+        eventRewardBranch: 0,
+        activeBaseline: 6_700,
+        homeBackgroundInput: 0,
+        awayBackgroundInput: 0,
+      }
+      current.players[0].ratingInputs = {
+        statsPacked: btoa(String.fromCharCode(...packed)),
+        internalW25: 0,
+        internalW24: 0,
+        specialW2C: 0,
+        specialW2D: 0,
+        specialW2E: 0,
+        specialW2F: 0,
+        specialW30: 0,
+        specialW31: 0,
+        rawInternalRating: index === 0 ? 6_700 : 6_900,
+        specialConditionA: 0,
+        specialConditionB: 0,
+        inPossessionRoleDuty: "128",
+        outOfPossessionRoleDuty: "0",
+        totalEligibleDuration: 10_800,
+        ratingEventsCommonLength: 0,
+        ratingEventsTail: [],
+      }
+    })
+    const archive = await preprocessReplayArchive({
+      ...fixture,
+      ratingConfiguration: {
+        weightsByCategoryBit: new Map([[7, weights]]),
+      },
+    })
+    const session = new ReplaySession(archive, {
+      checkpointInterval: 1,
+      maxCheckpoints: 2,
+    })
+
+    expect(archive.frames.every((frame) =>
+      frame.players.every((player) => player.ratingContribution == null)
+    )).toBe(true)
+
+    const before = session.advanceTo(0).players[0].ratingContribution
+    const after = session.advanceTo(1).players[0].ratingContribution
+    const rewound = session.seek(0).players[0].ratingContribution
+
+    expect(before?.groupContributionsPreFactor.Shooting).toBe(0)
+    expect(after?.groupContributionsPreFactor.Shooting).toBe(200)
+    expect(after?.predictedInternalScore).toBe(6_900)
+    expect(rewound?.groupContributionsPreFactor.Shooting).toBe(0)
+    expect(rewound).toBe(before)
+  })
+
   it("matches the legacy derivation builders at every frame", async () => {
     const fixture = replayFixture()
     const archive = await preprocessReplayArchive(fixture, { batchSize: 2 })

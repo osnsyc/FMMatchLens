@@ -40,6 +40,7 @@ internal sealed class GameMatchTickHook : IDisposable
     // Keep this limit in sync with ArchiveFrameCodec.MaxTrajectoryPoints.
     private const int MaxStoredMomentumTrajectoryPoints = 4;
     private const int MonitoredMomentumEventCount = 4;
+    private const int ActiveRatingBaseline = 6_700;
 
     private readonly RealtimeMatchTimeline _timeline;
     private readonly MatchUpdateDelegate _hookDelegate;
@@ -52,7 +53,12 @@ internal sealed class GameMatchTickHook : IDisposable
     private readonly Dictionary<nint, CandidateState> _candidates = new();
     private readonly Dictionary<nint, PreLockFrameCache> _preLockFrames = new();
     private readonly Dictionary<nint, NativeMomentumCaptureState> _nativeMomentumStates = new();
+    private readonly Dictionary<(nint Match, int Slot), RatingResearchPlayerData> _lastRatingResearchBySlot = new();
+    private readonly Dictionary<nint, (float Home, float Away)> _ratingBackgroundByMatch = new();
+    private readonly Dictionary<nint, int> _lastRatingCapturedTickByMatch = new();
+    private readonly Dictionary<nint, RatingResearchMatchData?> _lastRatingMatchByMatch = new();
     private readonly object _nativeMomentumGate = new();
+    private readonly object _ratingCaptureGate = new();
     private readonly object _animatedUpdateGate = new();
     private readonly ConcurrentDictionary<nint, byte> _terminalMatches = new();
     private readonly ConcurrentQueue<PendingDiagnosticMessage> _pendingDiagnosticMessages = new();
@@ -140,16 +146,17 @@ internal sealed class GameMatchTickHook : IDisposable
         GamePluginBuild build;
         string modulePath;
         string sha256;
+        var supportedBuild = false;
         try
         {
-            var isSupportedBuild = GamePluginBuildCatalog.TryResolve(
+            supportedBuild = GamePluginBuildCatalog.TryResolve(
                 moduleBase,
                 out build,
                 out modulePath,
                 out sha256);
             PluginLogger.Info($"Detected game_plugin.dll: sha256={sha256}, path={modulePath}.");
 
-            if (!isSupportedBuild)
+            if (!supportedBuild)
             {
                 PluginLogger.Warning(
                     $"Unsupported game_plugin.dll build; using fallback GAME_MATCH hook RVA " +
@@ -230,6 +237,7 @@ internal sealed class GameMatchTickHook : IDisposable
         _detour = null;
         _original = null;
         _started = false;
+        ClearRatingCaptureState();
         PluginLogger.Debug("GAME_MATCH match-update hook stopped.");
     }
 
@@ -482,6 +490,7 @@ internal sealed class GameMatchTickHook : IDisposable
             frame.HalfPitchLength = 0;
             frame.MomentumCount = 0;
             frame.RollingMomentumCount = 0;
+            frame.RatingResearch = null;
             frame.PossessionTeam = record.PossessionTeam == record.HomeTeam
                 ? TeamSide.Home
                 : record.PossessionTeam == record.AwayTeam
@@ -499,20 +508,25 @@ internal sealed class GameMatchTickHook : IDisposable
                 out frame.RollingMomentumCount);
             CaptureNativeMomentumEvents(record.MatchAddress, frame);
 
+            Span<nint> capturedMatchPlayers = stackalloc nint[RawRealtimeTickFrame.MaxPlayers];
             CaptureTeamPlayerFrames(
                 frame,
                 record.HomeTeam,
                 record.HomePlayerCount,
                 TeamSide.Home,
                 slotOffset: 0,
-                record.CurrentBallHolder);
+                record.CurrentBallHolder,
+                capturedMatchPlayers);
             CaptureTeamPlayerFrames(
                 frame,
                 record.AwayTeam,
                 record.AwayPlayerCount,
                 TeamSide.Away,
                 slotOffset: record.HomePlayerCount,
-                record.CurrentBallHolder);
+                record.CurrentBallHolder,
+                capturedMatchPlayers);
+
+            CaptureRatingFrameData(record.MatchAddress, record.Tick, frame, capturedMatchPlayers);
 
             ResolveDerivedTeamStats(frame);
             ResolveMomentumEventPlayerIds(
@@ -548,7 +562,8 @@ internal sealed class GameMatchTickHook : IDisposable
         int playerCount,
         TeamSide teamSide,
         int slotOffset,
-        nint ballHolder)
+        nint ballHolder,
+        Span<nint> capturedMatchPlayers)
     {
         for (var teamSlot = 0; teamSlot < playerCount && frame.PlayerCount < RawRealtimeTickFrame.MaxPlayers; teamSlot++)
         {
@@ -561,6 +576,7 @@ internal sealed class GameMatchTickHook : IDisposable
                 continue;
             }
 
+            capturedMatchPlayers[frame.PlayerCount] = matchPlayer;
             frame.Players[frame.PlayerCount++] = player;
             if (player.IsBallHolder)
             {
@@ -854,8 +870,8 @@ internal sealed class GameMatchTickHook : IDisposable
 
         var stats = Marshal.ReadIntPtr(matchPlayer + Offsets.MatchPlayer.Stats);
         if (stats == default || !VirtualMemory.IsReadable(
-                stats + Offsets.PlayerStats.NonUniqueMatchStatKey,
-                Offsets.PlayerStats.ShotsFaced - Offsets.PlayerStats.NonUniqueMatchStatKey + 1))
+                stats,
+                Offsets.PlayerStats.RatingInputReadableSize))
         {
             return false;
         }
@@ -919,6 +935,321 @@ internal sealed class GameMatchTickHook : IDisposable
             SavesTipped: ReadByteDirect(stats + Offsets.PlayerStats.SavesTipped),
             DistanceM: ReadFloatDirect(stats + Offsets.PlayerStats.DistanceM));
         return true;
+    }
+
+    private void CaptureRatingFrameData(
+        nint match,
+        int tick,
+        RawRealtimeTickFrame frame,
+        ReadOnlySpan<nint> capturedMatchPlayers)
+    {
+        lock (_ratingCaptureGate)
+        {
+            if (_lastRatingCapturedTickByMatch.TryGetValue(match, out var previousTick) && previousTick == tick)
+            {
+                _lastRatingMatchByMatch.TryGetValue(match, out var previousMatch);
+                frame.RatingResearch = previousMatch;
+                for (var index = 0; index < frame.PlayerCount; index++)
+                {
+                    var slot = frame.Players[index].Slot;
+                    if (_lastRatingResearchBySlot.TryGetValue((match, slot), out var previousPlayer))
+                    {
+                        frame.Players[index] = frame.Players[index] with { RatingResearch = previousPlayer };
+                        continue;
+                    }
+
+                    var matchPlayer = capturedMatchPlayers[index];
+                    if (matchPlayer != default &&
+                        _memoryReader.TryReadPointer(matchPlayer + Offsets.MatchPlayer.Stats, out var stats) &&
+                        stats != default)
+                    {
+                        frame.Players[index] = frame.Players[index] with
+                        {
+                            RatingResearch = CaptureRatingPlayerData(match, matchPlayer, stats, slot),
+                        };
+                    }
+                }
+                return;
+            }
+
+            frame.RatingResearch = CaptureRatingMatchData(match);
+            for (var index = 0; index < frame.PlayerCount; index++)
+            {
+                var matchPlayer = capturedMatchPlayers[index];
+                if (matchPlayer == default ||
+                    !_memoryReader.TryReadPointer(matchPlayer + Offsets.MatchPlayer.Stats, out var stats) ||
+                    stats == default)
+                {
+                    continue;
+                }
+
+                frame.Players[index] = frame.Players[index] with
+                {
+                    RatingResearch = CaptureRatingPlayerData(
+                        match,
+                        matchPlayer,
+                        stats,
+                        frame.Players[index].Slot),
+                };
+            }
+            _lastRatingMatchByMatch[match] = frame.RatingResearch;
+            _lastRatingCapturedTickByMatch[match] = tick;
+        }
+    }
+
+    private RatingResearchMatchData? CaptureRatingMatchData(nint match)
+    {
+        _memoryReader.TryReadUInt32(match + Offsets.GameMatch.RatingBaseCondition, out var baseCondition);
+        _memoryReader.TryReadByte(match + Offsets.GameMatch.LifecycleStateC, out var matchPhase);
+        _memoryReader.TryReadByte(match + Offsets.GameMatch.EventRewardBranch, out var eventRewardBranch);
+        if (!TryGetOrCaptureRatingBackground(match, out var background)) return null;
+        return new RatingResearchMatchData(
+            baseCondition,
+            matchPhase,
+            eventRewardBranch,
+            ActiveRatingBaseline,
+            background.Home,
+            background.Away);
+    }
+
+    private bool TryGetOrCaptureRatingBackground(nint match, out (float Home, float Away) value)
+    {
+        if (_ratingBackgroundByMatch.TryGetValue(match, out value)) return true;
+        if (!TryReadTeamRatingBackground(match, Offsets.GameMatch.HomeTeam, out var home) ||
+            !TryReadTeamRatingBackground(match, Offsets.GameMatch.AwayTeam, out var away))
+        {
+            value = default;
+            return false;
+        }
+        value = (home, away);
+        _ratingBackgroundByMatch[match] = value;
+        return true;
+    }
+
+    private bool TryReadTeamRatingBackground(nint match, int teamOffset, out float value)
+    {
+        value = 0;
+        if (!_memoryReader.TryReadPointer(match + teamOffset, out var team) ||
+            team == default ||
+            !_memoryReader.TryReadPointer(team + Offsets.Team.PlayerTable, out var player) ||
+            player == default ||
+            !_memoryReader.TryReadPointer(player + Offsets.MatchPlayer.RatingContext298, out var context) ||
+            context == default ||
+            !_memoryReader.TryReadFloat(context + Offsets.RatingContext.MatchBackgroundInput, out value))
+        {
+            value = 0;
+            return false;
+        }
+        return float.IsFinite(value);
+    }
+
+    private RatingResearchPlayerData CaptureRatingPlayerData(
+        nint match,
+        nint player,
+        nint stats,
+        int slot)
+    {
+        var cacheKey = (match, slot);
+        _lastRatingResearchBySlot.TryGetValue(cacheKey, out var previous);
+        ReadPointer(player, Offsets.MatchPlayer.RatingContext288, out var context288);
+        ReadPointer(player, Offsets.MatchPlayer.RatingContext290, out var context290);
+
+        var ratingEvents = ReadRawRecords(
+            player,
+            Offsets.MatchPlayer.RatingEventsBegin,
+            Offsets.MatchPlayer.RatingEventsEnd,
+            Offsets.RatingEvent.Size,
+            previous?.RatingEventsRaw);
+        var eligibleDuration = ReadEligibleDuration(player);
+        var inPossessionRoleDuty = ReadUInt64(player, Offsets.MatchPlayer.InPossessionRoleDuty);
+
+        var result = new RatingResearchPlayerData(
+            Stats: CaptureRatingStatsInputs(stats),
+            InternalW25: ReadInt32(player, Offsets.MatchPlayer.InternalW25),
+            InternalW24: ReadInt32(player, Offsets.MatchPlayer.InternalW24),
+            SpecialW2C: ReadSByte(player, Offsets.MatchPlayer.SpecialW2C),
+            SpecialW2D: ReadSByte(player, Offsets.MatchPlayer.SpecialW2D),
+            SpecialW2E: ReadSByte(player, Offsets.MatchPlayer.SpecialW2E),
+            SpecialW2F: ReadByte(player, Offsets.MatchPlayer.SpecialW2F),
+            SpecialW30: ReadByte(player, Offsets.MatchPlayer.SpecialW30),
+            SpecialW31: ReadByte(player, Offsets.MatchPlayer.SpecialW31),
+            RawInternalRating: ReadInt32(player, Offsets.MatchPlayer.RawInternalRating),
+            InPossessionRoleDuty: inPossessionRoleDuty,
+            OutOfPossessionRoleDuty: ReadUInt64(player, Offsets.MatchPlayer.OutOfPossessionRoleDuty),
+            SpecialConditionA: ReadSByte(context288, Offsets.RatingContext.SpecialCondition),
+            SpecialConditionB: ReadSByte(context290, Offsets.RatingContext.SpecialCondition),
+            TeamAEventCounterCandidate: ReadByte(context288, Offsets.RatingContext.EventCounterCandidate),
+            TeamBEventCounterCandidate: ReadByte(context290, Offsets.RatingContext.EventCounterCandidate),
+            TeamAEventAdjustmentCandidate: ReadByte(context288, Offsets.RatingContext.EventAdjustmentCandidate),
+            TeamBEventAdjustmentCandidate: ReadByte(context290, Offsets.RatingContext.EventAdjustmentCandidate),
+            TotalEligibleDuration: eligibleDuration,
+            RatingEventsRaw: ratingEvents);
+        _lastRatingResearchBySlot[cacheKey] = result;
+        return result;
+
+        bool ReadPointer(nint source, int offset, out nint value)
+        {
+            value = default;
+            return source != default && _memoryReader.TryReadPointer(source + offset, out value);
+        }
+        int ReadInt32(nint source, int offset) =>
+            source != default && _memoryReader.TryReadInt32(source + offset, out var value) ? value : 0;
+        ulong ReadUInt64(nint source, int offset) =>
+            source != default && _memoryReader.TryReadUInt64(source + offset, out var value) ? value : 0;
+        byte ReadByte(nint source, int offset) =>
+            source != default && _memoryReader.TryReadByte(source + offset, out var value) ? value : (byte)0;
+        sbyte ReadSByte(nint source, int offset) => unchecked((sbyte)ReadByte(source, offset));
+        float ReadFloat(nint source, int offset) =>
+            source != default && _memoryReader.TryReadFloat(source + offset, out var value) && float.IsFinite(value)
+                ? value
+                : 0f;
+        short ReadInt16(nint source, int offset) =>
+            source != default && _memoryReader.TryReadInt16(source + offset, out var value) ? value : (short)0;
+        RatingStatsInputs CaptureRatingStatsInputs(nint source) => new(
+            ReadFloat(source, Offsets.PlayerStats.Xg),
+            ReadFloat(source, Offsets.PlayerStats.OpenPlayXa),
+            ReadByte(source, Offsets.PlayerStats.Goals),
+            ReadByte(source, Offsets.PlayerStats.PenaltyAttempts),
+            ReadByte(source, Offsets.PlayerStats.Penalties),
+            ReadByte(source, Offsets.PlayerStats.OwnGoals),
+            ReadByte(source, Offsets.PlayerStats.Shots),
+            ReadByte(source, Offsets.PlayerStats.ShotsOnTarget),
+            ReadByte(source, Offsets.PlayerStats.SavesHeld),
+            ReadByte(source, Offsets.PlayerStats.SavesParried),
+            ReadByte(source, Offsets.PlayerStats.SavesTipped),
+            ReadByte(source, Offsets.PlayerStats.DefensiveBlocks),
+            ReadByte(source, Offsets.PlayerStats.PenaltiesFaced),
+            ReadByte(source, Offsets.PlayerStats.PenaltiesSaved),
+            ReadByte(source, Offsets.PlayerStats.Assists),
+            ReadByte(source, Offsets.PlayerStats.ChanceInvolvementsCandidate),
+            ReadByte(source, Offsets.PlayerStats.Dribbles),
+            ReadByte(source, Offsets.PlayerStats.Fouls),
+            ReadByte(source, Offsets.PlayerStats.Fouled),
+            ReadByte(source, Offsets.PlayerStats.YellowCards),
+            ReadByte(source, Offsets.PlayerStats.RedCards),
+            ReadByte(source, Offsets.PlayerStats.OpenPlayKeyPasses),
+            ReadByte(source, Offsets.PlayerStats.TacklesAttempted),
+            ReadByte(source, Offsets.PlayerStats.TacklesWon),
+            ReadByte(source, Offsets.PlayerStats.Aerials),
+            ReadByte(source, Offsets.PlayerStats.AerialsWon),
+            ReadByte(source, Offsets.PlayerStats.Interceptions),
+            ReadByte(source, Offsets.PlayerStats.ErrorsLeadingToShotOrGoalCandidate),
+            ReadByte(source, Offsets.PlayerStats.TeamGoalsWhileOnPitch),
+            ReadByte(source, Offsets.PlayerStats.TeamConcededWhileOnPitch),
+            ReadByte(source, Offsets.PlayerStats.PossessionWon),
+            ReadByte(source, Offsets.PlayerStats.Clearances),
+            ReadByte(source, Offsets.PlayerStats.CrossAttemptsTypeOne),
+            ReadByte(source, Offsets.PlayerStats.CrossAttemptsTypeTwo),
+            ReadByte(source, Offsets.PlayerStats.CrossCompletionsTypeOne),
+            ReadByte(source, Offsets.PlayerStats.CrossCompletionsTypeTwo),
+            ReadInt16(source, Offsets.PlayerStats.ShortPassesAttemptedCandidate),
+            ReadInt16(source, Offsets.PlayerStats.LongPassesAttemptedCandidate),
+            ReadInt16(source, Offsets.PlayerStats.ShortPassesCompletedCandidate),
+            ReadInt16(source, Offsets.PlayerStats.LongPassesCompletedCandidate));
+    }
+
+    private IReadOnlyList<byte[]> ReadRawRecords(
+        nint owner,
+        int beginOffset,
+        int endOffset,
+        int recordSize,
+        IReadOnlyList<byte[]>? previous)
+    {
+        const int maximumRecords = 4_096;
+        if (!_memoryReader.TryReadPointer(owner + beginOffset, out var begin) ||
+            !_memoryReader.TryReadPointer(owner + endOffset, out var end) ||
+            begin == default)
+        {
+            return Array.Empty<byte[]>();
+        }
+
+        var byteLength = (long)end - (long)begin;
+        if (byteLength < 0 || byteLength % recordSize != 0 ||
+            byteLength / recordSize > maximumRecords || byteLength > int.MaxValue ||
+            (byteLength > 0 && !VirtualMemory.IsReadable(begin, checked((int)byteLength))))
+        {
+            return Array.Empty<byte[]>();
+        }
+
+        var count = checked((int)(byteLength / recordSize));
+        if (count == 0) return Array.Empty<byte[]>();
+        byte[][]? records = previous?.Count == count ? null : new byte[count][];
+        for (var index = 0; index < count; index++)
+        {
+            var address = begin + index * recordSize;
+            var unchanged = previous is not null && index < previous.Count &&
+                            RawRecordMatches(address, previous[index], recordSize);
+            if (records is null && !unchanged)
+            {
+                records = new byte[count][];
+                for (var prefix = 0; prefix < index; prefix++) records[prefix] = previous![prefix];
+            }
+
+            if (records is null) continue;
+            if (unchanged) records[index] = previous![index];
+            else
+            {
+                records[index] = new byte[recordSize];
+                Marshal.Copy(address, records[index], 0, recordSize);
+            }
+        }
+        return records ?? previous!;
+    }
+
+    private static bool RawRecordMatches(nint address, byte[] previous, int recordSize)
+    {
+        if (previous.Length != recordSize) return false;
+        var offset = 0;
+        for (; offset + sizeof(long) <= recordSize; offset += sizeof(long))
+        {
+            if (Marshal.ReadInt64(address + offset) != BitConverter.ToInt64(previous, offset)) return false;
+        }
+        for (; offset < recordSize; offset++)
+        {
+            if (Marshal.ReadByte(address + offset) != previous[offset]) return false;
+        }
+        return true;
+    }
+
+    private int ReadEligibleDuration(nint player)
+    {
+        if (!_memoryReader.TryReadPointer(player + Offsets.MatchPlayer.CategoryHistoryBegin, out var begin) ||
+            !_memoryReader.TryReadPointer(player + Offsets.MatchPlayer.CategoryHistoryEnd, out var end) ||
+            begin == default)
+        {
+            return 0;
+        }
+
+        var byteLength = (long)end - (long)begin;
+        if (byteLength < 0 || byteLength % Offsets.RatingCategoryHistory.Size != 0 ||
+            byteLength / Offsets.RatingCategoryHistory.Size > 4_096 || byteLength > int.MaxValue ||
+            (byteLength > 0 && !VirtualMemory.IsReadable(begin, checked((int)byteLength))))
+        {
+            return 0;
+        }
+
+        long total = 0;
+        var count = checked((int)(byteLength / Offsets.RatingCategoryHistory.Size));
+        for (var index = 0; index < count; index++)
+        {
+            var record = begin + index * Offsets.RatingCategoryHistory.Size;
+            var encoded = unchecked((ushort)Marshal.ReadInt16(record));
+            if (encoded == 0x3F41 || ((encoded >> 8) & 0x20) != 0) continue;
+            var duration = Marshal.ReadInt32(record + 0x20);
+            if (duration > 0) total += duration;
+        }
+        return checked((int)Math.Min(total, int.MaxValue));
+    }
+
+    private void ClearRatingCaptureState()
+    {
+        lock (_ratingCaptureGate)
+        {
+            _lastRatingResearchBySlot.Clear();
+            _ratingBackgroundByMatch.Clear();
+            _lastRatingCapturedTickByMatch.Clear();
+            _lastRatingMatchByMatch.Clear();
+        }
     }
 
     private bool ReadPlayerMovement(
@@ -2252,6 +2583,7 @@ internal sealed class GameMatchTickHook : IDisposable
         {
             _nativeMomentumStates.Clear();
         }
+        ClearRatingCaptureState();
         _stableSimulation = default;
         _stableAnimated = default;
         Interlocked.Exchange(ref _selectedAnimated, 0);

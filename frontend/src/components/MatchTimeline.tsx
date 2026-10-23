@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/tooltip"
 import type { MatchEventType, MatchSnapshot, TeamSide } from "@/types/match"
 import { playbackToggleEventName } from "@/lib/appShortcuts"
+import { observedRatingWeightConfiguration } from "@/lib/ratingCalculator"
 import {
   emitExploreTourInteraction,
   exploreTourTimelineSeekEventName,
@@ -266,6 +267,7 @@ export function MatchTimeline({
             metadata: loadedMetadata,
             metadataTimeline: loadedMetadataTimeline,
             frames: loaded,
+            ratingConfiguration: observedRatingWeightConfiguration,
           })
           if (!cancelled && prepared) {
             activateReplay(prepared)
@@ -474,6 +476,7 @@ export function MatchTimeline({
         metadata: parsed.metadata,
         metadataTimeline: parsed.metadataTimeline,
         frames: parsed.frames,
+        ratingConfiguration: parsed.ratingConfiguration,
       })
       if (!prepared || requestId !== localArchiveRequestRef.current) return
       activateReplay(prepared)

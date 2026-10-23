@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Serialization;
 
 namespace FMMatchLens.Plugin.Domain;
@@ -26,7 +27,155 @@ internal sealed record RealtimeTickFrame(
     TeamTickData Home,
     TeamTickData Away,
     IReadOnlyList<PlayerTickData> Players,
-    IReadOnlyList<MomentumEventUpdate>? MomentumEventUpdates = null);
+    IReadOnlyList<MomentumEventUpdate>? MomentumEventUpdates = null)
+{
+    [JsonPropertyName("ratingModel")]
+    public RatingResearchMatchData? RatingResearch { get; init; }
+}
+
+internal sealed record RatingResearchMatchData(
+    uint RatingBaseCondition,
+    byte MatchPhase,
+    byte EventRewardBranch,
+    int ActiveBaseline,
+    float HomeBackgroundInput,
+    float AwayBackgroundInput);
+
+internal sealed record RatingModelMetadata(
+    int ActiveBaseline,
+    float HomeBackgroundInput,
+    float AwayBackgroundInput);
+
+internal sealed record RatingResearchPlayerData(
+    RatingStatsInputs Stats,
+    int InternalW25,
+    int InternalW24,
+    sbyte SpecialW2C,
+    sbyte SpecialW2D,
+    sbyte SpecialW2E,
+    byte SpecialW2F,
+    byte SpecialW30,
+    byte SpecialW31,
+    int RawInternalRating,
+    ulong InPossessionRoleDuty,
+    ulong OutOfPossessionRoleDuty,
+    sbyte SpecialConditionA,
+    sbyte SpecialConditionB,
+    byte TeamAEventCounterCandidate,
+    byte TeamBEventCounterCandidate,
+    byte TeamAEventAdjustmentCandidate,
+    byte TeamBEventAdjustmentCandidate,
+    int TotalEligibleDuration,
+    IReadOnlyList<byte[]> RatingEventsRaw);
+
+internal sealed record RatingResearchPlayerWireData(
+    byte[] StatsPacked,
+    int InternalW25,
+    int InternalW24,
+    sbyte SpecialW2C,
+    sbyte SpecialW2D,
+    sbyte SpecialW2E,
+    byte SpecialW2F,
+    byte SpecialW30,
+    byte SpecialW31,
+    int RawInternalRating,
+    string InPossessionRoleDuty,
+    string OutOfPossessionRoleDuty,
+    sbyte SpecialConditionA,
+    sbyte SpecialConditionB,
+    int TotalEligibleDuration,
+    int RatingEventsCommonLength,
+    IReadOnlyList<byte[]> RatingEventsTail)
+{
+    internal static RatingResearchPlayerWireData From(
+        RatingResearchPlayerData value,
+        RatingResearchPlayerData? previous = null)
+    {
+        var common = CommonRawRecordLength(previous?.RatingEventsRaw, value.RatingEventsRaw);
+        return new(
+        PackStats(value.Stats), value.InternalW25, value.InternalW24,
+        value.SpecialW2C, value.SpecialW2D, value.SpecialW2E,
+        value.SpecialW2F, value.SpecialW30, value.SpecialW31,
+        value.RawInternalRating,
+        value.InPossessionRoleDuty.ToString(CultureInfo.InvariantCulture),
+        value.OutOfPossessionRoleDuty.ToString(CultureInfo.InvariantCulture),
+        value.SpecialConditionA, value.SpecialConditionB,
+        value.TotalEligibleDuration, common, value.RatingEventsRaw.Skip(common).ToArray());
+    }
+
+    internal static byte[] PackStats(RatingStatsInputs value)
+    {
+        using var stream = new MemoryStream(28);
+        using var writer = new BinaryWriter(stream);
+        writer.Write(value.OpenPlayXa);
+        writer.Write(value.PenaltyAttempts);
+        writer.Write(value.DefensiveBlocksCandidate); writer.Write(value.PenaltiesFaced); writer.Write(value.PenaltiesSaved);
+        writer.Write(value.ChanceInvolvementsCandidate); writer.Write(value.YellowCards); writer.Write(value.RedCards);
+        writer.Write(value.OpenPlayKeyPasses);
+        writer.Write(value.ErrorsLeadingToShotOrGoalCandidate); writer.Write(value.TeamGoalsWhileOnPitchCandidate);
+        writer.Write(value.TeamConcededWhileOnPitchCandidate); writer.Write(value.PossessionWonCandidate);
+        writer.Write(value.CrossAttemptsTypeOne); writer.Write(value.CrossAttemptsTypeTwo);
+        writer.Write(value.CrossCompletionsTypeOne); writer.Write(value.CrossCompletionsTypeTwo);
+        writer.Write(value.ShortPassesAttemptedCandidate); writer.Write(value.LongPassesAttemptedCandidate);
+        writer.Write(value.ShortPassesCompletedCandidate); writer.Write(value.LongPassesCompletedCandidate);
+        var packed = stream.ToArray();
+        if (packed.Length != 28) throw new InvalidOperationException("Rating-only stats wire size changed unexpectedly.");
+        return packed;
+    }
+
+    private static int CommonRawRecordLength(
+        IReadOnlyList<byte[]>? previous,
+        IReadOnlyList<byte[]> current)
+    {
+        if (previous is null) return 0;
+        var limit = Math.Min(previous.Count, current.Count);
+        var common = 0;
+        while (common < limit && previous[common].AsSpan().SequenceEqual(current[common])) common++;
+        return common;
+    }
+}
+
+internal readonly record struct RatingStatsInputs(
+    float ExpectedGoals,
+    float OpenPlayXa,
+    byte Goals,
+    byte PenaltyAttempts,
+    byte Penalties,
+    byte OwnGoals,
+    byte Shots,
+    byte ShotsOnTarget,
+    byte SavesHeld,
+    byte SavesParried,
+    byte SavesTipped,
+    byte DefensiveBlocksCandidate,
+    byte PenaltiesFaced,
+    byte PenaltiesSaved,
+    byte Assists,
+    byte ChanceInvolvementsCandidate,
+    byte Dribbles,
+    byte Fouls,
+    byte Fouled,
+    byte YellowCards,
+    byte RedCards,
+    byte OpenPlayKeyPasses,
+    byte TacklesAttempted,
+    byte TacklesWon,
+    byte AerialsAttempted,
+    byte AerialsWon,
+    byte Interceptions,
+    byte ErrorsLeadingToShotOrGoalCandidate,
+    byte TeamGoalsWhileOnPitchCandidate,
+    byte TeamConcededWhileOnPitchCandidate,
+    byte PossessionWonCandidate,
+    byte Clearances,
+    byte CrossAttemptsTypeOne,
+    byte CrossAttemptsTypeTwo,
+    byte CrossCompletionsTypeOne,
+    byte CrossCompletionsTypeTwo,
+    short ShortPassesAttemptedCandidate,
+    short LongPassesAttemptedCandidate,
+    short ShortPassesCompletedCandidate,
+    short LongPassesCompletedCandidate);
 
 internal enum MomentumEventUpdateKind
 {
@@ -168,7 +317,14 @@ internal readonly record struct PlayerTickData(
     int SavesHeld,
     int SavesParried,
     int SavesTipped,
-    float DistanceM);
+    float DistanceM)
+{
+    [JsonIgnore]
+    public RatingResearchPlayerData? RatingResearch { get; init; }
+
+    [JsonPropertyName("ratingInputs")]
+    public RatingResearchPlayerWireData? RatingInputs { get; init; }
+}
 
 internal sealed record RealtimeMatchMetadata(
     string MatchId,

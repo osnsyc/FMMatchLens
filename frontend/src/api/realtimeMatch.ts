@@ -11,6 +11,14 @@ import {
 import { HistoricalDerivations } from "@/api/replay/replayDerivations"
 import { reuseMatchSnapshot } from "@/lib/matchSnapshotReuse"
 import {
+  calculateRatingContribution,
+  decodeArchiveRatingInputs,
+  decodeRealtimeRatingInputs,
+  decodeLiveRatingInputs,
+  observedRatingWeightConfiguration,
+  type RatingWeightConfiguration,
+} from "@/lib/ratingCalculator"
+import {
   backendWebSocketUrl,
   defaultBackendUrl,
   loadBackendUrl,
@@ -86,6 +94,97 @@ export type RealtimePlayer = PlayerStats & {
   savesHeld: number
   savesParried: number
   savesTipped: number
+  ratingInputs?: RealtimeRatingInputs
+  archiveRatingInputs?: ArchiveRatingInputs
+  ratingContribution?: RatingContribution
+}
+
+/** Compact binary-archive input retained until its frame is displayed. */
+export type ArchiveRatingInputs = {
+  /** The 28 archive-only bytes not already represented by RealtimePlayer stats. */
+  statsPacked: Uint8Array
+  internalW25: number
+  internalW24: number
+  specialW2C: number
+  specialW2D: number
+  specialW2E: number
+  specialW2F: number
+  specialW30: number
+  specialW31: number
+  internalScore: number
+  specialConditionA: number
+  specialConditionB: number
+  inPossessionRoleDuty: bigint
+  outOfPossessionRoleDuty: bigint
+  totalEligibleDuration: number
+  classificationDurations: RatingClassificationDuration[]
+  qualityFlags: string[]
+  ratingEvents: Uint8Array[]
+}
+
+export type RealtimeRatingInputs = {
+  /** Base64-encoded 28-byte rating-only stat vector. */
+  statsPacked: string
+  internalW25: number
+  internalW24: number
+  specialW2C: number
+  specialW2D: number
+  specialW2E: number
+  specialW2F: number
+  specialW30: number
+  specialW31: number
+  rawInternalRating: number
+  specialConditionA: number
+  specialConditionB: number
+  /** Decimal uint64 strings preserve the raw role/duty values losslessly over JSON. */
+  inPossessionRoleDuty: string
+  outOfPossessionRoleDuty: string
+  totalEligibleDuration: number
+  ratingEventsCommonLength: number
+  ratingEventsTail: string[]
+}
+
+export type RealtimeRatingModel = {
+  ratingBaseCondition: number
+  matchPhase: number
+  eventRewardBranch: number
+  activeBaseline: number
+  homeBackgroundInput: number
+  awayBackgroundInput: number
+}
+
+export type RatingContribution = {
+  nativeRating: number
+  internalScore: number
+  groupContributionsPreFactor: Record<RatingContributionGroup, number>
+  groupContributionsPostFactor: Record<RatingContributionGroup, number>
+  preFactorTotal: number
+  selectedFactorIndex: number
+  selectedBaseFactor: number
+  effectiveFactor: number
+  globalFactorAdjustment: number
+  predictedInternalScore: number
+  reconstructionResidual: number
+  classificationDurations: RatingClassificationDuration[]
+  qualityFlags: string[]
+  terms: RatingContributionTerm[]
+  limitation: string
+}
+
+export type RatingContributionGroup =
+  | "BaseContext" | "Shooting" | "Creativity" | "Passing" | "Defence" | "Goalkeeping"
+
+export type RatingClassificationDuration = { categoryBit: number; duration: number }
+
+export type RatingContributionTerm = {
+  index: number
+  categoryBit: number
+  group: RatingContributionGroup
+  input: number
+  coefficient: number
+  contribution: number
+  postFactorContribution: number
+  confidence: string
 }
 
 export type RealtimeFrame = {
@@ -94,6 +193,7 @@ export type RealtimeFrame = {
   tick: number
   displayTick: number
   period: number
+  ratingModel?: RealtimeRatingModel
   capturedUnixMilliseconds: number
   possessionTeam?: TeamSide
   ballHolderPlayerId?: number
@@ -532,6 +632,10 @@ export function useRealtimeMatch(
     let socket: WebSocket | null = null
     let reconnectTimer: number | undefined
     let latestFrame: RealtimeFrame | null = null
+    let liveRatingInputs = new Map<number, ArchiveRatingInputs>()
+    let historyRatingInputs = new Map<number, ArchiveRatingInputs>()
+    const liveRatingContributions = new RatingContributionResolverCache()
+    const ratingConfiguration = observedRatingWeightConfiguration
     let historyMatchId = ""
     let historyLastTick = -1
     let formationHistoryIndex = 0
@@ -585,7 +689,11 @@ export function useRealtimeMatch(
           historical.momentum,
           historical.rollingMomentum,
           formationSnapshots,
-          publishedSnapshot
+          publishedSnapshot,
+          true,
+          ratingConfiguration,
+          undefined,
+          liveRatingContributions,
         )
         setMatch(publishedSnapshot)
       }
@@ -602,6 +710,9 @@ export function useRealtimeMatch(
       formationHistoryIndex = 0
       formationHistoryEntries = []
       formationSnapshots = []
+      liveRatingInputs = new Map()
+      historyRatingInputs = new Map()
+      liveRatingContributions.clear()
       publishedSnapshot = undefined
       derived = new HistoricalDerivations()
       historical = derived.snapshot(0)
@@ -744,7 +855,10 @@ export function useRealtimeMatch(
             slice.matchId === latestFrame?.matchId
           )
             motionSource?.setStatus("ended")
-          const additions = slice.frames.filter(
+          const hydratedFrames = slice.frames.map((frame) =>
+            hydrateRealtimeRatingFrame(frame, historyRatingInputs)
+          )
+          const additions = hydratedFrames.filter(
             (frame) => frame.tick > historyLastTick
           )
           derived.append(additions)
@@ -776,15 +890,16 @@ export function useRealtimeMatch(
         const expected = latestFrame
         const response = await liveFetch(`${apiBase}/api/match/current`)
         if (!response.ok) return
-        const frame = (await response.json()) as RealtimeFrame | null
+        const rawFrame = (await response.json()) as RealtimeFrame | null
         if (
           disposed ||
           generation !== connectionGeneration ||
           latestFrame !== expected
         )
           return
-        if (frame?.matchId) {
-          resetFor(frame.matchId)
+        if (rawFrame?.matchId) {
+          resetFor(rawFrame.matchId)
+          const frame = hydrateRealtimeRatingFrame(rawFrame, liveRatingInputs)
           latestFrame = frame
           motionSource?.publish(frame, false)
           publish(frame, false)
@@ -816,14 +931,17 @@ export function useRealtimeMatch(
         try {
           const envelope = JSON.parse(event.data) as RealtimeEnvelope
           if (envelope.type === "realtime_tick") {
-            const frame = envelope.payload as RealtimeFrame
-            if (!frame?.matchId) return
+            const rawFrame = envelope.payload as RealtimeFrame
+            if (!rawFrame?.matchId) return
             if (
-              latestFrame?.matchId === frame.matchId &&
-              frame.tick < latestFrame.tick
+              latestFrame?.matchId === rawFrame.matchId &&
+              rawFrame.tick < latestFrame.tick
+            ) return
+            resetFor(rawFrame.matchId)
+            const frame = hydrateRealtimeRatingFrame(
+              rawFrame,
+              liveRatingInputs,
             )
-              return
-            resetFor(frame.matchId)
             latestFrame = frame
             motionSource?.publish(frame)
             // The 250ms WebSocket path only builds the current snapshot. No
@@ -894,7 +1012,10 @@ export function toMatchSnapshot(
   rollingMomentum: MatchMomentumPoint[] = [],
   formationSnapshots?: FormationSnapshot[],
   previous?: MatchSnapshot,
-  allowLocalAssets = true
+  allowLocalAssets = true,
+  ratingConfiguration?: RatingWeightConfiguration,
+  cachedRatingContributions?: readonly (RatingContribution | undefined)[],
+  ratingResolverCache?: RatingContributionResolverCache,
 ): MatchSnapshot {
   const clockTick = Number.isFinite(frame.displayTick)
     ? frame.displayTick
@@ -945,14 +1066,24 @@ export function toMatchSnapshot(
           : archivedAssetUrl(metadata?.away.logoPath),
       stats: toTeamStats(frame.away),
     },
-    players: frame.players.map((player) =>
-      toPlayer(
+    players: frame.players.map((player, index) => {
+      const ratingContribution = cachedRatingContributions?.[index]
+        ?? (ratingResolverCache
+          ? player.ratingContribution
+          : calculatePlayerRatingContribution(player, frame.ratingModel, ratingConfiguration))
+      const resolveRatingContribution = ratingResolverCache?.resolverFor(
         player,
+        frame.ratingModel,
+        ratingConfiguration,
+      )
+      return toPlayer(
+        ratingContribution ? { ...player, ratingContribution } : player,
         playerMetadataBySlot.get(player.slot),
         metadata?.matchDate,
-        allowLocalAssets
+        allowLocalAssets,
+        resolveRatingContribution,
       )
-    ),
+    }),
     events,
     heatmaps,
     tacticalEvents,
@@ -969,6 +1100,128 @@ export function toMatchSnapshot(
         }),
   }
   return reuseMatchSnapshot(previous, next)
+}
+
+export class RatingContributionResolverCache {
+  private readonly entries = new Map<number, RatingResolverEntry>()
+
+  clear() {
+    this.entries.clear()
+  }
+
+  resolverFor(
+    player: RealtimePlayer,
+    model: RealtimeRatingModel | undefined,
+    configuration?: RatingWeightConfiguration,
+  ) {
+    if (player.ratingContribution) return () => player.ratingContribution
+    if (!model || !configuration || (!player.archiveRatingInputs && !player.ratingInputs)) return undefined
+    const previous = this.entries.get(player.slot)
+    if (
+      previous
+      && previous.input === (player.archiveRatingInputs ?? player.ratingInputs)
+      && previous.configuration === configuration
+      && sameRatingModel(previous.model, model)
+      && sameRatingPlayerSource(previous.player, player)
+    ) return previous.resolve
+
+    let calculated: RatingContribution | undefined
+    let hasCalculated = false
+    const resolve = () => {
+      if (!hasCalculated) {
+        calculated = calculatePlayerRatingContribution(player, model, configuration)
+        hasCalculated = true
+      }
+      return calculated
+    }
+    this.entries.set(player.slot, {
+      input: player.archiveRatingInputs ?? player.ratingInputs!,
+      configuration,
+      model,
+      player,
+      resolve,
+    })
+    return resolve
+  }
+}
+
+type RatingResolverEntry = {
+  input: ArchiveRatingInputs | RealtimeRatingInputs
+  configuration: RatingWeightConfiguration
+  model: RealtimeRatingModel
+  player: RealtimePlayer
+  resolve: () => RatingContribution | undefined
+}
+
+function sameRatingModel(left: RealtimeRatingModel, right: RealtimeRatingModel) {
+  return left.ratingBaseCondition === right.ratingBaseCondition
+    && left.matchPhase === right.matchPhase
+    && left.eventRewardBranch === right.eventRewardBranch
+    && left.activeBaseline === right.activeBaseline
+    && left.homeBackgroundInput === right.homeBackgroundInput
+    && left.awayBackgroundInput === right.awayBackgroundInput
+}
+
+function sameRatingPlayerSource(left: RealtimePlayer, right: RealtimePlayer) {
+  return left.team === right.team && left.rating === right.rating && left.xg === right.xg
+    && left.goals === right.goals && left.penalties === right.penalties && left.ownGoals === right.ownGoals
+    && left.shots === right.shots && left.shotsOnTarget === right.shotsOnTarget
+    && left.savesHeld === right.savesHeld && left.savesParried === right.savesParried && left.savesTipped === right.savesTipped
+    && left.assists === right.assists && left.dribbles === right.dribbles && left.fouls === right.fouls && left.fouled === right.fouled
+    && left.tacklesAttempted === right.tacklesAttempted && left.tacklesWon === right.tacklesWon
+    && left.aerials === right.aerials && left.aerialsWon === right.aerialsWon
+    && left.interceptions === right.interceptions && left.clearances === right.clearances
+}
+
+function hydrateRealtimeRatingFrame(
+  frame: RealtimeFrame,
+  priorBySlot: Map<number, ArchiveRatingInputs>,
+) {
+  let changed = false
+  const players = frame.players.map((player) => {
+    if (!player.ratingInputs) return player
+    try {
+      const compact = decodeRealtimeRatingInputs(
+        player.ratingInputs,
+        priorBySlot.get(player.slot),
+      )
+      priorBySlot.set(player.slot, compact)
+      changed = true
+      return { ...player, ratingInputs: undefined, archiveRatingInputs: compact }
+    } catch {
+      return { ...player, ratingInputs: undefined, archiveRatingInputs: undefined }
+    }
+  })
+  return changed ? { ...frame, players } : frame
+}
+
+export function calculateFrameRatingContributions(
+  frame: RealtimeFrame,
+  ratingConfiguration?: RatingWeightConfiguration,
+): readonly (RatingContribution | undefined)[] {
+  return frame.players.map((player) =>
+    calculatePlayerRatingContribution(player, frame.ratingModel, ratingConfiguration)
+  )
+}
+
+function calculatePlayerRatingContribution(
+  player: RealtimePlayer,
+  model: RealtimeRatingModel | undefined,
+  ratingConfiguration?: RatingWeightConfiguration,
+) {
+  if (player.ratingContribution) return player.ratingContribution
+  if (!model || !ratingConfiguration) return undefined
+  if (player.archiveRatingInputs) {
+    return calculateRatingContribution(
+      decodeArchiveRatingInputs(player.archiveRatingInputs, player, model, ratingConfiguration)
+    )
+  }
+  if (player.ratingInputs) {
+    return calculateRatingContribution(
+      decodeLiveRatingInputs(player.ratingInputs, player, model, ratingConfiguration)
+    )
+  }
+  return undefined
 }
 
 export function toPitchDimensions(metadata?: RealtimeMatchMetadata | null) {
@@ -1513,7 +1766,8 @@ function toPlayer(
   player: RealtimePlayer,
   metadata?: RealtimePlayerMetadata,
   matchDate?: string,
-  allowLocalAssets = true
+  allowLocalAssets = true,
+  resolveRatingContribution?: () => RatingContribution | undefined,
 ): MatchPlayer {
   const uid = metadata?.uid
   return {
@@ -1541,6 +1795,8 @@ function toPlayer(
     inPossession: metadata?.inPossession,
     outOfPossession: metadata?.outOfPossession,
     rating: player.rating > 0 ? player.rating : undefined,
+    ratingContribution: player.ratingContribution,
+    resolveRatingContribution,
     age: calculateAge(metadata?.profile?.dateOfBirth, matchDate),
     isStarter: !player.isSubstitute,
     isOnPitch: player.isOnPitch,
