@@ -29,7 +29,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
-import { BrandIcon } from "@/components/BrandIcon"
 import {
   Select,
   SelectContent,
@@ -69,6 +68,7 @@ import {
   type DashboardFocusPanel,
 } from "@/lib/appShortcuts"
 import { useExploreTour } from "@/features/explore-tour/useExploreTour"
+import { FMMatchLensLogo } from "@/components/fmmatchlens-logo"
 
 const FormationPitch = lazy(() =>
   import("@/components/FormationPitch").then((module) => ({
@@ -485,7 +485,12 @@ export function App() {
         <div className="relative flex w-full max-w-lg flex-col items-center">
           <Card className="w-full overflow-hidden border-border/70 bg-card/90 p-0 shadow-2xl backdrop-blur-xl">
             <div className="flex flex-col items-center px-8 py-10 text-center sm:px-12">
-              <BrandIcon className="mb-5 size-20 text-primary drop-shadow-[0_0_24px_color-mix(in_oklch,var(--primary)_55%,transparent)]" />
+              <FMMatchLensLogo
+                size={80}
+                color="currentColor"
+                className="mb-5 size-20 text-primary drop-shadow-[0_0_24px_color-mix(in_oklch,var(--primary)_55%,transparent)]"
+                aria-hidden="true"
+              />
               <h1 className="font-fm-universe text-3xl tracking-tight text-foreground">
                 FMMatchLens
               </h1>
