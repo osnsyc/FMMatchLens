@@ -186,6 +186,7 @@ const resources = {
         presets: {
           fm: "FMMatchLens",
           opta: "Opta Inspired",
+          sofascore: "Sofascore Inspired",
           wyscout: "Wyscout Inspired",
         },
         scheme: {
@@ -983,6 +984,7 @@ const resources = {
         presets: {
           fm: "FMMatchLens",
           opta: "Opta Inspired",
+          sofascore: "Sofascore Inspired",
           wyscout: "Wyscout Inspired",
         },
         scheme: {

@@ -31,6 +31,15 @@
   --viz-away-fallback: #26648c;
 }
 
+:root[data-preset="sofascore-inspired"][data-color-vision="colorblind"] {
+  --viz-home-fallback: #0bb32a;
+  --viz-away-fallback: #374df5;
+}
+
+:root[data-preset="sofascore-inspired"][data-scheme="dark"][data-color-vision="colorblind"] {
+  --viz-away-fallback: #8794f9;
+}
+
 :root[data-contrast="high"][data-preset] {
   --text-muted: var(--text-secondary);
   --border-subtle: var(--border-strong);

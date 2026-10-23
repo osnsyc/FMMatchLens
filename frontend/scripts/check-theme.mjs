@@ -21,12 +21,16 @@ const presets = [
   ["fm/dark", "src/styles/themes/fm.css", ':root[data-preset="fm"][data-scheme="dark"]'],
   ["opta-inspired/light", "src/styles/themes/opta-inspired.css", ':root[data-preset="opta-inspired"][data-scheme="light"]'],
   ["opta-inspired/dark", "src/styles/themes/opta-inspired.css", ':root[data-preset="opta-inspired"][data-scheme="dark"]'],
+  ["sofascore-inspired/light", "src/styles/themes/sofascore-inspired.css", ':root[data-preset="sofascore-inspired"][data-scheme="light"]'],
+  ["sofascore-inspired/dark", "src/styles/themes/sofascore-inspired.css", ':root[data-preset="sofascore-inspired"][data-scheme="dark"]'],
   ["wyscout-inspired", "src/styles/themes/wyscout-inspired.css", ':root[data-preset="wyscout-inspired"]'],
 ]
-const knownPresetIds = new Set(["fm", "opta-inspired", "wyscout-inspired"])
+const knownPresetIds = new Set(["fm", "opta-inspired", "sofascore-inspired", "wyscout-inspired"])
 const fixedTeamColors = new Map([
   ["opta-inspired/light", { home: "#6327c6", away: "#dc3a44" }],
   ["opta-inspired/dark", { home: "#9b73ed", away: "#dc3a44" }],
+  ["sofascore-inspired/light", { home: "#0bb32a", away: "#374df5" }],
+  ["sofascore-inspired/dark", { home: "#0bb32a", away: "#8794f9" }],
   ["wyscout-inspired", { home: "#e05a35", away: "#26648c" }],
 ])
 const failures = []

@@ -13,6 +13,7 @@ import { selectTeamDisplayColors, teamColorCacheKey } from "../../src/lib/teamCo
 
 const fm = getThemePreset("fm")
 const opta = getThemePreset("opta-inspired")
+const sofascore = getThemePreset("sofascore-inspired")
 const wyscout = getThemePreset("wyscout-inspired")
 
 describe("appearance resolution", () => {
@@ -23,6 +24,8 @@ describe("appearance resolution", () => {
     ["system", "dark", fm, "dark"],
     ["light", "light", opta, "light"],
     ["dark", "light", opta, "dark"],
+    ["light", "dark", sofascore, "light"],
+    ["dark", "light", sofascore, "dark"],
     ["dark", "dark", wyscout, "light"],
   ] as const)("resolves %s with a %s system", (preference, system, preset, expected) => {
     expect(resolveScheme(preference, system, preset)).toBe(expected)
@@ -70,8 +73,16 @@ describe("appearance persistence", () => {
 })
 
 describe("theme registry", () => {
-  it("registers both inspired presets with their supported schemes", () => {
+  it("registers inspired presets with their supported schemes", () => {
     expect(getThemePreset("opta-inspired").supportedSchemes).toEqual(["light", "dark"])
+    expect(getThemePreset("sofascore-inspired").supportedSchemes).toEqual(["light", "dark"])
+    expect(getThemePreset("sofascore-inspired").defaultScheme).toBe("light")
+    expect(getThemePreset("sofascore-inspired").teamColors).toEqual({
+      mode: "fixed",
+      home: "#0bb32a",
+      away: "#374df5",
+      dark: { home: "#0bb32a", away: "#8794f9" },
+    })
     expect(getThemePreset("wyscout-inspired").supportedSchemes).toEqual(["light"])
     expect(getThemePreset("opta-inspired").teamColors).toEqual({
       mode: "fixed",

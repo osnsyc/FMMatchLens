@@ -1,5 +1,6 @@
 import { fmPreset } from "@/theme/presets/fm"
 import { optaInspiredPreset } from "@/theme/presets/opta-inspired"
+import { sofascoreInspiredPreset } from "@/theme/presets/sofascore-inspired"
 import { wyscoutInspiredPreset } from "@/theme/presets/wyscout-inspired"
 import type { ThemePreset } from "@/theme/types"
 
@@ -22,6 +23,7 @@ export function createThemeRegistry(presets: readonly ThemePreset[]) {
 export const themeRegistry = createThemeRegistry([
   fmPreset,
   optaInspiredPreset,
+  sofascoreInspiredPreset,
   wyscoutInspiredPreset,
 ])
 

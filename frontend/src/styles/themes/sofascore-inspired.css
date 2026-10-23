@@ -1,0 +1,217 @@
+/*
+ * Sofascore-inspired semantic palette.
+ * Colors are mapped from Sofascore's web semantic palette into FMMatchLens's
+ * theme token contract. Dark values adapt those semantics for dark surfaces.
+ */
+:root[data-preset="sofascore-inspired"][data-scheme="light"] {
+  --font-preset-heading: "Inter Variable", Arial, sans-serif;
+  --font-preset-sans: "Inter Variable", Arial, sans-serif;
+  --font-preset-data: "IBM Plex Mono", monospace;
+
+  --surface-page: #edf1f6;
+  --surface-panel: #ffffff;
+  --surface-panel-muted: rgb(229 233 239 / 50%);
+  --surface-popover: #ffffff;
+  --surface-input: rgb(34 34 38 / 6%);
+  --surface-overlay: rgb(34 34 38 / 70%);
+
+  --text-primary: #222226;
+  --text-secondary: rgb(34 34 38 / 70%);
+  --text-muted: rgb(34 34 38 / 45%);
+  --text-inverse: #ffffff;
+
+  --border-subtle: rgb(34 34 38 / 6%);
+  --border-default: rgb(34 34 38 / 15%);
+  --border-strong: #a4a9b3;
+  --border-focus: #374df5;
+
+  --action-primary: #374df5;
+  --action-primary-hover: #2c3ec4;
+  --action-on-primary: #ffffff;
+  --action-selected: rgb(55 77 245 / 12%);
+  --action-selected-text: #2c3ec4;
+
+  --status-positive: #15b168;
+  --status-negative: #c7361f;
+  --status-warning: #c7921f;
+  --status-info: #374df5;
+
+  --viz-home-fallback: #0bb32a;
+  --viz-away-fallback: #374df5;
+  --viz-series-1: #374df5;
+  --viz-series-2: #0bb32a;
+  --viz-series-3: #cac285;
+  --viz-series-4: #e59c03;
+  --viz-series-5: #ff407f;
+  --viz-grid: rgb(34 34 38 / 6%);
+  --viz-axis: rgb(34 34 38 / 45%);
+
+  --formation-pitch-surface: transparent;
+  --formation-player-number: var(--surface-page);
+  --heatmap-pitch-surface: transparent;
+  --heatmap-player-number: var(--surface-page);
+  --tactical-pitch-surface: transparent;
+  --pitch-line: #3c8063;
+  --pitch-zone: rgb(11 179 42 / 15%);
+  --pitch-label: rgb(34 34 38 / 70%);
+
+  --event-important: #e59c03;
+  --event-contrast: #374df5;
+  --event-marker-foreground: #ffffff;
+  --event-marker-shadow: rgb(34 34 38 / 16%);
+  --event-trajectory: rgb(34 34 38 / 70%);
+  --event-selected: #374df5;
+  --event-historical: #a4a9b3;
+
+  --heatmap-stop-0: var(--surface-panel);
+  --heatmap-stop-1: #cbedbf;
+  --heatmap-stop-2: #d5eb86;
+  --heatmap-stop-3: #fffc20;
+  --heatmap-stop-4: #ff8111;
+  --heatmap-stop-5: #ff1f1f;
+
+  --effect-highlight: rgb(55 77 245 / 15%);
+  --effect-shadow: rgb(34 34 38 / 16%);
+  --effect-panel-glow: transparent;
+  --effect-card-glow: transparent;
+  --gradient-page: linear-gradient(145deg, #edf1f6 0%, #ffffff 56%, #e5e9ef 100%);
+  --gradient-control-active: linear-gradient(135deg, #374df5, #2c3ec4);
+  --radius: 0.5rem;
+}
+
+:root[data-preset="sofascore-inspired"][data-scheme="dark"] {
+  --font-preset-heading: "Inter Variable", Arial, sans-serif;
+  --font-preset-sans: "Inter Variable", Arial, sans-serif;
+  --font-preset-data: "IBM Plex Mono", monospace;
+
+  --surface-page: #121212;
+  --surface-panel: #1d1d1f;
+  --surface-panel-muted: #27272a;
+  --surface-popover: #242426;
+  --surface-input: #303034;
+  --surface-overlay: rgb(0 0 0 / 72%);
+
+  --text-primary: #f7f7f8;
+  --text-secondary: #d1d2d6;
+  --text-muted: #a4a9b3;
+  --text-inverse: #121212;
+
+  --border-subtle: #303034;
+  --border-default: #424248;
+  --border-strong: #686a73;
+  --border-focus: #8794f9;
+
+  --action-primary: #8794f9;
+  --action-primary-hover: #a4adfb;
+  --action-on-primary: #121212;
+  --action-selected: #2b326a;
+  --action-selected-text: #f7f7f8;
+
+  --status-positive: #00c424;
+  --status-negative: #ff6258;
+  --status-warning: #e9be18;
+  --status-info: #38c3d5;
+
+  --viz-home-fallback: #0bb32a;
+  --viz-away-fallback: #8794f9;
+  --viz-series-1: #8794f9;
+  --viz-series-2: #24cc43;
+  --viz-series-3: #cac285;
+  --viz-series-4: #e59c03;
+  --viz-series-5: #ff407f;
+  --viz-grid: rgb(255 255 255 / 8%);
+  --viz-axis: #a4a9b3;
+
+  --formation-pitch-surface: transparent;
+  --formation-player-number: var(--surface-page);
+  --heatmap-pitch-surface: transparent;
+  --heatmap-player-number: var(--surface-page);
+  --tactical-pitch-surface: transparent;
+  --pitch-line: #aeb4c0;
+  --pitch-zone: rgb(135 148 249 / 12%);
+  --pitch-label: #d1d2d6;
+
+  --event-important: #e9be18;
+  --event-contrast: #8794f9;
+  --event-marker-foreground: #121212;
+  --event-marker-shadow: rgb(0 0 0 / 72%);
+  --event-trajectory: #d1d2d6;
+  --event-selected: #8794f9;
+  --event-historical: #8f939d;
+
+  --heatmap-stop-0: var(--surface-panel);
+  --heatmap-stop-1: #cbedbf;
+  --heatmap-stop-2: #d5eb86;
+  --heatmap-stop-3: #fffc20;
+  --heatmap-stop-4: #ff8111;
+  --heatmap-stop-5: #ff1f1f;
+
+  --effect-highlight: rgb(135 148 249 / 18%);
+  --effect-shadow: rgb(0 0 0 / 34%);
+  --effect-panel-glow: transparent;
+  --effect-card-glow: rgb(255 255 255 / 2%);
+  --gradient-page: linear-gradient(145deg, #121212 0%, #18181a 56%, #121212 100%);
+  --gradient-control-active: linear-gradient(135deg, #8794f9, #6676f7);
+  --radius: 0.5rem;
+}
+
+:root[data-preset="sofascore-inspired"] body {
+  letter-spacing: 0;
+}
+
+:root[data-preset="sofascore-inspired"] [data-slot="card"] {
+  border-color: var(--border-subtle);
+  background: var(--surface-panel);
+  box-shadow: 0 1px 3px var(--effect-shadow);
+}
+
+:root[data-preset="sofascore-inspired"] [data-slot="card"]::before {
+  display: none;
+}
+
+:root[data-preset="sofascore-inspired"] [data-slot="card"]:hover {
+  border-color: var(--border-default);
+  box-shadow: 0 3px 10px var(--effect-shadow);
+}
+
+:root[data-preset="sofascore-inspired"] [data-slot="card-title"]::before {
+  width: 3px;
+  background: var(--action-primary);
+  box-shadow: none;
+}
+
+:root[data-preset="sofascore-inspired"] :is(
+  [data-slot="button"],
+  [data-slot="tabs-trigger"],
+  [data-slot="menubar-trigger"]
+) {
+  font-family: var(--font-preset-sans);
+  font-weight: 600;
+}
+
+:root[data-preset="sofascore-inspired"] :is(
+  .tabular-nums,
+  [data-slot="chart"],
+  [data-slot="slider-value"]
+) {
+  font-family: var(--font-preset-data);
+}
+
+:root[data-preset="sofascore-inspired"] :is(
+  [data-slot="dropdown-menu-content"],
+  [data-slot="select-content"],
+  [data-slot="tooltip-content"]
+) {
+  border-color: var(--border-default);
+  box-shadow: 0 10px 24px var(--effect-shadow);
+}
+
+:root[data-preset="sofascore-inspired"] :is(
+  [data-slot="dropdown-menu-radio-item"][data-state="checked"],
+  [data-slot="dropdown-menu-checkbox-item"][data-state="checked"],
+  [data-slot="tabs-trigger"][data-state="active"],
+  [data-slot="tabs-trigger"][data-active]
+) {
+  color: var(--action-selected-text);
+  background: var(--action-selected);
+}
