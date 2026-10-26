@@ -9,6 +9,7 @@ export type AppShortcut = {
     | "matchStats"
     | "tactical"
     | "heatmap"
+    | "mapMode"
     | "formation"
     | "playback"
     | "theme"
@@ -17,6 +18,7 @@ export type AppShortcut = {
   displayKey: string
   labelKey: string
   requiresMatch: boolean
+  altKey?: boolean
   handled?: boolean
 }
 
@@ -48,6 +50,14 @@ export const appShortcuts: readonly AppShortcut[] = [
     displayKey: "H",
     labelKey: "shortcuts.heatmap",
     requiresMatch: true,
+  },
+  {
+    id: "mapMode",
+    key: "h",
+    displayKey: "Alt+H",
+    labelKey: "shortcuts.mapMode",
+    requiresMatch: true,
+    altKey: true,
   },
   {
     id: "formation",
@@ -86,7 +96,6 @@ export function shortcutForKeyboardEvent(event: KeyboardEvent) {
     event.repeat ||
     event.metaKey ||
     event.ctrlKey ||
-    event.altKey ||
     isEditableShortcutTarget(event.target) ||
     (key === " " && isInteractiveShortcutTarget(event.target))
   ) {
@@ -94,7 +103,10 @@ export function shortcutForKeyboardEvent(event: KeyboardEvent) {
   }
 
   return appShortcuts.find(
-    (shortcut) => shortcut.handled !== false && shortcut.key === key
+    (shortcut) =>
+      shortcut.handled !== false &&
+      shortcut.key === key &&
+      Boolean(shortcut.altKey) === event.altKey
   )
 }
 

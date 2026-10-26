@@ -172,6 +172,7 @@ const resources = {
         matchStats: "专注比赛数据",
         tactical: "专注战术板",
         heatmap: "专注热图",
+        mapMode: "热图 / 传球网络",
         formation: "专注阵型",
         playback: "播放 / 暂停",
         theme: "切换明暗主题",
@@ -371,6 +372,7 @@ const resources = {
         coachAdvice: "教练建议",
         assistant: "助理教练",
         positionHeatmap: "位置热图",
+        passMap: "传球网络",
         dataMap: "战术板",
       },
       formationView: {
@@ -441,6 +443,17 @@ const resources = {
           residual: "偏差",
           resultFactor: "比赛结果修正系数",
         },
+      },
+      mapView: {
+        switchToHeatmap: "切换到位置热图",
+        switchToPassMap: "切换到传球网络",
+      },
+      passMap: {
+        networkLabel: "普通传球网络",
+        empty: "所选时间范围内暂无普通传球数据",
+        edgeTooltip: "{{passer}} → {{receiver}} · {{count}} 次",
+        playerTooltip: "{{player}}，传球尝试 {{attempts}} 次，成功率 {{rate}}%",
+        playerStats: "尝试 {{attempts}} 次 · 成功率 {{rate}}%",
       },
       playerProfile: {
         age: "年龄",
@@ -970,6 +983,7 @@ const resources = {
         matchStats: "Match stats focus",
         tactical: "Tactical board focus",
         heatmap: "Heatmap focus",
+        mapMode: "Heatmap / Pass Map",
         formation: "Formation focus",
         playback: "Play / pause",
         theme: "Toggle theme",
@@ -1173,6 +1187,7 @@ const resources = {
         coachAdvice: "Coach Advice",
         assistant: "Assistant",
         positionHeatmap: "Heatmap",
+        passMap: "Pass Map",
         dataMap: "Tactical",
       },
       formationView: {
@@ -1243,6 +1258,17 @@ const resources = {
           residual: "Residual",
           resultFactor: "Match-result factor",
         },
+      },
+      mapView: {
+        switchToHeatmap: "Switch to heatmap",
+        switchToPassMap: "Switch to pass map",
+      },
+      passMap: {
+        networkLabel: "Open-play passing network",
+        empty: "No open-play passes in the selected time range",
+        edgeTooltip: "{{passer}} → {{receiver}} · {{count}} passes",
+        playerTooltip: "{{player}}, {{attempts}} passes, {{rate}}%",
+        playerStats: "{{attempts}} passes · {{rate}}%",
       },
       playerProfile: {
         age: "Age",

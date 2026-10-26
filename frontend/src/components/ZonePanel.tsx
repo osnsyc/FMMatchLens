@@ -9,6 +9,10 @@ import {
 import { PixiHeatmap } from "@/components/heatmap/PixiHeatmap"
 import { PitchMarkings } from "@/components/pitch/PitchMarkings"
 import { PitchPlayerBadge } from "@/components/pitch/PitchPlayerBadge"
+import {
+  MapPanelControls,
+  type SpatialMapView,
+} from "@/components/map/MapPanelControls"
 import { emitExploreTourInteraction } from "@/features/explore-tour/exploreTourEvents"
 import { resolvePitchDimensions } from "@/components/pitch/pitchGeometry"
 import {
@@ -30,6 +34,11 @@ import type {
 type ZonePanelProps = {
   match: MatchSnapshot
   isFocusMode: boolean
+  selectedTeam: TeamSide
+  selectedRange: PositionHeatmapRange
+  onViewChange: (view: SpatialMapView) => void
+  onTeamChange: (team: TeamSide) => void
+  onRangeChange: (range: PositionHeatmapRange) => void
 }
 
 const PITCH_FRAME_GAP = 4
@@ -60,16 +69,21 @@ type HeatmapView = {
   labels: HeatLabel[]
 }
 
-export function ZonePanel({ match, isFocusMode }: ZonePanelProps) {
+export function ZonePanel({
+  match,
+  isFocusMode,
+  selectedTeam,
+  selectedRange,
+  onViewChange,
+  onTeamChange,
+  onRangeChange,
+}: ZonePanelProps) {
   const { t } = useTranslation()
   const pitchDimensions = resolvePitchDimensions(match.pitchDimensions)
-  const [selectedTeam, setSelectedTeam] = useState<TeamSide>("home")
   const [selectedPlayerByTeam, setSelectedPlayerByTeam] = useState<
     Record<TeamSide, number | null>
   >({ home: null, away: null })
   const [selectedPhase, setSelectedPhase] = useState<HeatmapPhase>("all")
-  const [selectedRange, setSelectedRange] =
-    useState<PositionHeatmapRange>("full")
   const pitchHostRef = useRef<HTMLDivElement | null>(null)
   const [pitchSize, setPitchSize] = useState({ width: 0, height: 0 })
   const pitchFrameAspect = pitchDimensions.width / pitchDimensions.length
@@ -226,45 +240,26 @@ export function ZonePanel({ match, isFocusMode }: ZonePanelProps) {
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
       <CardHeader className="shrink-0 grid-cols-[auto_1fr] items-center gap-2 border-b px-3 py-2">
-        <CardTitle className="text-sm font-semibold @max-[230px]/card-header:hidden">
-          {t("panels.positionHeatmap")}
+        <CardTitle className="min-w-0 text-sm font-semibold">
+          <button
+            type="button"
+            className="block w-full cursor-pointer truncate py-1 text-left hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            aria-label={t("mapView.switchToPassMap")}
+            onClick={() => onViewChange("passMap")}
+          >
+            {t("panels.positionHeatmap")}
+          </button>
         </CardTitle>
         <CardAction className="flex min-w-0 flex-nowrap items-center justify-end gap-1.5">
-          <MultiStateButton
-            data-tour="heatmap-range"
-            data-tour-state={selectedRange}
-            value={selectedRange}
-            onValueChange={(value) => {
-              setSelectedRange(value)
+          <MapPanelControls
+            selectedRange={selectedRange}
+            selectedTeam={selectedTeam}
+            onRangeChange={(value) => {
+              onRangeChange(value)
               emitExploreTourInteraction({ id: "heatmap-range-change", value })
             }}
-            variant="outline"
-            size="sm"
-            className="min-w-14 px-2 text-[11px]"
-            aria-label={t("heatmap.range")}
-            contextMenuClassName="min-w-32"
-            states={
-              [
-                { value: "full", label: t("heatmapRange.full") },
-                { value: "half", label: t("heatmapRange.half") },
-                { value: "recent15", label: t("heatmapRange.recent15") },
-              ] satisfies Array<{ value: PositionHeatmapRange; label: string }>
-            }
-          />
-          <MultiStateButton
-            value={selectedTeam}
-            onValueChange={setSelectedTeam}
-            variant="outline"
-            size="sm"
-            className="min-w-12 px-2 text-[11px]"
-            aria-label={t("heatmap.team")}
-            contextMenuClassName="min-w-28"
-            states={
-              [
-                { value: "home", label: t("common.home") },
-                { value: "away", label: t("common.away") },
-              ] satisfies Array<{ value: TeamSide; label: string }>
-            }
+            onTeamChange={onTeamChange}
+            heatmapTour
           />
           <MultiStateButton
             data-tour="heatmap-phase"

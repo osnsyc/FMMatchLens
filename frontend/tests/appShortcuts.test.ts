@@ -20,7 +20,9 @@ describe("app shortcuts", () => {
   })
 
   it("assigns a unique key to every action", () => {
-    const keys = appShortcuts.map((shortcut) => shortcut.key)
+    const keys = appShortcuts.map(
+      (shortcut) => `${shortcut.altKey ? "alt+" : ""}${shortcut.key}`
+    )
     expect(new Set(keys).size).toBe(keys.length)
   })
 
@@ -31,6 +33,9 @@ describe("app shortcuts", () => {
     expect(shortcutForKeyboardEvent(keyboardEvent("Spacebar"))?.id).toBe(
       "playback"
     )
+    expect(
+      shortcutForKeyboardEvent(keyboardEvent("h", { altKey: true }))?.id
+    ).toBe("mapMode")
   })
 
   it("documents browser-native shortcuts without intercepting them", () => {

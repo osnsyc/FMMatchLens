@@ -69,6 +69,7 @@ import {
 } from "@/lib/appShortcuts"
 import { useExploreTour } from "@/features/explore-tour/useExploreTour"
 import { FMMatchLensLogo } from "@/components/fmmatchlens-logo"
+import type { SpatialMapView } from "@/components/map/MapPanelControls"
 
 const FormationPitch = lazy(() =>
   import("@/components/FormationPitch").then((module) => ({
@@ -100,9 +101,9 @@ const XgTimeline = lazy(() =>
     default: module.XgTimeline,
   }))
 )
-const ZonePanel = lazy(() =>
-  import("@/components/ZonePanel").then((module) => ({
-    default: module.ZonePanel,
+const SpatialMapPanel = lazy(() =>
+  import("@/components/SpatialMapPanel").then((module) => ({
+    default: module.SpatialMapPanel,
   }))
 )
 
@@ -178,6 +179,8 @@ export function App() {
   const [focusedPanel, setFocusedPanel] = useState<DashboardFocusPanel | null>(
     null
   )
+  const [spatialMapView, setSpatialMapView] =
+    useState<SpatialMapView>("heatmap")
   const [isChromeHidden, setIsChromeHidden] = useState(false)
   const [ratingBreakdownDetailed, setRatingBreakdownDetailed] = useState(false)
   const isTacticalFocusMode = focusedPanel === "tactical"
@@ -463,6 +466,11 @@ export function App() {
           setFocusedPanel((current) => (current === panel ? null : panel))
           break
         }
+        case "mapMode":
+          setSpatialMapView((current) =>
+            current === "heatmap" ? "passMap" : "heatmap"
+          )
+          break
         case "playback":
           window.dispatchEvent(new Event(playbackToggleEventName))
           break
@@ -940,9 +948,11 @@ export function App() {
                     active={focusedPanel == null || focusedPanel === "heatmap"}
                   >
                     <div data-tour="heatmap-panel" className="h-full min-h-0">
-                      <ZonePanel
+                      <SpatialMapPanel
                         match={match}
                         isFocusMode={focusedPanel === "heatmap"}
+                        view={spatialMapView}
+                        onViewChange={setSpatialMapView}
                       />
                     </div>
                   </AnimatedDashboardCard>

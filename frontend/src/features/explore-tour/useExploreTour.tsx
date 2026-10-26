@@ -467,7 +467,7 @@ export function useExploreTour(adapter: ExploreTourAdapter) {
         advanceWhenDrawerCloses()
       }
       taskScope.schedule(() => {
-        if (currentId === "heatmap-explore" && key === "h") {
+        if (currentId === "heatmap-explore" && key === "h" && !event.altKey) {
           const focused = Boolean(
             document.querySelector('[data-dashboard-focus="heatmap"]')
           )
