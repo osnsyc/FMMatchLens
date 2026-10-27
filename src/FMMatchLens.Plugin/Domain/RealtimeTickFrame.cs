@@ -301,6 +301,7 @@ internal readonly record struct PlayerTickData(
     int CrossesCompleted,
     int Passes,
     int PassesCompleted,
+    int ProgressivePasses,
     int KeyPasses,
     int TacklesAttempted,
     int TacklesWon,

@@ -769,8 +769,9 @@ internal static class Offsets
         public const int LongPassesAttemptedCandidate = 0xDE;
         public const int ShortPassesCompletedCandidate = 0xE0;
         public const int LongPassesCompletedCandidate = 0xE2;
+        public const int ProgressivePasses = 0xE9;
 
-        // Inclusive of the highest-address rating input above (an Int16 at +0xE2).
-        public const int RatingInputReadableSize = 0xE4;
+        // Inclusive of the highest-address player stat above (a byte at +0xE9).
+        public const int RatingInputReadableSize = 0xEA;
     }
 }

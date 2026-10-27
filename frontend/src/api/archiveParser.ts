@@ -36,8 +36,10 @@ const maxChunkBytes = 16 * 1024 * 1024
 const legacyTeamFields = (1n << 23n) - 1n
 const allTeamFields = (1n << 25n) - 1n
 const legacyPlayerFields = (1n << 39n) - 1n
-const allPlayerFields = (1n << 42n) - 1n
+const version27PlayerFields = (1n << 42n) - 1n
+const allPlayerFields = (1n << 43n) - 1n
 const compactPlayerFields = allPlayerFields & ~(1n << 36n)
+const version27CompactPlayerFields = version27PlayerFields & ~(1n << 36n)
 
 type ArchiveHeader = {
   structureMajor: number
@@ -260,7 +262,13 @@ function readFrames(
 ) {
   const reader = new ArchiveBufferReader(payload)
   const supportedTeamFields = structureMinor >= 6 ? allTeamFields : legacyTeamFields
-  const supportedPlayerFields = structureMinor >= 7 ? compactPlayerFields : structureMinor >= 6 ? allPlayerFields : legacyPlayerFields
+  const supportedPlayerFields = structureMinor >= 8
+    ? compactPlayerFields
+    : structureMinor >= 7
+      ? version27CompactPlayerFields
+      : structureMinor >= 6
+        ? version27PlayerFields
+        : legacyPlayerFields
   if (structureMinor === 1 && reader.readByte() !== legacy21FramePayloadMarker) {
     throw new ArchiveError("2.1 帧载荷标记无效")
   }
@@ -608,6 +616,7 @@ function readPlayerFields(reader: ArchiveBufferReader, prior: RealtimePlayer, ma
     [32, "defensiveFreeKicks"], [33, "attackingFreeKicks"], [34, "clearances"], [35, "shotsFaced"],
     [37, "overallPhysicalCondition"], [38, "matchSharpness"],
     [39, "savesHeld"], [40, "savesParried"], [41, "savesTipped"],
+    [42, "progressivePasses"],
   ]
   for (const [bit, field] of statFields) {
     // Legacy bit 36 precedes condition/sharpness and keeper fields on the wire.

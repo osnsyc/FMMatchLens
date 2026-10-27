@@ -917,6 +917,7 @@ internal sealed class GameMatchTickHook : IDisposable
             CrossesCompleted: ReadByteDirect(stats + Offsets.PlayerStats.CrossesCompleted),
             Passes: ReadByteDirect(stats + Offsets.PlayerStats.Passes),
             PassesCompleted: ReadByteDirect(stats + Offsets.PlayerStats.PassesCompleted),
+            ProgressivePasses: ReadByteDirect(stats + Offsets.PlayerStats.ProgressivePasses),
             KeyPasses: ReadByteDirect(stats + Offsets.PlayerStats.KeyPasses),
             TacklesAttempted: ReadByteDirect(stats + Offsets.PlayerStats.TacklesAttempted),
             TacklesWon: ReadByteDirect(stats + Offsets.PlayerStats.TacklesWon),

@@ -41,7 +41,8 @@ internal static class ArchiveWireFormat
     // VarUInt movement keyframes, and per-axis football change flags define
     // the 2.7 layout. The compact player-rating payload defines 2.8: rating-only
     // PlayerStats fields are byte-delta encoded while fields already present in
-    // PlayerTickData are reused; raw rating events, IP/OOP RoleDuty, and total eligible duration
+    // PlayerTickData are reused; per-player progressive passes are retained; raw
+    // rating events, IP/OOP RoleDuty, and total eligible duration
     // let the frontend reconstruct classification durations along the timeline;
     // raw per-team W04/W05 context candidates are byte-delta encoded;
     // match-level inputs are change-masked; the active 6700 baseline, both

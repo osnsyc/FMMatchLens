@@ -201,6 +201,7 @@ export type PlayerStats = {
   crossesCompleted?: number
   passes?: number
   passesCompleted?: number
+  progressivePasses?: number
   keyPasses?: number
   tacklesAttempted?: number
   tacklesWon?: number
