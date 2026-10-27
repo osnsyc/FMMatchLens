@@ -1,6 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowDataTransferHorizontalIcon, ArrowDown01Icon, ArrowUp01Icon, FootballIcon, HelpCircleIcon, Pin02Icon, SidebarLeft01Icon } from "@hugeicons/core-free-icons"
+import { ArrowDataTransferHorizontalIcon, FootballIcon, Pin02Icon, SidebarLeft01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { AssistIcon } from "@/components/AssistIcon"
@@ -45,8 +45,8 @@ import { nationDisplay } from "@/lib/nations"
 import { findNearestPositionPlayerIds } from "@/lib/playerPositionMatch"
 import { decodePlayerTraits } from "@/lib/playerTraits"
 import { sameSquadPlayers } from "@/lib/matchRenderEquality"
+import { setPlayerProfileBackdrop } from "@/lib/playerProfileBackdrop"
 import { exploreTourCloseOverlaysEventName } from "@/features/explore-tour/exploreTourEvents"
-import type { RatingContributionGroup } from "@/api/realtimeMatch"
 
 type SquadPanelProps = {
   title: string
@@ -59,10 +59,11 @@ type SquadPanelProps = {
   pinnedPlayerId?: number
   attackingOpponent?: MatchPlayer
   profilePopupSuppressed?: boolean
-  ratingBreakdownDetailed: boolean
-  ratingBreakdownMaximum: number
-  onRatingBreakdownDetailedChange: (detailed: boolean) => void
   onPinnedPlayerChange: (playerId?: number) => void
+  detailsPinnedPlayerId?: number
+  onPlayerDetailsPreview: (side: TeamSide, playerId: number, panel: HTMLElement, anchor: HTMLElement) => void
+  onPlayerDetailsPreviewEnd: (side: TeamSide, playerId: number) => void
+  onPlayerDetailsPin: (side: TeamSide, playerId: number, panel: HTMLElement, anchor: HTMLElement) => void
   tacticalSelectionActive?: boolean
   tacticalSelectedPlayerIds?: ReadonlySet<number>
   onTacticalPlayerToggle?: (playerId: number) => void
@@ -87,13 +88,7 @@ type PlayerStatus = {
   className?: string
 }
 
-let openPlayerProfileCount = 0
 const emptyPlayerIdSet: ReadonlySet<number> = new Set()
-
-function setPlayerProfileBackdrop(open: boolean) {
-  openPlayerProfileCount = Math.max(0, openPlayerProfileCount + (open ? 1 : -1))
-  document.body.classList.toggle("player-profile-open", openPlayerProfileCount > 0)
-}
 
 function initials(name: string) {
   return name
@@ -229,13 +224,6 @@ function ratingClass(
   return "text-foreground"
 }
 
-function inverseRatingClass(rating?: number) {
-  if (rating == null) return "bg-muted text-muted-foreground"
-  if (rating >= 7.5) return "bg-status-positive text-background"
-  if (rating < 6.5) return "bg-status-negative text-background"
-  return "bg-foreground text-background"
-}
-
 export const SquadPanel = memo(function SquadPanel({
   title,
   teamUid,
@@ -247,10 +235,11 @@ export const SquadPanel = memo(function SquadPanel({
   pinnedPlayerId,
   attackingOpponent,
   profilePopupSuppressed = false,
-  ratingBreakdownDetailed,
-  ratingBreakdownMaximum,
-  onRatingBreakdownDetailedChange,
   onPinnedPlayerChange,
+  detailsPinnedPlayerId,
+  onPlayerDetailsPreview,
+  onPlayerDetailsPreviewEnd,
+  onPlayerDetailsPin,
   tacticalSelectionActive = false,
   tacticalSelectedPlayerIds = emptyPlayerIdSet,
   onTacticalPlayerToggle,
@@ -684,13 +673,15 @@ export const SquadPanel = memo(function SquadPanel({
         <PlayerStatusStrip statuses={statuses} />
 
         {/* Rating */}
-        <RatingBreakdownHover
+        <PlayerDetailsTrigger
           player={player}
           side={side}
+          teamColor={resolvedTeamColor}
+          pinned={detailsPinnedPlayerId === player.id}
           panelRef={panelRef}
-          detailed={ratingBreakdownDetailed}
-          maximum={ratingBreakdownMaximum}
-          onDetailedChange={onRatingBreakdownDetailedChange}
+          onPreview={onPlayerDetailsPreview}
+          onPreviewEnd={onPlayerDetailsPreviewEnd}
+          onPin={onPlayerDetailsPin}
         />
       </li>
     )
@@ -841,10 +832,11 @@ function sameSquadPanelProps(previous: SquadPanelProps, next: SquadPanelProps) {
     && previous.pinnedPlayerId === next.pinnedPlayerId
     && previous.attackingOpponent === next.attackingOpponent
     && previous.profilePopupSuppressed === next.profilePopupSuppressed
-    && previous.ratingBreakdownDetailed === next.ratingBreakdownDetailed
-    && previous.ratingBreakdownMaximum === next.ratingBreakdownMaximum
-    && previous.onRatingBreakdownDetailedChange === next.onRatingBreakdownDetailedChange
     && previous.onPinnedPlayerChange === next.onPinnedPlayerChange
+    && previous.detailsPinnedPlayerId === next.detailsPinnedPlayerId
+    && previous.onPlayerDetailsPreview === next.onPlayerDetailsPreview
+    && previous.onPlayerDetailsPreviewEnd === next.onPlayerDetailsPreviewEnd
+    && previous.onPlayerDetailsPin === next.onPlayerDetailsPin
     && previous.tacticalSelectionActive === next.tacticalSelectionActive
     && previous.tacticalSelectedPlayerIds === next.tacticalSelectedPlayerIds
     && previous.onTacticalPlayerToggle === next.onTacticalPlayerToggle
@@ -1059,228 +1051,90 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   previous.player.attributes === next.player.attributes
 )
 
-const outfieldRatingContributionGroups: RatingContributionGroup[] = [
-  "Shooting", "Creativity", "Passing", "Defence",
-]
-
-const goalkeeperRatingContributionGroups: RatingContributionGroup[] = [
-  "Goalkeeping", "Creativity", "Passing", "Defence",
-]
-
-function RatingBreakdownHover({
+function PlayerDetailsTrigger({
   player,
   side,
+  teamColor,
+  pinned,
   panelRef,
-  detailed,
-  maximum,
-  onDetailedChange,
+  onPreview,
+  onPreviewEnd,
+  onPin,
 }: {
   player: MatchPlayer
   side: TeamSide
+  teamColor: string
+  pinned: boolean
   panelRef: React.RefObject<HTMLElement | null>
-  detailed: boolean
-  maximum: number
-  onDetailedChange: (detailed: boolean) => void
+  onPreview: (side: TeamSide, playerId: number, panel: HTMLElement, anchor: HTMLElement) => void
+  onPreviewEnd: (side: TeamSide, playerId: number) => void
+  onPin: (side: TeamSide, playerId: number, panel: HTMLElement, anchor: HTMLElement) => void
 }) {
   const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
-  const [sideOffset, setSideOffset] = useState(8)
-
-  useLayoutEffect(() => {
-    if (!open) return
-    setPlayerProfileBackdrop(true)
-    return () => setPlayerProfileBackdrop(false)
-  }, [open])
-
-  const isGoalkeeper = (player.positionFamiliarities?.GK ?? 0) >= 15 || player.position === "GK"
-  const groups = isGoalkeeper
-    ? goalkeeperRatingContributionGroups
-    : outfieldRatingContributionGroups
-  const contribution = open
-    ? player.ratingContribution ?? player.resolveRatingContribution?.()
-    : player.ratingContribution
-  const timeAdjustment = contribution?.groupContributionsPostFactor.BaseContext ?? 0
-  const penaltyShootout = contribution?.terms
-    .filter((term) => term.index >= 44 && term.index <= 49)
-    .reduce((sum, term) => sum + term.postFactorContribution, 0) ?? 0
-  const hasBreakdown = player.ratingContribution != null || player.resolveRatingContribution != null
-  const score = player.rating ?? contribution?.nativeRating
-  const ratingText = score?.toFixed(1) ?? "-"
-  const ratingClassName = `
-    col-start-5
-    flex h-6 w-9 shrink-0
-    items-center justify-center
-    justify-self-end
-    rounded-md
-    bg-muted/35
-    text-sm font-semibold
-    tabular-nums
-    sm:w-10
-    ${ratingClass(score)}
-  `
-  const ratingElement = (
-    <span className={ratingClassName}>
-      {ratingText}
-    </span>
-  )
-
-  if (!hasBreakdown) return ratingElement
-
-  const updateOffset = (trigger: HTMLElement) => {
-    const panel = panelRef.current?.getBoundingClientRect()
-    const anchor = trigger.getBoundingClientRect()
-    if (!panel) return
-    setSideOffset(side === "home" ? Math.max(8, panel.right - anchor.right + 8) : Math.max(8, anchor.left - panel.left + 8))
+  const showPreview = (anchor: HTMLElement) => {
+    const panel = panelRef.current
+    if (panel) onPreview(side, player.id, panel, anchor)
+  }
+  const pin = (anchor: HTMLElement) => {
+    const panel = panelRef.current
+    if (panel) onPin(side, player.id, panel, anchor)
   }
 
   return (
-    <HoverCard open={open} onOpenChange={setOpen}>
-      <HoverCardTrigger
-        render={(
-          <span
-            className={ratingClassName}
-            onPointerEnter={(event) => updateOffset(event.currentTarget)}
-          />
-        )}
-      >
-        {ratingText}
-      </HoverCardTrigger>
-      {contribution && (
-        <HoverCardContent
-          side={side === "home" ? "right" : "left"}
-          sideOffset={sideOffset}
-          align="center"
-          className="w-80 bg-card p-3 text-card-foreground shadow-xl ring-1 ring-border"
+    <span
+      data-player-details-trigger
+      role="button"
+      tabIndex={0}
+      aria-pressed={pinned}
+      aria-label={t("playerDetails.open", { player: player.name })}
+      className={`
+        col-start-5
+        relative flex h-6 w-9 shrink-0
+        cursor-pointer items-center justify-center
+        justify-self-end rounded-md
+        border border-transparent bg-muted/35 text-sm font-semibold
+        tabular-nums outline-none transition-colors
+        hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring/60
+        sm:w-10
+        ${ratingClass(player.rating)}
+      `}
+      onPointerEnter={(event) => {
+        event.currentTarget.style.boxShadow = `inset 0 0 0 1px ${teamColor}`
+        showPreview(event.currentTarget)
+      }}
+      onPointerLeave={(event) => {
+        event.currentTarget.style.boxShadow = ""
+        onPreviewEnd(side, player.id)
+      }}
+      onFocus={(event) => {
+        event.currentTarget.style.boxShadow = `inset 0 0 0 1px ${teamColor}`
+        showPreview(event.currentTarget)
+      }}
+      onBlur={(event) => {
+        event.currentTarget.style.boxShadow = ""
+        onPreviewEnd(side, player.id)
+      }}
+      onClick={(event) => {
+        event.stopPropagation()
+        pin(event.currentTarget)
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return
+        event.preventDefault()
+        event.stopPropagation()
+        pin(event.currentTarget)
+      }}
+    >
+      {player.rating?.toFixed(1) ?? "-"}
+      {pinned && (
+        <AvatarBadge
+          aria-hidden="true"
+          className="-bottom-0.5! -right-1.5! left-auto! size-3! [&>svg]:size-2.5!"
         >
-          <div className="mb-3 flex items-center justify-between gap-3 border-b border-border/70 pb-2">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <h3 className="truncate text-xs font-bold tracking-wide">
-                {t("ratingBreakdown.title")}
-              </h3>
-              <Tooltip>
-                <TooltipTrigger
-                  render={(
-                    <button
-                      type="button"
-                      className="flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-                      aria-label={t("ratingBreakdown.about")}
-                    />
-                  )}
-                >
-                  <HugeiconsIcon icon={HelpCircleIcon} className="size-3.5" strokeWidth={2} />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-64">
-                  {t("ratingBreakdown.description")}
-                </TooltipContent>
-              </Tooltip>
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                className="h-5 px-1.5 text-[10px] text-muted-foreground"
-                aria-expanded={detailed}
-                aria-label={t(detailed ? "ratingBreakdown.showSummary" : "ratingBreakdown.showDetails")}
-                onClick={() => onDetailedChange(!detailed)}
-              >
-                {t(detailed ? "ratingBreakdown.summary" : "ratingBreakdown.details")}
-                <HugeiconsIcon
-                  icon={detailed ? ArrowUp01Icon : ArrowDown01Icon}
-                  className="size-2.5"
-                  strokeWidth={2}
-                />
-              </Button>
-            </div>
-            <span className={`flex h-6 min-w-9 shrink-0 items-center justify-center rounded-md px-1.5 text-xs font-bold tabular-nums ${inverseRatingClass(score)}`}>
-              {ratingText}
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-            {groups.map((group) => {
-              const value = contribution.groupContributionsPostFactor[group] ?? 0
-              return (
-                <RatingBreakdownMetric
-                  key={group}
-                  label={t(`ratingBreakdown.groups.${group}`)}
-                  description={t(`ratingBreakdown.groupDescriptions.${group}`)}
-                  value={value}
-                  maximum={maximum}
-                />
-              )
-            })}
-            {detailed && (
-              <>
-                <RatingBreakdownMetric
-                  label={t("ratingBreakdown.groups.TimeAdjustment")}
-                  description={t("ratingBreakdown.groupDescriptions.TimeAdjustment")}
-                  value={timeAdjustment}
-                  maximum={maximum}
-                />
-                <RatingBreakdownMetric
-                  label={t("ratingBreakdown.groups.PenaltyShootout")}
-                  description={t("ratingBreakdown.groupDescriptions.PenaltyShootout")}
-                  value={penaltyShootout}
-                  maximum={maximum}
-                />
-              </>
-            )}
-          </div>
-          {detailed && (
-            <div className="mt-3 flex items-center gap-x-3 whitespace-nowrap border-t border-border/70 pt-2 text-[9px] leading-4 text-muted-foreground tabular-nums">
-              <span>{t("ratingBreakdown.debug.residual")}: {contribution.reconstructionResidual}‰</span>
-              <span>{t("ratingBreakdown.debug.resultFactor")}: {contribution.selectedBaseFactor.toFixed(2)}</span>
-            </div>
-          )}
-        </HoverCardContent>
+          <HugeiconsIcon icon={Pin02Icon} strokeWidth={2.2} />
+        </AvatarBadge>
       )}
-    </HoverCard>
-  )
-}
-
-function RatingBreakdownMetric({
-  label,
-  description,
-  value,
-  maximum,
-}: {
-  label: string
-  description: string
-  value: number
-  maximum: number
-}) {
-  return (
-    <div className="min-w-0">
-      <div className="flex items-center justify-between gap-2 text-[11px]">
-        <span className="flex min-w-0 items-center gap-1 text-muted-foreground">
-          <span className="truncate">{label}</span>
-          <Tooltip>
-            <TooltipTrigger
-              render={(
-                <button
-                  type="button"
-                  className="flex size-3.5 shrink-0 items-center justify-center rounded-full transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-                  aria-label={description}
-                />
-              )}
-            >
-              <HugeiconsIcon icon={HelpCircleIcon} className="size-3" strokeWidth={2} />
-            </TooltipTrigger>
-            <TooltipContent className="max-w-64">{description}</TooltipContent>
-          </Tooltip>
-        </span>
-        <span className={`font-medium tabular-nums ${value > 0 ? "text-status-positive" : value < 0 ? "text-status-negative" : "text-muted-foreground"}`}>
-          {value > 0 ? "+" : ""}{(value / 1000).toFixed(2)}
-        </span>
-      </div>
-      <div className="relative mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
-        <span className="absolute inset-y-0 left-1/2 w-px bg-border" />
-        {value !== 0 && (
-          <span
-            className={`absolute inset-y-0 rounded-full ${value > 0 ? "left-1/2 bg-status-positive" : "right-1/2 bg-status-negative"}`}
-            style={{ width: `${Math.min(50, Math.max(1, Math.abs(value) / maximum * 50))}%` }}
-          />
-        )}
-      </div>
-    </div>
+    </span>
   )
 }
 

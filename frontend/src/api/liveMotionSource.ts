@@ -1,5 +1,9 @@
 import { validPitchHalf } from "@/components/tactical/shared/core/frameProjector"
 import type { RealtimeFrame } from "@/api/realtimeMatch"
+import {
+  PlayerMovementTracker,
+  type PlayerMovementAnalysis,
+} from "@/api/playerMovement"
 import type { TeamSide } from "@/types/match"
 export type LiveMotionStatus =
   "buffering" | "playing" | "waiting" | "disconnected" | "ended" | "suspended"
@@ -31,6 +35,7 @@ export class LiveMotionSource {
   private statuses = new Set<(status: LiveMotionStatus) => void>()
   private generation = 0
   private status: LiveMotionStatus = "disconnected"
+  private readonly movement = new PlayerMovementTracker()
   getLatest() {
     return this.latest
   }
@@ -62,6 +67,15 @@ export class LiveMotionSource {
     this.generation++
     this.latest = undefined
     this.setStatus("disconnected")
+  }
+  resetMovement() {
+    this.movement.reset()
+  }
+  ingestMovementFrames(frames: readonly RealtimeFrame[]) {
+    this.movement.append(frames)
+  }
+  getPlayerMovement(playerId: number): PlayerMovementAnalysis {
+    return this.movement.get(playerId)
   }
   publish(
     frame: RealtimeFrame,
@@ -151,6 +165,7 @@ export class LiveMotionSource {
   }
   dispose() {
     this.reset()
+    this.resetMovement()
     this.listeners.clear()
     this.statuses.clear()
   }

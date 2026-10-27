@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from "react"
 import { useTranslation } from "react-i18next"
-import { motion, MotionConfig } from "framer-motion"
+import { AnimatePresence, motion, MotionConfig } from "framer-motion"
 import {
   Coffee01Icon,
   Github01Icon,
@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/select"
 import { ScoreHeader } from "@/components/ScoreHeader"
 import { PlayerComparisonPopup, SquadPanel } from "@/components/SquadPanel"
+import { PlayerMatchDetailsPopup } from "@/components/PlayerMatchDetailsPopup"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useTheme } from "@/components/theme-provider"
 import { useRealtimeMatch, type RealtimeFrame } from "@/api/realtimeMatch"
@@ -68,8 +69,17 @@ import {
   type DashboardFocusPanel,
 } from "@/lib/appShortcuts"
 import { useExploreTour } from "@/features/explore-tour/useExploreTour"
+import { exploreTourCloseOverlaysEventName } from "@/features/explore-tour/exploreTourEvents"
 import { FMMatchLensLogo } from "@/components/fmmatchlens-logo"
 import type { SpatialMapView } from "@/components/map/MapPanelControls"
+
+type PlayerDetailsOverlayState = {
+  side: TeamSide
+  playerId: number
+  panelElement: HTMLElement
+  anchorElement: HTMLElement
+  pinned: boolean
+}
 
 const FormationPitch = lazy(() =>
   import("@/components/FormationPitch").then((module) => ({
@@ -182,7 +192,6 @@ export function App() {
   const [spatialMapView, setSpatialMapView] =
     useState<SpatialMapView>("heatmap")
   const [isChromeHidden, setIsChromeHidden] = useState(false)
-  const [ratingBreakdownDetailed, setRatingBreakdownDetailed] = useState(false)
   const isTacticalFocusMode = focusedPanel === "tactical"
   const [tacticalEventFilterMode, setTacticalEventFilterMode] =
     useState<TacticalEventFilterMode>("all")
@@ -192,6 +201,62 @@ export function App() {
   const [pinnedPlayers, setPinnedPlayers] = useState<PinnedPlayersState>({
     ids: {},
   })
+  const [playerDetailsOverlay, setPlayerDetailsOverlay] =
+    useState<PlayerDetailsOverlayState | null>(null)
+  const [, refreshLiveMovement] = useState(0)
+  const playerDetailsCloseTimerRef = useRef<number | undefined>(undefined)
+  const cancelPlayerDetailsClose = useCallback(() => {
+    if (playerDetailsCloseTimerRef.current == null) return
+    window.clearTimeout(playerDetailsCloseTimerRef.current)
+    playerDetailsCloseTimerRef.current = undefined
+  }, [])
+  const previewPlayerDetails = useCallback((
+    side: TeamSide,
+    playerId: number,
+    panelElement: HTMLElement,
+    anchorElement: HTMLElement,
+  ) => {
+    cancelPlayerDetailsClose()
+    setPlayerDetailsOverlay((current) => current?.pinned
+      ? current
+      : { side, playerId, panelElement, anchorElement, pinned: false })
+  }, [cancelPlayerDetailsClose])
+  const finishPlayerDetailsPreview = useCallback((side: TeamSide, playerId: number) => {
+    cancelPlayerDetailsClose()
+    playerDetailsCloseTimerRef.current = window.setTimeout(() => {
+      playerDetailsCloseTimerRef.current = undefined
+      setPlayerDetailsOverlay((current) => (
+        current && !current.pinned && current.side === side && current.playerId === playerId
+          ? null
+          : current
+      ))
+    }, 120)
+  }, [cancelPlayerDetailsClose])
+  const pinPlayerDetails = useCallback((
+    side: TeamSide,
+    playerId: number,
+    panelElement: HTMLElement,
+    anchorElement: HTMLElement,
+  ) => {
+    cancelPlayerDetailsClose()
+    setPlayerDetailsOverlay({ side, playerId, panelElement, anchorElement, pinned: true })
+  }, [cancelPlayerDetailsClose])
+  const closePlayerDetails = useCallback(() => {
+    cancelPlayerDetailsClose()
+    setPlayerDetailsOverlay(null)
+  }, [cancelPlayerDetailsClose])
+  useEffect(() => () => cancelPlayerDetailsClose(), [cancelPlayerDetailsClose])
+  useEffect(() => {
+    window.addEventListener(exploreTourCloseOverlaysEventName, closePlayerDetails)
+    return () => window.removeEventListener(exploreTourCloseOverlaysEventName, closePlayerDetails)
+  }, [closePlayerDetails])
+  useEffect(() => {
+    if (!playerDetailsOverlay || replayMatch !== null) return
+    // Movement history is aggregated continuously, but the popup only needs a
+    // low-frequency refresh. This keeps the 250 ms live path render-free.
+    const timer = window.setInterval(() => refreshLiveMovement((value) => value + 1), 5_000)
+    return () => window.clearInterval(timer)
+  }, [playerDetailsOverlay, replayMatch])
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const demoAbortRef = useRef<AbortController | null>(null)
   const showReplayFrame = useCallback((snapshot: MatchSnapshot) => {
@@ -335,7 +400,8 @@ export function App() {
     pinnedPlayerMatchScopeRef.current = pinnedPlayerMatchScope
     setPinnedPlayers({ ids: {} })
     setTacticalPlayerIds(new Set())
-  }, [pinnedPlayerMatchScope])
+    closePlayerDetails()
+  }, [closePlayerDetails, pinnedPlayerMatchScope])
 
   const match = useMemo(() => {
     if (!sourceMatch) return null
@@ -378,19 +444,6 @@ export function App() {
     preset,
   ])
   const hasMatch = match !== null
-  const ratingBreakdownMaximum = useMemo(() => {
-    if (!match) return 1_000
-
-    return Math.max(1_000, ...match.players.flatMap((player) => {
-      const contribution = player.ratingContribution ?? player.resolveRatingContribution?.()
-      if (!contribution) return []
-      const isGoalkeeper = (player.positionFamiliarities?.GK ?? 0) >= 15 || player.position === "GK"
-      const groups = isGoalkeeper
-        ? (["Goalkeeping", "Creativity", "Passing", "Defence"] as const)
-        : (["Shooting", "Creativity", "Passing", "Defence"] as const)
-      return groups.map((group) => Math.abs(contribution.groupContributionsPostFactor[group] ?? 0))
-    }))
-  }, [match])
 
   const setPinnedPlayer = useCallback((side: TeamSide, playerId?: number) => {
     setPinnedPlayers((current) => updatePinnedPlayer(current, side, playerId))
@@ -739,6 +792,15 @@ export function App() {
     (player) => player.id === pinnedPlayers.ids.away
   )
   const comparisonOpen = pinnedHomePlayer != null && pinnedAwayPlayer != null
+  const playerDetailsPlayer = playerDetailsOverlay
+    ? match.players.find((player) => (
+        player.id === playerDetailsOverlay.playerId &&
+        player.team === playerDetailsOverlay.side
+      ))
+    : undefined
+  const playerDetailsLiveMovement = playerDetailsOverlay && !isReplayMode
+    ? liveMotionSource.getPlayerMovement(playerDetailsOverlay.playerId)
+    : undefined
 
   return (
     <main className="scrollbar-hidden h-svh w-full overflow-auto bg-background p-4 sm:p-6">
@@ -817,10 +879,15 @@ export function App() {
                       : undefined
                   }
                   profilePopupSuppressed={comparisonOpen}
-                  ratingBreakdownDetailed={ratingBreakdownDetailed}
-                  ratingBreakdownMaximum={ratingBreakdownMaximum}
-                  onRatingBreakdownDetailedChange={setRatingBreakdownDetailed}
                   onPinnedPlayerChange={setPinnedHomePlayer}
+                  detailsPinnedPlayerId={
+                    playerDetailsOverlay?.pinned && playerDetailsOverlay.side === "home"
+                      ? playerDetailsOverlay.playerId
+                      : undefined
+                  }
+                  onPlayerDetailsPreview={previewPlayerDetails}
+                  onPlayerDetailsPreviewEnd={finishPlayerDetailsPreview}
+                  onPlayerDetailsPin={pinPlayerDetails}
                   tacticalSelectionActive={
                     isTacticalFocusMode &&
                     tacticalEventFilterMode === "individual"
@@ -989,10 +1056,15 @@ export function App() {
                       : undefined
                   }
                   profilePopupSuppressed={comparisonOpen}
-                  ratingBreakdownDetailed={ratingBreakdownDetailed}
-                  ratingBreakdownMaximum={ratingBreakdownMaximum}
-                  onRatingBreakdownDetailedChange={setRatingBreakdownDetailed}
                   onPinnedPlayerChange={setPinnedAwayPlayer}
+                  detailsPinnedPlayerId={
+                    playerDetailsOverlay?.pinned && playerDetailsOverlay.side === "away"
+                      ? playerDetailsOverlay.playerId
+                      : undefined
+                  }
+                  onPlayerDetailsPreview={previewPlayerDetails}
+                  onPlayerDetailsPreviewEnd={finishPlayerDetailsPreview}
+                  onPlayerDetailsPin={pinPlayerDetails}
                   tacticalSelectionActive={
                     isTacticalFocusMode &&
                     tacticalEventFilterMode === "individual"
@@ -1033,6 +1105,34 @@ export function App() {
           </motion.div>
         </MotionConfig>
       </Suspense>
+      <AnimatePresence>
+        {playerDetailsOverlay && playerDetailsPlayer && (
+          <PlayerMatchDetailsPopup
+          key="shared-player-details"
+          player={playerDetailsPlayer}
+          side={playerDetailsOverlay.side}
+          pinned={playerDetailsOverlay.pinned}
+          teamColor={
+            (playerDetailsOverlay.side === "home" ? match.home.color : match.away.color) ??
+            (playerDetailsOverlay.side === "home" ? "var(--team-home-fallback)" : "var(--team-away-fallback)")
+          }
+          panelElement={playerDetailsOverlay.panelElement}
+          anchorElement={playerDetailsOverlay.anchorElement}
+          matchMinute={match.clock.minute}
+          matchTick={match.clock.elapsedTick}
+          movementFrames={tacticalReplayFrames}
+          movementAnalysis={playerDetailsLiveMovement}
+          heatmaps={match.heatmaps}
+          pitchDimensions={match.pitchDimensions}
+          onPointerEnter={cancelPlayerDetailsClose}
+          onPointerLeave={() => finishPlayerDetailsPreview(
+            playerDetailsOverlay.side,
+            playerDetailsOverlay.playerId,
+          )}
+          onClose={closePlayerDetails}
+          />
+        )}
+      </AnimatePresence>
     </main>
   )
 }

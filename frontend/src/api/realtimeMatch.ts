@@ -619,6 +619,7 @@ export function useRealtimeMatch(
     // Do not even create the localhost WebSocket or issue an API request until
     // the caller explicitly enables live connectivity.
     motionSource?.reset()
+    motionSource?.resetMovement()
     if (!enabled) return
 
     const apiBase = backendUrl
@@ -704,6 +705,7 @@ export function useRealtimeMatch(
     const resetFor = (matchId: string) => {
       if (historyMatchId === matchId) return
       motionSource?.reset()
+      motionSource?.resetMovement()
       motionSource?.setStatus("buffering")
       historyMatchId = matchId
       historyLastTick = -1
@@ -862,6 +864,7 @@ export function useRealtimeMatch(
             (frame) => frame.tick > historyLastTick
           )
           derived.append(additions)
+          motionSource?.ingestMovementFrames(additions)
           if (additions.length > 0) {
             historyLastTick = additions.at(-1)!.tick
           }
@@ -985,6 +988,7 @@ export function useRealtimeMatch(
       disposed = true
       controller.abort()
       motionSource?.reset()
+      motionSource?.resetMovement()
       if (socket)
         socket.onopen =
           socket.onmessage =
