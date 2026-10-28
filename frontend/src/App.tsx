@@ -940,7 +940,7 @@ export function App() {
                   }`}
                 >
                   <AnimatedDashboardCard active={focusedPanel !== "formation"}>
-                    <Momentum match={match} />
+                    <Momentum match={match} visible={focusedPanel == null} />
                   </AnimatedDashboardCard>
 
                   <AnimatedDashboardCard active={focusedPanel !== "formation"}>

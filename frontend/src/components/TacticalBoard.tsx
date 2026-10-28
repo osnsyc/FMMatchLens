@@ -13,11 +13,7 @@ import {
 } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
-import {
-  ArrowBigLeftDashIcon,
-  ArrowBigRightDashIcon,
-  Clock01Icon,
-} from "@hugeicons/core-free-icons"
+import { Clock01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { Button } from "@/components/ui/button"
@@ -72,8 +68,6 @@ import type {
   MatchPlayer,
   MatchSnapshot,
   TacticalEventFilterMode,
-  TacticalEventPoint,
-  TeamSide,
 } from "@/types/match"
 import { useTheme } from "@/components/theme-provider"
 import { cssVizTokens } from "@/theme/vizTokens"
@@ -106,13 +100,6 @@ type TacticalBoardProps = {
   eventFilterMode: TacticalEventFilterMode
   selectedPlayerIds: ReadonlySet<number>
   onEventFilterModeChange: (mode: TacticalEventFilterMode) => void
-}
-type HorizontalZone = 0 | 1 | 2
-
-type LaneShare = {
-  zone: HorizontalZone
-  count: number
-  percentage: number
 }
 
 type HoveredTacticalPoint = {
@@ -150,7 +137,6 @@ export const TacticalBoard = memo(function TacticalBoard({
   const liveMode = mode === "liveMotion" && motionAvailable
   const [pitchControlEnabled, setPitchControlEnabled] = useState(false)
   const [showNumbers, setShowNumbers] = useState(true)
-  const [showAttackFocus, setShowAttackFocus] = useState(true)
   const [selectedShotId, setSelectedShotId] = useState<string | null>(null)
   const [selectedMetrics, setSelectedMetrics] = useState<
     Record<string, boolean>
@@ -296,10 +282,6 @@ export const TacticalBoard = memo(function TacticalBoard({
       })
     },
     [playerById, startPlayback]
-  )
-  const momentumLaneShares = useMemo(
-    () => calculateMomentumLaneShares(filteredTacticalEvents),
-    [filteredTacticalEvents]
   )
   const appearance = useMemo(
     () => ({
@@ -504,7 +486,7 @@ export const TacticalBoard = memo(function TacticalBoard({
             >
               {t("dataMap.displaySettings")}
               <span className="ml-1 text-[9px] text-primary tabular-nums">
-                {Number(showNumbers) + Number(showAttackFocus)}
+                {Number(showNumbers)}
               </span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="z-[100] min-w-36">
@@ -513,14 +495,6 @@ export const TacticalBoard = memo(function TacticalBoard({
                 onCheckedChange={(checked) => setShowNumbers(checked === true)}
               >
                 {t("dataMap.showNumbers")}
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={showAttackFocus}
-                onCheckedChange={(checked) =>
-                  setShowAttackFocus(checked === true)
-                }
-              >
-                {t("dataMap.attackFocus")}
               </DropdownMenuCheckboxItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -590,13 +564,6 @@ export const TacticalBoard = memo(function TacticalBoard({
                 <div className="pointer-events-none absolute inset-0 bg-primary/[0.025]" />
                 <PitchMarkings dimensions={pitchDimensions} />
                 <PitchGoals dimensions={pitchDimensions} />
-
-                {showAttackFocus &&
-                  !liveMode &&
-                  activeSelectedShotId == null &&
-                  !tacticalPlayback && (
-                    <AttackFocus laneShares={momentumLaneShares} />
-                  )}
 
                 <PixiTactical
                   liveMode={liveMode}
@@ -864,112 +831,9 @@ function TacticalAssociationRow({
   )
 }
 
-function AttackFocus({
-  laneShares,
-}: {
-  laneShares: Record<TeamSide, LaneShare[]>
-}) {
-  return (
-    <div
-      className="pointer-events-none absolute inset-0 z-[5]"
-      aria-hidden="true"
-    >
-      <div className="absolute inset-x-0 top-1/3 border-t-2 border-dashed border-foreground/15" />
-      <div className="absolute inset-x-0 top-2/3 border-t-2 border-dashed border-foreground/15" />
-      {(["away", "home"] as const).flatMap((team) =>
-        laneShares[team].map((lane) => {
-          const relativeTop = ((lane.zone + 0.5) / 3) * 100
-          const top = team === "home" ? relativeTop : 100 - relativeTop
-          return (
-            <div
-              key={`${team}-momentum-lane-${lane.zone}`}
-              className="absolute h-1/4 w-[22%] -translate-x-1/2 -translate-y-1/2"
-              style={{ left: team === "home" ? "60%" : "40%", top: `${top}%` }}
-            >
-              <HugeiconsIcon
-                icon={
-                  team === "home" ? ArrowBigRightDashIcon : ArrowBigLeftDashIcon
-                }
-                strokeWidth={0.5}
-                className="size-full text-foreground/[0.10]"
-              />
-              <span className="absolute inset-0 flex items-center justify-center text-[clamp(11px,2cqw,18px)] font-bold text-foreground/55 tabular-nums">
-                {lane.percentage}%
-              </span>
-            </div>
-          )
-        })
-      )}
-    </div>
-  )
-}
-
 function formatMatchTick(tick: number) {
   const seconds = Math.floor(Math.max(0, tick) / 4)
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
-}
-
-function calculateMomentumLaneShares(
-  events: TacticalEventPoint[]
-): Record<TeamSide, LaneShare[]> {
-  const counts: Record<TeamSide, [number, number, number]> = {
-    home: [0, 0, 0],
-    away: [0, 0, 0],
-  }
-  for (const event of events) {
-    const zone = weightedMomentumHorizontalZone(event)
-    if (zone != null) counts[event.team][zone] += 1
-  }
-  return {
-    home: buildLaneShares(counts.home),
-    away: buildLaneShares(counts.away),
-  }
-}
-
-function weightedMomentumHorizontalZone(
-  event: TacticalEventPoint
-): HorizontalZone | undefined {
-  if (!Number.isFinite(event.x) || !Number.isFinite(event.y)) return undefined
-  const reverseDirection = (event.flags & 0x100) !== 0
-  const rotatedForDisplay =
-    event.team === "home" ? !reverseDirection : reverseDirection
-  const nativeLongitudinal = rotatedForDisplay ? 100 - event.x : event.x
-  const nativeLateral = rotatedForDisplay ? 100 - event.y : event.y
-  const relativeLongitudinal = reverseDirection
-    ? 100 - nativeLongitudinal
-    : nativeLongitudinal
-  const relativeLateral = reverseDirection ? 100 - nativeLateral : nativeLateral
-  if (relativeLongitudinal >= 50) return undefined
-  if (relativeLateral > 200 / 3) return 0
-  if (relativeLateral > 100 / 3) return 1
-  return 2
-}
-
-function buildLaneShares(counts: [number, number, number]): LaneShare[] {
-  const total = counts[0] + counts[1] + counts[2]
-  if (total === 0) {
-    return counts.map((count, zone) => ({
-      zone: zone as HorizontalZone,
-      count,
-      percentage: 0,
-    }))
-  }
-  const exact = counts.map((count) => (count / total) * 100)
-  const percentages = exact.map(Math.floor)
-  const remainder = 100 - percentages.reduce((sum, value) => sum + value, 0)
-  const remainderOrder = exact
-    .map((value, zone) => ({ zone, fraction: value - Math.floor(value) }))
-    .sort(
-      (left, right) => right.fraction - left.fraction || left.zone - right.zone
-    )
-  for (let index = 0; index < remainder; index += 1) {
-    percentages[remainderOrder[index].zone] += 1
-  }
-  return counts.map((count, zone) => ({
-    zone: zone as HorizontalZone,
-    count,
-    percentage: percentages[zone],
-  }))
 }
 
 function MarkerGlyph({

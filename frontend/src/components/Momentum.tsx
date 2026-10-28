@@ -12,6 +12,7 @@ import {
   YAxis,
 } from "recharts"
 
+import { MomentumEventMap } from "@/components/MomentumEventMap"
 import { CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
@@ -22,9 +23,10 @@ import { useTheme } from "@/components/theme-provider"
 
 type MomentumProps = {
   match: MatchSnapshot
+  visible?: boolean
 }
 
-type MomentumMode = "line" | "bars"
+type MomentumMode = "line" | "bars" | "eventMap"
 
 type MomentumPoint = {
   minute: number
@@ -58,7 +60,7 @@ const eventWeights: Partial<Record<TacticalEventPoint["metricId"], number>> = {
 
 const momentumYTicks = [-1, -0.5, 0, 0.5, 1]
 
-export const Momentum = memo(function Momentum({ match }: MomentumProps) {
+export const Momentum = memo(function Momentum({ match, visible = true }: MomentumProps) {
   const { t } = useTranslation()
   const { settings } = useTheme()
   const colorblind = settings.colorVision === "colorblind"
@@ -114,130 +116,142 @@ export const Momentum = memo(function Momentum({ match }: MomentumProps) {
           items={[
             { id: "line", label: t("momentum.line"), content: null },
             { id: "bars", label: t("momentum.bars"), content: null },
+            { id: "eventMap", label: t("momentum.eventMap"), content: null },
           ]}
         />
       </CardHeader>
 
       <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-        <ChartContainer config={chartConfig} className="min-h-0 flex-1 px-2 py-2">
-          <ComposedChart data={data} margin={{ top: 4, right: 12, bottom: 4, left: 0 }}>
-            <XAxis
-              dataKey="minute"
-              type="number"
-              domain={[0, domainEnd]}
-              ticks={xTicks}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(value) => `${value}'`}
+        {mode === "eventMap" ? (
+          visible && (
+            <MomentumEventMap
+              events={match.tacticalEvents}
+              home={match.home}
+              away={match.away}
+              pitchDimensions={match.pitchDimensions}
             />
-            <YAxis
-              type="number"
-              domain={[-1.18, 1.18]}
-              ticks={momentumYTicks}
-              allowDataOverflow
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(value) => Number(value).toFixed(value === 0 ? 0 : 1)}
-              width={28}
-            />
-            {momentumYTicks.filter((tick) => tick !== 0).map((tick) => (
-              <ReferenceLine
-                key={tick}
-                y={tick}
-                stroke="var(--border)"
-                strokeDasharray="3 3"
+          )
+        ) : (
+          <ChartContainer config={chartConfig} className="min-h-0 flex-1 px-2 py-2">
+            <ComposedChart data={data} margin={{ top: 4, right: 12, bottom: 4, left: 0 }}>
+              <XAxis
+                dataKey="minute"
+                type="number"
+                domain={[0, domainEnd]}
+                ticks={xTicks}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(value) => `${value}'`}
               />
-            ))}
-            <ReferenceLine y={0} stroke="var(--border)" strokeWidth={1.2} />
-            {goalMarkers.map((marker) => {
-              const markerY = marker.team === "home" ? 1.1 : -1.1
-              return (
+              <YAxis
+                type="number"
+                domain={[-1.18, 1.18]}
+                ticks={momentumYTicks}
+                allowDataOverflow
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(value) => Number(value).toFixed(value === 0 ? 0 : 1)}
+                width={28}
+              />
+              {momentumYTicks.filter((tick) => tick !== 0).map((tick) => (
                 <ReferenceLine
-                  key={`${marker.id}-line`}
-                  segment={[
-                    { x: marker.minute, y: 0 },
-                    { x: marker.minute, y: markerY },
-                  ]}
-                  stroke={marker.team === "home" ? homeColor : awayColor}
-                  strokeOpacity={0.7}
+                  key={tick}
+                  y={tick}
+                  stroke="var(--border)"
                   strokeDasharray="3 3"
-                  ifOverflow="visible"
                 />
-              )
-            })}
-            <ChartTooltip
-              cursor={{ stroke: "var(--border)", strokeDasharray: "3 3" }}
-              content={(
-                <MomentumTooltipDetails
-                  homeColor={homeColor}
-                  awayColor={awayColor}
-                  fallback={t("momentum.title")}
-                />
-              )}
-            />
-
-            {mode === "line" ? (
-              <>
-                <Area
-                  dataKey="positive"
-                  type="monotone"
-                  stroke="var(--color-positive)"
-                  fill={homeColor}
-                  fillOpacity={0.5}
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 3 }}
-                  isAnimationActive={false}
-                />
-                <Area
-                  dataKey="negative"
-                  type="monotone"
-                  stroke="var(--color-negative)"
-                  fill={awayColor}
-                  fillOpacity={0.5}
-                  strokeWidth={2}
-                  strokeDasharray={colorblind ? "7 4" : undefined}
-                  dot={false}
-                  activeDot={{ r: 3 }}
-                  isAnimationActive={false}
-                />
-              </>
-            ) : (
-              <Bar dataKey="value" barSize={12} radius={[2, 2, 2, 2]} isAnimationActive={false}>
-                {bars.map((bar) => (
-                  <Cell key={`${bar.startMinute}-${bar.endMinute}`} fill={bar.value >= 0 ? homeColor : awayColor} fillOpacity={0.78} />
-                ))}
-              </Bar>
-            )}
-
-            {goalMarkers.map((marker) => {
-              const isHome = marker.team === "home"
-              const markerY = isHome ? 1.1 : -1.1
-              const color = isHome ? homeColor : awayColor
-              return (
-                <ReferenceDot
-                  key={`${marker.id}-icon`}
-                  x={marker.minute}
-                  y={markerY}
-                  r={1}
-                  fill="transparent"
-                  stroke="transparent"
-                  ifOverflow="visible"
-                >
-                  <Label
-                    content={(
-                      <GoalMarkerLabel
-                        color={color}
-                        title={marker.title}
-                        side={isHome ? "top" : "bottom"}
-                      />
-                    )}
+              ))}
+              <ReferenceLine y={0} stroke="var(--border)" strokeWidth={1.2} />
+              {goalMarkers.map((marker) => {
+                const markerY = marker.team === "home" ? 1.1 : -1.1
+                return (
+                  <ReferenceLine
+                    key={`${marker.id}-line`}
+                    segment={[
+                      { x: marker.minute, y: 0 },
+                      { x: marker.minute, y: markerY },
+                    ]}
+                    stroke={marker.team === "home" ? homeColor : awayColor}
+                    strokeOpacity={0.7}
+                    strokeDasharray="3 3"
+                    ifOverflow="visible"
                   />
-                </ReferenceDot>
-              )
-            })}
-          </ComposedChart>
-        </ChartContainer>
+                )
+              })}
+              <ChartTooltip
+                cursor={{ stroke: "var(--border)", strokeDasharray: "3 3" }}
+                content={(
+                  <MomentumTooltipDetails
+                    homeColor={homeColor}
+                    awayColor={awayColor}
+                    fallback={t("momentum.title")}
+                  />
+                )}
+              />
+
+              {mode === "line" ? (
+                <>
+                  <Area
+                    dataKey="positive"
+                    type="monotone"
+                    stroke="var(--color-positive)"
+                    fill={homeColor}
+                    fillOpacity={0.5}
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 3 }}
+                    isAnimationActive={false}
+                  />
+                  <Area
+                    dataKey="negative"
+                    type="monotone"
+                    stroke="var(--color-negative)"
+                    fill={awayColor}
+                    fillOpacity={0.5}
+                    strokeWidth={2}
+                    strokeDasharray={colorblind ? "7 4" : undefined}
+                    dot={false}
+                    activeDot={{ r: 3 }}
+                    isAnimationActive={false}
+                  />
+                </>
+              ) : (
+                <Bar dataKey="value" barSize={12} radius={[2, 2, 2, 2]} isAnimationActive={false}>
+                  {bars.map((bar) => (
+                    <Cell key={`${bar.startMinute}-${bar.endMinute}`} fill={bar.value >= 0 ? homeColor : awayColor} fillOpacity={0.78} />
+                  ))}
+                </Bar>
+              )}
+
+              {goalMarkers.map((marker) => {
+                const isHome = marker.team === "home"
+                const markerY = isHome ? 1.1 : -1.1
+                const color = isHome ? homeColor : awayColor
+                return (
+                  <ReferenceDot
+                    key={`${marker.id}-icon`}
+                    x={marker.minute}
+                    y={markerY}
+                    r={1}
+                    fill="transparent"
+                    stroke="transparent"
+                    ifOverflow="visible"
+                  >
+                    <Label
+                      content={(
+                        <GoalMarkerLabel
+                          color={color}
+                          title={marker.title}
+                          side={isHome ? "top" : "bottom"}
+                        />
+                      )}
+                    />
+                  </ReferenceDot>
+                )
+              })}
+            </ComposedChart>
+          </ChartContainer>
+        )}
       </CardContent>
     </section>
   )
@@ -397,10 +411,13 @@ function buildGoalMarkers(
 function sameMomentumProps(previous: MomentumProps, next: MomentumProps) {
   const left = previous.match
   const right = next.match
-  return left.home.name === right.home.name
+  return previous.visible === next.visible
+    && left.home.name === right.home.name
     && left.home.color === right.home.color
     && left.away.name === right.away.name
     && left.away.color === right.away.color
+    && left.pitchDimensions?.length === right.pitchDimensions?.length
+    && left.pitchDimensions?.width === right.pitchDimensions?.width
     && left.clock.minute === right.clock.minute
     && left.momentum === right.momentum
     && left.rollingMomentum === right.rollingMomentum

@@ -404,6 +404,10 @@ const resources = {
         title: "比赛势头",
         line: "折线图",
         bars: "柱形图",
+        eventMap: "事件地图",
+        eventMapDescription: "次数 / 占本队比例；颜色深浅按两队单格最大次数统一归一化；箭头表示进攻方向，占比为本行本队三个分区显示占比之和",
+        eventMapEmpty: "暂无有权重的势头事件",
+        eventMapCell: "{{team}}，第 {{row}} 行第 {{column}} 列：{{count}} 次，占本队 {{percentage}}",
       },
       heatmapRange: {
         full: "全场",
@@ -1274,6 +1278,10 @@ const resources = {
         title: "Momentum",
         line: "Line",
         bars: "Bar",
+        eventMap: "Map",
+        eventMapDescription: "Count / team share; color intensity is relative to the highest cell count across both teams; arrows show attack direction and the sum of the team's three displayed cell shares in each row",
+        eventMapEmpty: "No weighted momentum events yet",
+        eventMapCell: "{{team}}, row {{row}}, column {{column}}: {{count}} events, {{percentage}} of team total",
       },
       heatmapRange: {
         full: "Full",
