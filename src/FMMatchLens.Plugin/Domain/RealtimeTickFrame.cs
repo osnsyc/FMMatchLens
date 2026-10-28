@@ -105,21 +105,23 @@ internal sealed record RatingResearchPlayerWireData(
 
     internal static byte[] PackStats(RatingStatsInputs value)
     {
-        using var stream = new MemoryStream(28);
+        using var stream = new MemoryStream(34);
         using var writer = new BinaryWriter(stream);
         writer.Write(value.OpenPlayXa);
         writer.Write(value.PenaltyAttempts);
         writer.Write(value.DefensiveBlocksCandidate); writer.Write(value.PenaltiesFaced); writer.Write(value.PenaltiesSaved);
-        writer.Write(value.ChanceInvolvementsCandidate); writer.Write(value.YellowCards); writer.Write(value.RedCards);
+        writer.Write(value.ChancesCreated); writer.Write(value.YellowCards); writer.Write(value.RedCards);
         writer.Write(value.OpenPlayKeyPasses);
         writer.Write(value.ErrorsLeadingToShotOrGoalCandidate); writer.Write(value.TeamGoalsWhileOnPitchCandidate);
         writer.Write(value.TeamConcededWhileOnPitchCandidate); writer.Write(value.PossessionWonCandidate);
         writer.Write(value.CrossAttemptsTypeOne); writer.Write(value.CrossAttemptsTypeTwo);
         writer.Write(value.CrossCompletionsTypeOne); writer.Write(value.CrossCompletionsTypeTwo);
+        writer.Write(value.GoalsConceded); writer.Write(value.Offsides); writer.Write(value.HeadersLost);
+        writer.Write(value.PossessionLost); writer.Write(value.PressesAttempted); writer.Write(value.PressesWon);
         writer.Write(value.ShortPassesAttemptedCandidate); writer.Write(value.LongPassesAttemptedCandidate);
         writer.Write(value.ShortPassesCompletedCandidate); writer.Write(value.LongPassesCompletedCandidate);
         var packed = stream.ToArray();
-        if (packed.Length != 28) throw new InvalidOperationException("Rating-only stats wire size changed unexpectedly.");
+        if (packed.Length != 34) throw new InvalidOperationException("Rating-only stats wire size changed unexpectedly.");
         return packed;
     }
 
@@ -151,7 +153,7 @@ internal readonly record struct RatingStatsInputs(
     byte PenaltiesFaced,
     byte PenaltiesSaved,
     byte Assists,
-    byte ChanceInvolvementsCandidate,
+    byte ChancesCreated,
     byte Dribbles,
     byte Fouls,
     byte Fouled,
@@ -172,6 +174,12 @@ internal readonly record struct RatingStatsInputs(
     byte CrossAttemptsTypeTwo,
     byte CrossCompletionsTypeOne,
     byte CrossCompletionsTypeTwo,
+    byte GoalsConceded,
+    byte Offsides,
+    byte HeadersLost,
+    byte PossessionLost,
+    byte PressesAttempted,
+    byte PressesWon,
     short ShortPassesAttemptedCandidate,
     short LongPassesAttemptedCandidate,
     short ShortPassesCompletedCandidate,

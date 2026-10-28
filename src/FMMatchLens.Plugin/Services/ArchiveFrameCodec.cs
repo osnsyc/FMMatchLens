@@ -30,7 +30,7 @@ internal static class ArchiveFrameCodec
     // Must match GameMatchTickHook.MaxStoredMomentumTrajectoryPoints. Lowering
     // this wire limit later requires a new archive minor version or migration.
     private const int MaxTrajectoryPoints = 4;
-    private const int RatingStatsInputSize = 28;
+    private const int RatingStatsInputSize = 34;
     private const ulong AllRatingPlayerFields = ((1UL << 23) - 1) & ~((1UL << 10) | (1UL << 12) | (1UL << 17));
 
     public static byte[] Encode(IReadOnlyList<RealtimeTickFrame> frames)
@@ -494,6 +494,7 @@ internal static class ArchiveFrameCodec
             reader.ReadByte(), reader.ReadByte(), reader.ReadByte(), reader.ReadByte(),
             (byte)player.Clearances,
             reader.ReadByte(), reader.ReadByte(), reader.ReadByte(), reader.ReadByte(),
+            reader.ReadByte(), reader.ReadByte(), reader.ReadByte(), reader.ReadByte(), reader.ReadByte(), reader.ReadByte(),
             reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16());
     }
 

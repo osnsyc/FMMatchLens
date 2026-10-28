@@ -466,7 +466,7 @@ export function decodeRealtimeRatingInputs(
   previous?: ArchiveRatingInputs,
 ): ArchiveRatingInputs {
   const statsPacked = decodeBase64(value.statsPacked)
-  if (statsPacked.byteLength !== 28) throw new Error("Live rating stats payload has an invalid size")
+  if (statsPacked.byteLength !== 34) throw new Error("Live rating stats payload has an invalid size")
   const common = Math.trunc(value.ratingEventsCommonLength)
   if (common < 0 || common > (previous?.ratingEvents.length ?? 0)) {
     throw new Error("Live rating event delta has no matching baseline")
@@ -528,7 +528,7 @@ export function decodeArchiveRatingInputs(
   configuration: RatingWeightConfiguration = observedRatingWeightConfiguration,
 ): RatingCalculationInput {
   const packed = value.statsPacked
-  if (packed.byteLength !== 28) throw new Error("Archive rating stats payload has an invalid size")
+  if (packed.byteLength !== 34) throw new Error("Archive rating stats payload has an invalid size")
   const raw = new Uint8Array(232)
   const view = new DataView(raw.buffer)
   view.setFloat32(0x1c, player.xg ?? 0, true)
@@ -539,13 +539,15 @@ export function decodeArchiveRatingInputs(
   byte(0x99, player.savesHeld); byte(0x9a, player.savesParried); byte(0x9b, player.savesTipped)
   const uniqueOffsets = [0x9c, 0x9d, 0x9e, 0xa0, 0xa6, 0xa7, 0xbd, 0xc8, 0xc9, 0xca, 0xcf, 0xd7, 0xd8, 0xd9, 0xda]
   uniqueOffsets.forEach((offset, index) => { raw[offset] = packed[5 + index] })
+  const confirmedOffsets = [0x8c, 0xa5, 0xc4, 0xd0, 0xe4, 0xe5]
+  confirmedOffsets.forEach((offset, index) => { raw[offset] = packed[20 + index] })
   byte(0x9f, player.assists); byte(0xa1, player.dribbles); byte(0xa3, player.fouls); byte(0xa4, player.fouled)
   byte(0xbe, player.tacklesAttempted); byte(0xbf, player.tacklesWon)
   byte(0xc2, player.aerials); byte(0xc3, player.aerialsWon); byte(0xc7, player.interceptions); byte(0xd1, player.clearances)
-  raw.set(packed.subarray(20, 22), 0xdc)
-  raw.set(packed.subarray(22, 24), 0xde)
-  raw.set(packed.subarray(24, 26), 0xe0)
-  raw.set(packed.subarray(26, 28), 0xe2)
+  raw.set(packed.subarray(26, 28), 0xdc)
+  raw.set(packed.subarray(28, 30), 0xde)
+  raw.set(packed.subarray(30, 32), 0xe0)
+  raw.set(packed.subarray(32, 34), 0xe2)
   return {
     statsRaw: raw,
     internalW25: value.internalW25, internalW24: value.internalW24,

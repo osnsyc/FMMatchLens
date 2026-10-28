@@ -101,7 +101,7 @@ export type RealtimePlayer = PlayerStats & {
 
 /** Compact binary-archive input retained until its frame is displayed. */
 export type ArchiveRatingInputs = {
-  /** The 28 archive-only bytes not already represented by RealtimePlayer stats. */
+  /** The 34 archive-only bytes not already represented by RealtimePlayer stats. */
   statsPacked: Uint8Array
   internalW25: number
   internalW24: number
@@ -123,7 +123,7 @@ export type ArchiveRatingInputs = {
 }
 
 export type RealtimeRatingInputs = {
-  /** Base64-encoded 28-byte rating-only stat vector. */
+  /** Base64-encoded 34-byte rating-only stat vector. */
   statsPacked: string
   internalW25: number
   internalW24: number

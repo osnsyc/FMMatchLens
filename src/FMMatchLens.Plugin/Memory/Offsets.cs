@@ -671,7 +671,9 @@ internal static class Offsets
         public const int ErrorsLeadingToGoal = 0x28; // u16
         public const int DistanceKmTimes10 = 0x2E; // u16
         public const int Offsides = 0x30; // u16
-        public const int OpenPlayCrossesCompleted = 0x34; // u16
+        // Previously labelled OpenPlayCrossesCompleted. Two match deltas disproved
+        // that interpretation; goalkeeper deltas dominate this value.
+        public const int Unknown0x34GoalkeeperMetricCandidate = 0x34; // u16
         public const int KeyPasses = 0x36; // u16
         public const int KeyTackles = 0x38; // u16
         public const int Interceptions = 0x3C; // u16
@@ -716,6 +718,7 @@ internal static class Offsets
         public const int OverallPhysicalCondition = 0x89;
         public const int MatchSharpness = 0x8A;
         public const int Goals = 0x8B;
+        public const int GoalsConceded = 0x8C;
         public const int PenaltyAttempts = 0x8D;
         public const int Penalties = 0x8E;
         public const int OwnGoals = 0x8F;
@@ -731,10 +734,11 @@ internal static class Offsets
         public const int PenaltiesFaced = 0x9D;
         public const int PenaltiesSaved = 0x9E;
         public const int Assists = 0x9F;
-        public const int ChanceInvolvementsCandidate = 0xA0;
+        public const int ChancesCreated = 0xA0;
         public const int Dribbles = 0xA1;
         public const int Fouls = 0xA3;
         public const int Fouled = 0xA4;
+        public const int Offsides = 0xA5;
         public const int YellowCards = 0xA6;
         public const int RedCards = 0xA7;
         public const int SubbedOffMinute = 0xAA;
@@ -750,6 +754,7 @@ internal static class Offsets
         public const int KeyTackles = 0xC0;
         public const int Aerials = 0xC2;
         public const int AerialsWon = 0xC3;
+        public const int HeadersLost = 0xC4;
         public const int Interceptions = 0xC7;
         public const int ErrorsLeadingToShotOrGoalCandidate = 0xC8;
         public const int TeamGoalsWhileOnPitch = 0xC9;
@@ -759,6 +764,7 @@ internal static class Offsets
         public const int DefensiveFreeKicks = 0xCD;
         public const int AttackingFreeKicks = 0xCE;
         public const int PossessionWon = 0xCF;
+        public const int PossessionLost = 0xD0;
         public const int Clearances = 0xD1;
         public const int ShotsFaced = 0xD5;
         public const int CrossAttemptsTypeOne = 0xD7;
@@ -769,6 +775,8 @@ internal static class Offsets
         public const int LongPassesAttemptedCandidate = 0xDE;
         public const int ShortPassesCompletedCandidate = 0xE0;
         public const int LongPassesCompletedCandidate = 0xE2;
+        public const int PressesAttempted = 0xE4;
+        public const int PressesWon = 0xE5;
         public const int ProgressivePasses = 0xE9;
 
         // Inclusive of the highest-address player stat above (a byte at +0xE9).

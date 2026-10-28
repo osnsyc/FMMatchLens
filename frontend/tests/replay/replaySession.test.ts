@@ -35,7 +35,7 @@ describe("ReplaySession", () => {
     }
     current.players[0].shots = 2
     current.players[0].archiveRatingInputs = {
-      statsPacked: new Uint8Array(28),
+      statsPacked: new Uint8Array(34),
       internalW25: 0, internalW24: 0,
       specialW2C: 0, specialW2D: 0, specialW2E: 0,
       specialW2F: 0, specialW30: 0, specialW31: 0,
@@ -72,7 +72,7 @@ describe("ReplaySession", () => {
     const weights = Array<number>(52).fill(0)
     weights[10] = 100
     fixture.frames.forEach((current, index) => {
-      const packed = new Uint8Array(28)
+      const packed = new Uint8Array(34)
       current.players[0].shots = index * 2
       current.ratingModel = {
         ratingBaseCondition: 0,
