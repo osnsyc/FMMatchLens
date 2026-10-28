@@ -86,7 +86,7 @@ export async function parseArchiveFile(buffer: ArrayBuffer, fileName: string): P
       const recordType = reader.readByte()
       if (recordType === metadataRecord) {
         const decoded = readMetadata(readRecordPayload(reader, maxRecordBytes), header)
-        if (decoded.revision <= metadataRevision) throw new ArchiveError("元数据修订序号不是严格递增")
+        if (decoded.revision <= metadataRevision) throw new ArchiveError("Metadata revision numbers are not strictly increasing")
         metadataRevision = decoded.revision
         metadata = metadata
           ? {
@@ -97,9 +97,9 @@ export async function parseArchiveFile(buffer: ArrayBuffer, fileName: string): P
           : decoded.metadata
         metadataTimeline.push(metadata)
       } else if (recordType === metadataDeltaRecord) {
-        if (!metadata) throw new ArchiveError("Metadata 增量缺少完整基线")
+        if (!metadata) throw new ArchiveError("Metadata delta is missing a complete baseline")
         const decoded = readMetadataDelta(readRecordPayload(reader, maxRecordBytes), header, metadata)
-        if (decoded.revision <= metadataRevision) throw new ArchiveError("Metadata 修订序号没有严格递增")
+        if (decoded.revision <= metadataRevision) throw new ArchiveError("Metadata revision numbers are not strictly increasing")
         metadataRevision = decoded.revision
         metadata = decoded.metadata
         metadataTimeline.push(decoded.metadata)
@@ -112,7 +112,7 @@ export async function parseArchiveFile(buffer: ArrayBuffer, fileName: string): P
         finalSummary = readFinalIndex(readRecordPayload(reader, maxRecordBytes), blocks)
       } else if (recordType === endRecord) {
         const payload = readRecordPayload(reader, 64)
-        if (payload.byteLength !== 8) throw new ArchiveError("结束记录长度无效")
+        if (payload.byteLength !== 8) throw new ArchiveError("Invalid end record length")
         endedUnixMilliseconds = new ArchiveBufferReader(payload).readInt64()
         break
       } else {
@@ -140,8 +140,8 @@ export async function parseArchiveFile(buffer: ArrayBuffer, fileName: string): P
     }
   }
   if (frames.length === 0) {
-    if (blockError instanceof Error) throw new Error(`存档没有可恢复的完整比赛帧：${blockError.message}`)
-    throw new Error("存档中没有完整的比赛帧")
+    if (blockError instanceof Error) throw new Error(`Archive has no recoverable complete match frames: ${blockError.message}`)
+    throw new Error("Archive contains no complete match frames")
   }
 
   const last = frames.at(-1)!
@@ -169,17 +169,17 @@ export async function parseArchiveFile(buffer: ArrayBuffer, fileName: string): P
 }
 
 function readHeader(reader: ArchiveBufferReader): ArchiveHeader {
-  if (reader.readAscii(magic.length) !== magic) throw new ArchiveError("不是有效的 FMMatchLens 存档")
+  if (reader.readAscii(magic.length) !== magic) throw new ArchiveError("Not a valid FMMatchLens archive")
   const major = reader.readUint16()
   const minor = reader.readUint16()
   const headerLength = reader.readUint32()
   if (major !== archiveStructureMajor || minor < firstSupportedStructureMinor || minor > archiveStructureMinor) {
-    throw new ArchiveError(`不支持的存档结构 ${major}.${minor}`)
+    throw new ArchiveError(`Unsupported archive structure ${major}.${minor}`)
   }
-  if (headerLength < 36 || headerLength > 64 * 1024 || headerLength > reader.length) throw new ArchiveError("文件头长度无效")
+  if (headerLength < 36 || headerLength > 64 * 1024 || headerLength > reader.length) throw new ArchiveError("Invalid file header length")
   const headerBytes = reader.bytes.subarray(0, headerLength)
   const expectedCrc = new DataView(headerBytes.buffer, headerBytes.byteOffset, headerBytes.byteLength).getUint32(headerLength - 4, true)
-  if (crc32(headerBytes.subarray(0, headerLength - 4)) !== expectedCrc) throw new ArchiveError("文件头 CRC 校验失败")
+  if (crc32(headerBytes.subarray(0, headerLength - 4)) !== expectedCrc) throw new ArchiveError("File header CRC check failed")
   const headerReader = new ArchiveBufferReader(headerBytes)
   headerReader.offset = 16
   headerReader.readUint64()
@@ -188,9 +188,9 @@ function readHeader(reader: ArchiveBufferReader): ArchiveHeader {
   const coordinateEncoding = headerReader.readByte()
   headerReader.readUint16()
   const compression = headerReader.readByte()
-  if (headerReader.offset > headerLength - 4) throw new ArchiveError("文件头字段越过 CRC 边界")
-  if (coordinateEncoding !== 1) throw new ArchiveError(`不支持坐标编码 ${coordinateEncoding}`)
-  if (compression > 1) throw new ArchiveError(`不支持压缩算法 ${compression}`)
+  if (headerReader.offset > headerLength - 4) throw new ArchiveError("File header fields extend past the CRC boundary")
+  if (coordinateEncoding !== 1) throw new ArchiveError(`Unsupported coordinate encoding ${coordinateEncoding}`)
+  if (compression > 1) throw new ArchiveError(`Unsupported compression algorithm ${compression}`)
   reader.offset = headerLength
   return { structureMajor: major, structureMinor: minor, matchId, startedUnixMilliseconds, headerLength }
 }
@@ -201,10 +201,10 @@ function readBlock(reader: ArchiveBufferReader, recordStart: number, structureMi
   const headerTail = reader.readBytes(headerTailLength)
   const expectedHeaderCrc = reader.readUint32()
   const completeHeader = reader.bytes.subarray(recordStart, recordStart + headerTailLength + 1)
-  if (crc32(completeHeader) !== expectedHeaderCrc) throw new ArchiveError("数据块头 CRC 校验失败")
+  if (crc32(completeHeader) !== expectedHeaderCrc) throw new ArchiveError("Block header CRC check failed")
   const header = new ArchiveBufferReader(headerTail)
-  if (header.readUint32() !== blockMagic) throw new ArchiveError("数据块标识无效")
-  if (legacy21 && header.readByte() !== legacy21BlockStructure) throw new ArchiveError("2.1 数据块结构标记无效")
+  if (header.readUint32() !== blockMagic) throw new ArchiveError("Invalid block identifier")
+  if (legacy21 && header.readByte() !== legacy21BlockStructure) throw new ArchiveError("Invalid 2.1 block structure marker")
   const compression = header.readUint16()
   const startTick = header.readInt32()
   const endTick = header.readInt32()
@@ -212,10 +212,10 @@ function readBlock(reader: ArchiveBufferReader, recordStart: number, structureMi
   const uncompressedLength = header.readUint32()
   const compressedLength = header.readUint32()
   const payloadCrc = header.readUint32()
-  if (compression > 1) throw new ArchiveError(`不支持数据块压缩算法 ${compression}`)
-  if (frameCount === 0 || endTick < startTick) throw new ArchiveError("数据块 Tick 范围无效")
+  if (compression > 1) throw new ArchiveError(`Unsupported block compression algorithm ${compression}`)
+  if (frameCount === 0 || endTick < startTick) throw new ArchiveError("Invalid block tick range")
   if (uncompressedLength === 0 || uncompressedLength > maxChunkBytes || compressedLength === 0 || compressedLength > maxChunkBytes) {
-    throw new ArchiveError("数据块长度无效")
+    throw new ArchiveError("Invalid block length")
   }
   const payload = reader.readBytes(compressedLength)
   return { recordOffset: recordStart, startTick, endTick, frameCount, uncompressedLength, compressedLength, payloadCrc, compression, payload }
@@ -226,7 +226,7 @@ async function decompressBlock(block: BlockReference) {
   if (block.compression === 0) {
     payload = block.payload
   } else {
-    if (typeof DecompressionStream === "undefined") throw new ArchiveError("当前浏览器不支持 Deflate 解压")
+    if (typeof DecompressionStream === "undefined") throw new ArchiveError("This browser does not support Deflate decompression")
     try {
       const input = new Blob([block.payload.slice().buffer]).stream()
       const output = input.pipeThrough(new DecompressionStream("deflate"))
@@ -236,17 +236,17 @@ async function decompressBlock(block: BlockReference) {
       while (true) {
         const chunk = await streamReader.read()
         if (chunk.done) break
-        if (offset + chunk.value.byteLength > payload.byteLength) throw new ArchiveError("数据块解压结果超过声明长度")
+        if (offset + chunk.value.byteLength > payload.byteLength) throw new ArchiveError("Decompressed block exceeds the declared length")
         payload.set(chunk.value, offset)
         offset += chunk.value.byteLength
       }
-      if (offset !== payload.byteLength) throw new ArchiveError("数据块解压长度不匹配")
+      if (offset !== payload.byteLength) throw new ArchiveError("Decompressed block length mismatch")
     } catch (error) {
-      throw new ArchiveError(`数据块解压失败：${error instanceof Error ? error.message : String(error)}`)
+      throw new ArchiveError(`Block decompression failed: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
-  if (payload.byteLength !== block.uncompressedLength) throw new ArchiveError("数据块解压长度不匹配")
-  if (crc32(payload) !== block.payloadCrc) throw new ArchiveError("数据块载荷 CRC 校验失败")
+  if (payload.byteLength !== block.uncompressedLength) throw new ArchiveError("Decompressed block length mismatch")
+  if (crc32(payload) !== block.payloadCrc) throw new ArchiveError("Block payload CRC check failed")
   return payload
 }
 
@@ -270,7 +270,7 @@ function readFrames(
         ? version27PlayerFields
         : legacyPlayerFields
   if (structureMinor === 1 && reader.readByte() !== legacy21FramePayloadMarker) {
-    throw new ArchiveError("2.1 帧载荷标记无效")
+    throw new ArchiveError("Invalid 2.1 frame payload marker")
   }
   const frames: RealtimeFrame[] = []
   let previous: RealtimeFrame | undefined
@@ -278,10 +278,10 @@ function readFrames(
   let previousRatingMatch: RatingWireMatchState | undefined
   for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
     const flags = reader.readByte()
-    if ((flags & ~(structureMinor >= 7 ? 31 : 3)) !== 0) throw new ArchiveError("帧变化标记无效")
+    if ((flags & ~(structureMinor >= 7 ? 31 : 3)) !== 0) throw new ArchiveError("Invalid frame change flags")
     const rosterReset = (flags & 1) !== 0
     const pitchChanged = (flags & 2) !== 0
-    if (!previous && (!rosterReset || !pitchChanged)) throw new ArchiveError("数据块缺少独立关键帧")
+    if (!previous && (!rosterReset || !pitchChanged)) throw new ArchiveError("Block is missing a self-contained keyframe")
     const sequence = addSafe(previous?.sequence ?? 0, reader.readVarInt())
     const tick = addSafe(previous?.tick ?? 0, reader.readVarInt())
     const displayTick = addSafe(previous?.displayTick ?? 0, reader.readVarInt())
@@ -289,7 +289,7 @@ function readFrames(
     const period = addSafe(previous?.period ?? 0, reader.readVarInt())
     const possessionRaw = reader.readByte()
     const possessionTeam: TeamSide | undefined = possessionRaw === 1 ? "home" : possessionRaw === 2 ? "away" : undefined
-    if (possessionRaw > 2) throw new ArchiveError("帧持球方无效")
+    if (possessionRaw > 2) throw new ArchiveError("Invalid frame possession team")
     const holderSlotValue = reader.readVarUint()
     const ballXCentimeters = structureMinor >= 7
       ? readBallDelta(reader, previous?.ballXCentimeters ?? 0, (flags & 4) !== 0) : 0
@@ -309,28 +309,28 @@ function readFrames(
     let players: RealtimePlayer[]
     if (rosterReset) {
       const count = reader.readVarUint()
-      if (count > 255) throw new ArchiveError("球员数量过大")
+      if (count > 255) throw new ArchiveError("Player count exceeds the limit")
       players = Array.from(
         { length: count },
         () => readFullPlayer(reader, halfPitchWidth, halfPitchLength, supportedPlayerFields, structureMinor >= 7),
       )
-      if (new Set(players.map((player) => player.slot)).size !== players.length) throw new ArchiveError("关键帧包含重复 Slot")
+      if (new Set(players.map((player) => player.slot)).size !== players.length) throw new ArchiveError("Keyframe contains duplicate slots")
     } else {
       players = previous!.players.map((prior) => {
         const qx = (structureMinor >= 7 ? Math.round(prior.x * 100) : quantize(prior.x, halfPitchWidth)) + reader.readVarInt()
         const qy = (structureMinor >= 7 ? Math.round(prior.y * 100) : quantize(prior.y, halfPitchLength)) + reader.readVarInt()
         if (structureMinor >= 7
           ? qx < -32768 || qx > 32767 || qy < -32768 || qy > 32767
-          : qx < 0 || qx > 65535 || qy < 0 || qy > 65535) throw new ArchiveError("坐标差分越界")
+          : qx < 0 || qx > 65535 || qy < 0 || qy > 65535) throw new ArchiveError("Coordinate delta is out of range")
         const playerFlags = structureMinor >= 7 ? reader.readByte() : 1
-        if ((playerFlags & ~15) !== 0) throw new ArchiveError("球员变化标记无效")
+        if ((playerFlags & ~15) !== 0) throw new ArchiveError("Invalid player change flags")
         const speedCentimetersPerSecond = structureMinor >= 7
           ? (prior.speedCentimetersPerSecond ?? 0) + ((playerFlags & 4) !== 0 ? reader.readVarInt() : 0)
           : undefined
         let angleDegrees = prior.angleDegrees
         if (structureMinor >= 7 && (playerFlags & 8) !== 0) {
           const delta = reader.readVarInt()
-          if (delta < -181 || delta > 180) throw new ArchiveError("朝向差分越界")
+          if (delta < -181 || delta > 180) throw new ArchiveError("Direction delta is out of range")
           const encodedAngle = ((prior.angleDegrees ?? 361) + delta + 362) % 362
           angleDegrees = encodedAngle === 361 ? undefined : encodedAngle
         }
@@ -341,7 +341,7 @@ function readFrames(
           throw new ArchiveError("Player movement data is outside its quantized range")
         }
         const mask = (playerFlags & 1) !== 0 ? reader.readVarUintBig() : 0n
-        if ((mask & ~supportedPlayerFields) !== 0n) throw new ArchiveError("球员状态包含未知字段")
+        if ((mask & ~supportedPlayerFields) !== 0n) throw new ArchiveError("Player state contains unknown fields")
         const player = readPlayerFields(reader, {
           ...prior,
           x: structureMinor >= 7 ? qx / 100 : dequantize(qx, halfPitchWidth),
@@ -357,7 +357,7 @@ function readFrames(
     }
     const holderSlot = holderSlotValue - 1
     const holder = holderSlotValue > 0 ? players.find((player) => player.slot === holderSlot) : undefined
-    if (holderSlotValue > 0 && !holder) throw new ArchiveError("持球球员 Slot 无效")
+    if (holderSlotValue > 0 && !holder) throw new ArchiveError("Invalid ball holder slot")
     const ballHolderPlayerId = holder?.playerId
     players = players.map((player) => ({ ...player, isBallHolder: player.slot === holderSlot }))
     const momentumEvents = readTail(reader, previous?.momentumEvents, (value) => readEvent(value, structureMinor))
@@ -379,8 +379,8 @@ function readFrames(
     frames.push(frame)
     previous = frame
   }
-  if (!reader.atEnd) throw new ArchiveError("数据块含有多余字节")
-  if (frames[0].tick !== startTick || frames.at(-1)!.tick !== endTick) throw new ArchiveError("数据块 Tick 范围不匹配")
+  if (!reader.atEnd) throw new ArchiveError("Block contains trailing bytes")
+  if (frames[0].tick !== startTick || frames.at(-1)!.tick !== endTick) throw new ArchiveError("Block tick range mismatch")
   return frames
 }
 
@@ -545,7 +545,7 @@ function readRawRecordTail(reader: ArchiveBufferReader, previous: Uint8Array[] |
 
 function readTeamDelta(reader: ArchiveBufferReader, previous: RealtimeTeam | undefined, supportedTeamFields: bigint): RealtimeTeam {
   const mask = reader.readVarUintBig()
-  if ((mask & ~supportedTeamFields) !== 0n) throw new ArchiveError("球队状态包含未知字段")
+  if ((mask & ~supportedTeamFields) !== 0n) throw new ArchiveError("Team state contains unknown fields")
   const prior: RealtimeTeam = previous ?? {
     goals: 0, xg: 0, possessionTime: 0, shots: 0, shotsOnTarget: 0, firstHalfShots: 0, secondHalfShots: 0,
     shotsOffTarget: 0, blockedShots: 0,
@@ -578,7 +578,7 @@ function readFullPlayer(
   const slot = reader.readVarUint()
   const playerId = reader.readVarInt()
   const teamRaw = reader.readByte()
-  if (teamRaw > 1) throw new ArchiveError("球员所属球队无效")
+  if (teamRaw > 1) throw new ArchiveError("Invalid player team")
   const x = compactEncoding ? reader.readInt16() / 100 : dequantize(reader.readUint16(), halfWidth)
   const y = compactEncoding ? reader.readInt16() / 100 : dequantize(reader.readUint16(), halfLength)
   const speedCentimetersPerSecond = compactEncoding ? reader.readVarUint() : undefined
@@ -628,13 +628,13 @@ function readPlayerFields(reader: ArchiveBufferReader, prior: RealtimePlayer, ma
 
 function readDistanceDelta(reader: ArchiveBufferReader, prior: number) {
   const distance = addSafe(prior, reader.readVarInt())
-  if (distance < 0 || distance > 16_777_216) throw new ArchiveError("球员累计距离越界")
+  if (distance < 0 || distance > 16_777_216) throw new ArchiveError("Player cumulative distance is out of range")
   return distance
 }
 
 function readBallDelta(reader: ArchiveBufferReader, prior: number, changed: boolean) {
   const value = changed ? addSafe(prior, reader.readVarInt()) : prior
-  if (value < -2147483648 || value > 2147483647) throw new ArchiveError("足球坐标越界")
+  if (value < -2147483648 || value > 2147483647) throw new ArchiveError("Ball coordinate is out of range")
   return value
 }
 
@@ -642,7 +642,7 @@ function readTail<T>(reader: ArchiveBufferReader, previous: readonly T[] | undef
   const prior = previous ?? []
   const common = reader.readVarUint()
   const tail = reader.readVarUint()
-  if (common > prior.length || common + tail > 65_536) throw new ArchiveError("增量流数量无效")
+  if (common > prior.length || common + tail > 65_536) throw new ArchiveError("Invalid delta stream count")
   const result = prior.slice(0, common) as T[]
   for (let index = 0; index < tail; index += 1) result.push(read(reader))
   return result
@@ -654,7 +654,7 @@ function readEvent(reader: ArchiveBufferReader, structureMinor: number): Realtim
   const lateralPosition = reader.readFloat32()
   const longitudinalPosition = reader.readFloat32()
   const teamRaw = reader.readByte()
-  if (teamRaw > 1) throw new ArchiveError("事件所属球队无效")
+  if (teamRaw > 1) throw new ArchiveError("Invalid event team")
   const result: RealtimeMomentumEvent = {
     eventIndex, tick, lateralPosition, longitudinalPosition, team: teamRaw === 1 ? "away" : "home",
     playerSlot: reader.readVarInt(), playerId: reader.readVarInt(), receiverPlayerSlot: reader.readVarInt(),
@@ -665,7 +665,7 @@ function readEvent(reader: ArchiveBufferReader, structureMinor: number): Realtim
     result.sequenceIndex = reader.readVarInt()
     result.completionTick = reader.readVarInt()
     const pointCount = reader.readVarUint()
-    if (pointCount > 4) throw new ArchiveError("事件轨迹点数量无效")
+    if (pointCount > 4) throw new ArchiveError("Invalid event trajectory point count")
     result.trajectoryPoints = Array.from({ length: pointCount }, () => ({
       lateralPosition: reader.readFloat32(),
       longitudinalPosition: reader.readFloat32(),
@@ -691,17 +691,17 @@ function readMetadata(payload: Uint8Array, header: ArchiveHeader) {
   const revision = reader.readVarUint()
   const capturedTick = reader.readVarInt()
   const stringCount = reader.readVarUint()
-  if (stringCount > 16_384) throw new ArchiveError("元数据字符串表过大")
+  if (stringCount > 16_384) throw new ArchiveError("Metadata string table exceeds the limit")
   const strings: Array<string | undefined> = [undefined]
   for (let index = 0; index < stringCount; index += 1) strings.push(reader.readString())
   let home = readTeamMetadata(reader, strings, header.structureMinor)
   let away = readTeamMetadata(reader, strings, header.structureMinor)
   const playerCount = reader.readVarUint()
-  if (playerCount > 255) throw new ArchiveError("元数据球员数量过大")
+  if (playerCount > 255) throw new ArchiveError("Metadata player count exceeds the limit")
   const players = Array.from({ length: playerCount }, () => readPlayerMetadata(reader, strings, header.structureMinor))
-  if (new Set(players.map((player) => player.slot)).size !== players.length) throw new ArchiveError("元数据包含重复 Slot")
+  if (new Set(players.map((player) => player.slot)).size !== players.length) throw new ArchiveError("Metadata contains duplicate slots")
   const playerUids = players.flatMap((player) => player.uid == null ? [] : [player.uid])
-  if (new Set(playerUids).size !== playerUids.length) throw new ArchiveError("元数据包含重复球员 UID")
+  if (new Set(playerUids).size !== playerUids.length) throw new ArchiveError("Metadata contains duplicate player UIDs")
   let matchDate: string | undefined
   let halfPitchWidth: number | undefined
   let halfPitchLength: number | undefined
@@ -709,7 +709,7 @@ function readMetadata(payload: Uint8Array, header: ArchiveHeader) {
   if (!reader.atEnd) {
     const extensionFlags = reader.readByte()
     const allowedExtensionFlags = header.structureMinor >= 6 ? 0x0f : header.structureMinor >= 5 ? 0x07 : 0x03
-    if (extensionFlags === 0 || (extensionFlags & ~allowedExtensionFlags) !== 0) throw new ArchiveError("元数据包含未知扩展字段")
+    if (extensionFlags === 0 || (extensionFlags & ~allowedExtensionFlags) !== 0) throw new ArchiveError("Metadata contains unknown extension fields")
     if ((extensionFlags & 0x01) !== 0) matchDate = reader.readString()
     if ((extensionFlags & 0x02) !== 0) {
       home = { ...home, manager: readManagerMetadata(reader, strings) }
@@ -721,7 +721,7 @@ function readMetadata(payload: Uint8Array, header: ArchiveHeader) {
     }
     if ((extensionFlags & 0x08) !== 0) competition = readCompetitionMetadata(reader, strings)
   }
-  if (!reader.atEnd) throw new ArchiveError("元数据包含多余字节")
+  if (!reader.atEnd) throw new ArchiveError("Metadata contains trailing bytes")
   const metadata: RealtimeMatchMetadata = {
     matchId: header.matchId,
     startedUnixMilliseconds: header.startedUnixMilliseconds,
@@ -742,12 +742,12 @@ function readMetadataDelta(payload: Uint8Array, header: ArchiveHeader, previous:
   const revision = reader.readVarUint()
   const capturedTick = reader.readVarInt()
   const stringCount = reader.readVarUint()
-  if (stringCount > 16_384) throw new ArchiveError("Metadata 字符串表过大")
+  if (stringCount > 16_384) throw new ArchiveError("Metadata string table exceeds the limit")
   const strings: Array<string | undefined> = [undefined]
   for (let index = 0; index < stringCount; index += 1) strings.push(reader.readString())
 
   const teamFlags = reader.readByte()
-  if ((teamFlags & ~0x03) !== 0) throw new ArchiveError("Metadata 增量含有未知球队字段")
+  if ((teamFlags & ~0x03) !== 0) throw new ArchiveError("Metadata delta contains unknown team fields")
   const home = (teamFlags & 0x01) !== 0
     ? { ...readTeamMetadata(reader, strings, header.structureMinor), manager: previous.home.manager }
     : previous.home
@@ -756,24 +756,24 @@ function readMetadataDelta(payload: Uint8Array, header: ArchiveHeader, previous:
     : previous.away
   const players = [...previous.players]
   const deltaCount = reader.readVarUint()
-  if (deltaCount > 255) throw new ArchiveError("Metadata 增量球员数量过大")
+  if (deltaCount > 255) throw new ArchiveError("Metadata delta player count exceeds the limit")
   for (let index = 0; index < deltaCount; index += 1) {
     const flags = reader.readByte()
     if (flags === 0 || (flags & ~0x07) !== 0 || ((flags & 0x01) !== 0 && flags !== 0x01)) {
-      throw new ArchiveError("Metadata 增量含有无效球员字段")
+      throw new ArchiveError("Metadata delta contains invalid player fields")
     }
     if ((flags & 0x01) !== 0) {
       const player = readPlayerMetadata(reader, strings, header.structureMinor)
-      if (players.some((existing) => existing.slot === player.slot)) throw new ArchiveError("Metadata 增量重复添加球员 Slot")
-      if (player.uid != null && players.some((existing) => existing.uid === player.uid)) throw new ArchiveError("Metadata 增量重复添加球员 UID")
+      if (players.some((existing) => existing.slot === player.slot)) throw new ArchiveError("Metadata delta adds a duplicate player slot")
+      if (player.uid != null && players.some((existing) => existing.uid === player.uid)) throw new ArchiveError("Metadata delta adds a duplicate player UID")
       players.push(player)
       continue
     }
 
     const playerId = reader.readVarInt()
     const playerIndexes = players.flatMap((player, playerIndex) => player.playerId === playerId ? [playerIndex] : [])
-    if (playerIndexes.length === 0) throw new ArchiveError("Metadata 增量引用了未知球员")
-    if (playerIndexes.length > 1) throw new ArchiveError("Metadata 增量引用了不唯一的旧版球员 ID")
+    if (playerIndexes.length === 0) throw new ArchiveError("Metadata delta references an unknown player")
+    if (playerIndexes.length > 1) throw new ArchiveError("Metadata delta references an ambiguous legacy player ID")
     const playerIndex = playerIndexes[0]
     const existing = players[playerIndex]
     players[playerIndex] = {
@@ -783,21 +783,21 @@ function readMetadataDelta(payload: Uint8Array, header: ArchiveHeader, previous:
     }
   }
   players.sort((left, right) => left.slot - right.slot)
-  if (new Set(players.map((player) => player.slot)).size !== players.length) throw new ArchiveError("Metadata 增量产生了重复 Slot")
+  if (new Set(players.map((player) => player.slot)).size !== players.length) throw new ArchiveError("Metadata delta results in duplicate slots")
   let halfPitchWidth = previous.halfPitchWidth
   let halfPitchLength = previous.halfPitchLength
   let competition = previous.competition
   if (header.structureMinor >= 5) {
     const extensionFlags = reader.readByte()
     const allowedExtensionFlags = header.structureMinor >= 6 ? 0x03 : 0x01
-    if ((extensionFlags & ~allowedExtensionFlags) !== 0) throw new ArchiveError("Metadata 增量包含未知扩展字段")
+    if ((extensionFlags & ~allowedExtensionFlags) !== 0) throw new ArchiveError("Metadata delta contains unknown extension fields")
     if ((extensionFlags & 0x01) !== 0) {
       halfPitchWidth = readPitchHalf(reader)
       halfPitchLength = readPitchHalf(reader)
     }
     if ((extensionFlags & 0x02) !== 0) competition = readCompetitionMetadata(reader, strings)
   }
-  if (!reader.atEnd) throw new ArchiveError("Metadata 增量包含多余字节")
+  if (!reader.atEnd) throw new ArchiveError("Metadata delta contains trailing bytes")
   const metadata: RealtimeMatchMetadata = {
     matchId: header.matchId,
     startedUnixMilliseconds: header.startedUnixMilliseconds,
@@ -815,7 +815,7 @@ function readMetadataDelta(payload: Uint8Array, header: ArchiveHeader, previous:
 
 function readPitchHalf(reader: ArchiveBufferReader) {
   const value = reader.readFloat32()
-  if (!Number.isFinite(value) || value <= 0) throw new ArchiveError("Metadata 包含无效球场尺寸")
+  if (!Number.isFinite(value) || value <= 0) throw new ArchiveError("Metadata contains invalid pitch dimensions")
   return value
 }
 
@@ -860,7 +860,7 @@ function readPlayerMetadata(
   const playerId = reader.readVarInt()
   const uid = readNullableUint(reader)
   const teamRaw = reader.readByte()
-  if (teamRaw > 1) throw new ArchiveError("元数据球队值无效")
+  if (teamRaw > 1) throw new ArchiveError("Invalid metadata team value")
   const legacyOrShirtNumber = readNullableInt(reader)
   const shirtNumber = legacyOrShirtNumber
   const squadNumber = structureMinor >= 7
@@ -1017,11 +1017,11 @@ function readAttributes(
 
 function readAttributeGroup(reader: ArchiveBufferReader, strings: Array<string | undefined>) {
   const count = reader.readVarUint()
-  if (count > 1_024) throw new ArchiveError("属性组过大")
+  if (count > 1_024) throw new ArchiveError("Attribute group exceeds the limit")
   const result: Record<string, number> = {}
   for (let index = 0; index < count; index += 1) {
     const name = readStringId(reader, strings)
-    if (!name) throw new ArchiveError("属性名称引用无效")
+    if (!name) throw new ArchiveError("Invalid attribute name reference")
     result[name] = reader.readVarInt()
   }
   return result
@@ -1030,7 +1030,7 @@ function readAttributeGroup(reader: ArchiveBufferReader, strings: Array<string |
 function readStringId(reader: ArchiveBufferReader, strings: Array<string | undefined>) {
   const id = reader.readVarUint()
   if (id === 0) return undefined
-  if (id >= strings.length) throw new ArchiveError("字符串引用无效")
+  if (id >= strings.length) throw new ArchiveError("Invalid string reference")
   return strings[id]
 }
 
@@ -1042,7 +1042,7 @@ function readFinalIndex(payload: Uint8Array, blocks: readonly BlockReference[]):
   const summary = { frameCount: reader.readVarUint(), firstTick: reader.readVarInt(), lastTick: reader.readVarInt(),
     homeGoals: reader.readVarInt(), awayGoals: reader.readVarInt() }
   const count = reader.readVarUint()
-  if (count !== blocks.length) throw new ArchiveError("最终索引块数量不匹配")
+  if (count !== blocks.length) throw new ArchiveError("Final index block count mismatch")
   for (let index = 0; index < count; index += 1) {
     const startTick = reader.readVarInt()
     const endTick = reader.readVarInt()
@@ -1051,30 +1051,30 @@ function readFinalIndex(payload: Uint8Array, blocks: readonly BlockReference[]):
     const frameCount = reader.readVarUint()
     const block = blocks[index]
     if (startTick !== block.startTick || endTick !== block.endTick || recordOffset !== block.recordOffset || compressedLength !== block.compressedLength || frameCount !== block.frameCount) {
-      throw new ArchiveError("最终索引与数据块头不一致")
+      throw new ArchiveError("Final index does not match block headers")
     }
   }
-  if (!reader.atEnd) throw new ArchiveError("最终索引包含多余字节")
+  if (!reader.atEnd) throw new ArchiveError("Final index contains trailing bytes")
   return summary
 }
 
 function readRecordPayload(reader: ArchiveBufferReader, maxLength: number) {
   const length = reader.readUint32()
   const expectedCrc = reader.readUint32()
-  if (length > maxLength) throw new ArchiveError("记录长度超限")
+  if (length > maxLength) throw new ArchiveError("Record length exceeds the limit")
   const payload = reader.readBytes(length)
-  if (crc32(payload) !== expectedCrc) throw new ArchiveError("记录 CRC 校验失败")
+  if (crc32(payload) !== expectedCrc) throw new ArchiveError("Record CRC check failed")
   return payload
 }
 
 function validatePitch(width: number, length: number) {
   if (!Number.isFinite(width) || !Number.isFinite(length) || width <= 0 || length <= 0 || width > 1_000 || length > 1_000) {
-    throw new ArchiveError("球场尺寸无效")
+    throw new ArchiveError("Invalid pitch dimensions")
   }
 }
 
 function quantize(value: number, halfExtent: number) {
-  if (!Number.isFinite(value)) throw new ArchiveError("坐标不是有限数值")
+  if (!Number.isFinite(value)) throw new ArchiveError("Coordinate is not finite")
   return Math.round(Math.min(1, Math.max(0, (value + halfExtent) / (halfExtent * 2))) * 65535)
 }
 
@@ -1082,7 +1082,7 @@ function dequantize(value: number, halfExtent: number) { return value / 65535 * 
 
 function addSafe(left: number, right: number) {
   const value = left + right
-  if (!Number.isSafeInteger(value)) throw new ArchiveError("差分结果超出浏览器安全整数范围")
+  if (!Number.isSafeInteger(value)) throw new ArchiveError("Delta result exceeds the browser safe integer range")
   return value
 }
 
@@ -1126,32 +1126,32 @@ class ArchiveBufferReader {
     this.floatScratch.setUint32(0, (this.floatScratch.getUint32(0, true) ^ this.readVarUint()) >>> 0, true)
     return this.floatScratch.getFloat32(0, true)
   }
-  readInt64() { this.ensure(8); const value = Number(this.view.getBigInt64(this.offset, true)); this.offset += 8; if (!Number.isSafeInteger(value)) throw new ArchiveError("64 位整数超出浏览器安全范围"); return value }
-  readUint64() { this.ensure(8); const value = Number(this.view.getBigUint64(this.offset, true)); this.offset += 8; if (!Number.isSafeInteger(value)) throw new ArchiveError("64 位整数超出浏览器安全范围"); return value }
+  readInt64() { this.ensure(8); const value = Number(this.view.getBigInt64(this.offset, true)); this.offset += 8; if (!Number.isSafeInteger(value)) throw new ArchiveError("64-bit integer exceeds the browser safe integer range"); return value }
+  readUint64() { this.ensure(8); const value = Number(this.view.getBigUint64(this.offset, true)); this.offset += 8; if (!Number.isSafeInteger(value)) throw new ArchiveError("64-bit integer exceeds the browser safe integer range"); return value }
   readUint64Hex() { this.ensure(8); const value = this.view.getBigUint64(this.offset, true); this.offset += 8; return value.toString(16).toUpperCase().padStart(16, "0") }
   readBytes(length: number) { this.ensure(length); const value = this.bytes.subarray(this.offset, this.offset + length); this.offset += length; return value }
   readAscii(length: number) { return String.fromCharCode(...this.readBytes(length)) }
   readString() {
     const length = this.readVarUint()
-    if (length > 1_048_576) throw new ArchiveError("字符串长度无效")
-    try { return this.decoder.decode(this.readBytes(length)) } catch { throw new ArchiveError("字符串不是有效 UTF-8") }
+    if (length > 1_048_576) throw new ArchiveError("Invalid string length")
+    try { return this.decoder.decode(this.readBytes(length)) } catch { throw new ArchiveError("String is not valid UTF-8") }
   }
   readVarUintBig() {
     let result = 0n
     for (let index = 0; index < 10; index += 1) {
       const byte = this.readByte()
-      if (index === 9 && byte > 1) throw new ArchiveError("VarInt 超出 UInt64 范围")
+      if (index === 9 && byte > 1) throw new ArchiveError("VarInt exceeds the UInt64 range")
       result |= BigInt(byte & 0x7f) << BigInt(index * 7)
       if ((byte & 0x80) === 0) return result
     }
-    throw new ArchiveError("VarInt 长度无效")
+    throw new ArchiveError("Invalid VarInt length")
   }
-  readVarUint() { const value = Number(this.readVarUintBig()); if (!Number.isSafeInteger(value)) throw new ArchiveError("VarInt 超出浏览器安全范围"); return value }
+  readVarUint() { const value = Number(this.readVarUintBig()); if (!Number.isSafeInteger(value)) throw new ArchiveError("VarInt exceeds the browser safe integer range"); return value }
   readVarInt() {
     const raw = this.readVarUintBig()
     const value = Number((raw >> 1n) ^ -(raw & 1n))
-    if (!Number.isSafeInteger(value)) throw new ArchiveError("有符号 VarInt 超出浏览器安全范围")
+    if (!Number.isSafeInteger(value)) throw new ArchiveError("Signed VarInt exceeds the browser safe integer range")
     return value
   }
-  private ensure(length: number) { if (!Number.isSafeInteger(length) || length < 0 || this.offset + length > this.bytes.byteLength) throw new ArchiveEndOfFileError("存档尾部记录未写完整") }
+  private ensure(length: number) { if (!Number.isSafeInteger(length) || length < 0 || this.offset + length > this.bytes.byteLength) throw new ArchiveEndOfFileError("Archive ends with an incomplete record") }
 }

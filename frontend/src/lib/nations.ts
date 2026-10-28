@@ -1,7 +1,8 @@
+import { chineseNationNames } from "@/i18n/nations"
+
 type NationOverride = {
   region: string
   en: string
-  zh: string
   flag?: string
 }
 
@@ -33,13 +34,13 @@ const nationRegions: Record<number, string> = {
 }
 
 const overrides: Record<number, NationOverride> = {
-  138: { region: "TW", en: "Chinese Taipei", zh: "中华台北" },
-  765: { region: "GB", en: "England", zh: "英格兰", flag: subdivisionFlag("gbeng") },
-  785: { region: "GB", en: "Northern Ireland", zh: "北爱尔兰" },
-  793: { region: "GB", en: "Scotland", zh: "苏格兰", flag: subdivisionFlag("gbsct") },
-  801: { region: "GB", en: "Wales", zh: "威尔士", flag: subdivisionFlag("gbwls") },
-  13100103: { region: "TZ", en: "Zanzibar", zh: "桑给巴尔" },
-  217945: { region: "XK", en: "Kosovo", zh: "科索沃" },
+  138: { region: "TW", en: "Chinese Taipei" },
+  765: { region: "GB", en: "England", flag: subdivisionFlag("gbeng") },
+  785: { region: "GB", en: "Northern Ireland" },
+  793: { region: "GB", en: "Scotland", flag: subdivisionFlag("gbsct") },
+  801: { region: "GB", en: "Wales", flag: subdivisionFlag("gbwls") },
+  13100103: { region: "TZ", en: "Zanzibar" },
+  217945: { region: "XK", en: "Kosovo" },
 }
 
 export type NationDisplay = {
@@ -53,7 +54,7 @@ export function nationDisplay(uid: number | undefined, language: string): Nation
   const region = override?.region ?? nationRegions[uid]
   if (!region) return undefined
   const localizedName = override
-    ? language.startsWith("zh") ? override.zh : override.en
+    ? language.startsWith("zh") ? chineseNationNames[uid] ?? override.en : override.en
     : displayRegion(region, language)
   return {
     flag: override?.flag ?? regionFlag(region),

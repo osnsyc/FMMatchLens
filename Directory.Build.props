@@ -16,7 +16,7 @@
     <KoFiLabel>Support on Ko-fi</KoFiLabel>
     <RepositoryUrl>https://github.com/osnsyc/FMMatchLens.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <ProjectDescription>Football Manager 2026 本地比赛数据采集、存档与可视化分析工具。</ProjectDescription>
+    <ProjectDescription>A local match data collection, archiving, and visual analysis tool for Football Manager.</ProjectDescription>
     <ApiPort>16726</ApiPort>
     <BepInExBuildVersion>6.0.0-be.785+6abdba4</BepInExBuildVersion>
     <BepInExBuildUrl>https://builds.bepinex.dev/projects/bepinex_be/785/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.785%2B6abdba4.zip</BepInExBuildUrl>
