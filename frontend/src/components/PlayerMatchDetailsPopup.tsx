@@ -300,6 +300,7 @@ export function PlayerMatchDetailsPopup({
 
           <MovementAnalysisCard
             distanceM={player.stats.distanceM}
+            sprints={player.stats.sprints}
             movement={movement}
           />
 
@@ -586,9 +587,11 @@ function SectionTitle({ title }: { title: string }) {
 
 function MovementAnalysisCard({
   distanceM,
+  sprints,
   movement,
 }: {
   distanceM?: number
+  sprints?: number
   movement: PlayerMovementAnalysis
 }) {
   const { t } = useTranslation()
@@ -608,7 +611,7 @@ function MovementAnalysisCard({
       <div className="min-h-0">
         <div className="grid grid-cols-3 gap-1 text-center">
           <MovementMetric label={t("playerDetails.movement.distance")} value={`${(Number(distanceM ?? 0) / 1000).toFixed(2)} km`} />
-          <MovementMetric label={t("playerDetails.movement.sprints")} value={total > 0 ? String(movement.sprintCount) : "-"} />
+          <MovementMetric label={t("playerDetails.movement.sprints")} value={sprints == null ? "-" : String(sprints)} />
           <MovementMetric label={t("playerDetails.movement.maximumSpeed")} value={total > 0 ? `${movement.maximumSpeedKmh.toFixed(1)} km/h` : "-"} />
         </div>
         <div

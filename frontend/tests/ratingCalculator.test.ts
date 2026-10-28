@@ -194,8 +194,8 @@ describe("rating reconstruction", () => {
     expect(result.reconstructionResidual).toBe(7)
   })
 
-  it("decodes the compact 34-byte live rating-only vector", () => {
-    const packed = new Uint8Array(34)
+  it("decodes the compact 36-byte live rating-only vector", () => {
+    const packed = new Uint8Array(36)
     const packedView = new DataView(packed.buffer)
     packedView.setFloat32(0, 0.25, true)
     packed[5 + 9] = 2 // team conceded while on pitch
@@ -204,6 +204,8 @@ describe("rating reconstruction", () => {
     packed[22] = 4 // headers lost
     packed[23] = 5 // possession lost
     packed[24] = 6 // presses attempted
+    packed[34] = 7
+    packed[35] = 19
     packed[25] = 1 // presses won
     packedView.setInt16(26, 12, true)
     const statsPacked = btoa(String.fromCharCode(...packed))
@@ -239,12 +241,14 @@ describe("rating reconstruction", () => {
     expect(decoded.statsRaw[0xd0]).toBe(5)
     expect(decoded.statsRaw[0xe4]).toBe(6)
     expect(decoded.statsRaw[0xe5]).toBe(1)
+    expect(decoded.statsRaw[0xeb]).toBe(7)
+    expect(decoded.statsRaw[0xed]).toBe(19)
     expect(rawView.getInt16(0xdc, true)).toBe(12)
     expect(decoded.backgroundInput).toBe(-1)
   })
 
-  it("expands the archive-only 34-byte stat vector only when requested", () => {
-    const packed = new Uint8Array(34)
+  it("expands the archive-only 36-byte stat vector only when requested", () => {
+    const packed = new Uint8Array(36)
     new DataView(packed.buffer).setFloat32(0, 0.25, true)
     packed[5 + 9] = 2 // Stats+0xCA: team conceded while on pitch.
     packed[20] = 2
@@ -252,6 +256,8 @@ describe("rating reconstruction", () => {
     packed[22] = 4
     packed[23] = 5
     packed[24] = 6
+    packed[34] = 7
+    packed[35] = 19
     packed[25] = 1
     new DataView(packed.buffer).setInt16(26, 12, true)
 
@@ -289,6 +295,8 @@ describe("rating reconstruction", () => {
     expect(decoded.statsRaw[0xd0]).toBe(5)
     expect(decoded.statsRaw[0xe4]).toBe(6)
     expect(decoded.statsRaw[0xe5]).toBe(1)
+    expect(decoded.statsRaw[0xeb]).toBe(7)
+    expect(decoded.statsRaw[0xed]).toBe(19)
     expect(rawView.getInt16(0xdc, true)).toBe(12)
     expect(decoded.qualityFlags).toEqual(["test_quality_flag"])
   })
@@ -298,7 +306,7 @@ describe("rating reconstruction", () => {
     const eventB = new Uint8Array(16).fill(2)
     const encode = (value: Uint8Array) => btoa(String.fromCharCode(...value))
     const base = {
-      statsPacked: encode(new Uint8Array(34)),
+      statsPacked: encode(new Uint8Array(36)),
       internalW25: 0, internalW24: 0,
       specialW2C: 0, specialW2D: 0, specialW2E: 0,
       specialW2F: 0, specialW30: 0, specialW31: 0,

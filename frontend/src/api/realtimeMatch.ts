@@ -101,7 +101,7 @@ export type RealtimePlayer = PlayerStats & {
 
 /** Compact binary-archive input retained until its frame is displayed. */
 export type ArchiveRatingInputs = {
-  /** The 34 archive-only bytes not already represented by RealtimePlayer stats. */
+  /** The 36 archive-only bytes not already represented by RealtimePlayer stats. */
   statsPacked: Uint8Array
   internalW25: number
   internalW24: number
@@ -123,7 +123,7 @@ export type ArchiveRatingInputs = {
 }
 
 export type RealtimeRatingInputs = {
-  /** Base64-encoded 34-byte rating-only stat vector. */
+  /** Base64-encoded 36-byte rating-only stat vector. */
   statsPacked: string
   internalW25: number
   internalW24: number
@@ -1773,6 +1773,8 @@ function toPlayer(
   allowLocalAssets = true,
   resolveRatingContribution?: () => RatingContribution | undefined,
 ): MatchPlayer {
+  const packedStats = player.archiveRatingInputs?.statsPacked
+    ?? (player.ratingInputs ? Uint8Array.from(atob(player.ratingInputs.statsPacked), (byte) => byte.charCodeAt(0)) : undefined)
   const uid = metadata?.uid
   return {
     id: uid ?? player.playerId,
@@ -1819,6 +1821,25 @@ function toPlayer(
     profile: metadata?.profile,
     attributes: metadata?.attributes,
     stats: {
+      openPlayXa: packedStats ? new DataView(packedStats.buffer, packedStats.byteOffset, packedStats.byteLength).getFloat32(0, true) : undefined,
+      penaltyAttempts: packedStats?.[4],
+      blocks: packedStats?.[5],
+      penaltiesFaced: packedStats?.[6],
+      penaltiesSaved: packedStats?.[7],
+      yellowCards: packedStats?.[9],
+      redCards: packedStats?.[10],
+      openPlayKeyPasses: packedStats?.[11],
+      possessionWon: packedStats?.[15],
+      goalsConceded: packedStats?.[20],
+      chancesCreated: packedStats?.[8],
+      offsides: packedStats?.[21],
+      headersLost: packedStats?.[22],
+      possessionLost: packedStats?.[23],
+      pressesAttempted: packedStats?.[24],
+      pressesWon: packedStats?.[25],
+      shotsOutsideBox: packedStats?.[34],
+      sprints: packedStats?.[35],
+      progressivePasses: player.progressivePasses,
       goals: player.goals,
       assists: player.assists,
       penalties: player.penalties,

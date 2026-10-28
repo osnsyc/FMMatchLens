@@ -183,6 +183,26 @@ export type TacticalEventPoint = {
 }
 
 export type PlayerStats = {
+  openPlayXa?: number
+  penaltyAttempts?: number
+  blocks?: number
+  penaltiesFaced?: number
+  penaltiesSaved?: number
+  yellowCards?: number
+  redCards?: number
+  openPlayKeyPasses?: number
+  possessionWon?: number
+
+  goalsConceded?: number
+  chancesCreated?: number
+  offsides?: number
+  headersLost?: number
+  possessionLost?: number
+  pressesAttempted?: number
+  pressesWon?: number
+  shotsOutsideBox?: number
+  sprints?: number
+
   goals: number
   assists: number
   penalties?: number

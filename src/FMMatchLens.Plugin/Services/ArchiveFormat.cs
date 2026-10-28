@@ -43,7 +43,7 @@ internal static class ArchiveWireFormat
     // PlayerStats fields are byte-delta encoded while fields already present in
     // PlayerTickData are reused; per-player progressive passes are retained; raw
     // goals conceded, chances created, offsides, headers lost, possession lost,
-    // presses attempted, and presses won are retained in the compact vector;
+    // presses attempted, presses won, shots outside the box, and sprints are retained in the compact vector;
     // rating events, IP/OOP RoleDuty, and total eligible duration
     // let the frontend reconstruct classification durations along the timeline;
     // raw per-team W04/W05 context candidates are byte-delta encoded;

@@ -31,7 +31,7 @@ export function NativeTabs({
   renderContent = true,
 }: NativeTabsProps) {
   const pillLayoutId = useId();
-  const [internalActiveTab, setInternalActiveTab] = useState(defaultValue || items[0].id);
+  const [internalActiveTab, setInternalActiveTab] = useState(defaultValue ?? items[0]?.id ?? "");
   const [direction, setDirection] = useState(1);
   const activeTab = value ?? internalActiveTab;
 
@@ -42,6 +42,8 @@ export function NativeTabs({
     setInternalActiveTab(value);
     onValueChange?.(value);
   };
+
+  if (items.length === 0) return null;
 
   return (
     <MotionConfig reducedMotion="user">

@@ -1,0 +1,78 @@
+// Dedicated table labels keep compact headers independent of other statistics views.
+const labels: Record<string, [string, string, string?, string?]> = {
+  rating: ["评分", "Rating"], goals: ["进球", "Goals"], assists: ["助攻", "Assists"],
+  xg: ["预期进球", "Expected goals", "xG", "xG"], xa: ["预期助攻", "Expected assists", "xA", "xA"],
+  nonPenaltyXg: ["非点球预期进球", "Non-penalty expected goals", "非点 xG", "npxG"],
+  openPlayXa: ["运动战预期助攻", "Open-play expected assists", "运动战 xA", "OP xA"],
+  chancesCreated: ["创造机会", "Chances created", "创机会", "Chances"],
+  keyPasses: ["关键传球", "Key passes", "关键传球", "Key pass"],
+  openPlayKeyPasses: ["运动战关键传球", "Open-play key passes", "运动战关键", "OP key"],
+  passes: ["尝试传球", "Passes attempted", "传球", "Pass att"],
+  passesCompleted: ["成功传球", "Passes completed", "成功传球", "Pass cmp"],
+  passAccuracy: ["传球成功率", "Pass completion rate", "传球率", "Pass %"],
+  progressivePasses: ["推进传球", "Progressive passes", "推进传球", "Prog pass"],
+  shots: ["射门", "Shots"], shotsOnTarget: ["射正", "Shots on target", "射正", "On target"],
+  shotAccuracy: ["射正率", "Shot accuracy", "射正率", "Shot %"],
+  shotsOutsideBox: ["禁区外射门", "Shots outside the box", "远射", "Long shots"],
+  goalsOutsideBox: ["禁区外进球", "Goals outside the box", "远射进球", "Long goals"],
+  clearCutChances: ["绝佳机会", "Clear-cut chances", "绝佳机会", "Big chance"],
+  hitWoodwork: ["击中门框", "Woodwork", "中框", "Woodwork"],
+  blockedShots: ["被封堵射门", "Shots blocked", "射门被挡", "Shot blk"],
+  penalties: ["罚入点球", "Penalties scored", "点球进球", "PK scored"],
+  penaltyAttempts: ["主罚点球", "Penalties attempted", "主罚点球", "PK att"],
+  crosses: ["尝试传中", "Crosses attempted", "传中", "Cross att"],
+  crossesCompleted: ["成功传中", "Crosses completed", "成功传中", "Cross cmp"],
+  crossAccuracy: ["传中成功率", "Cross completion rate", "传中率", "Cross %"],
+  openPlayCrossesAttempted: ["运动战传中", "Open-play crosses attempted", "运动战传中", "OP cross"],
+  dribbles: ["盘带", "Dribbles"], possessionWon: ["夺回球权", "Possession won", "夺回球权", "Poss won"],
+  possessionLost: ["丢失球权", "Possession lost", "丢失球权", "Poss lost"],
+  pressesAttempted: ["尝试压迫", "Presses attempted", "压迫", "Press att"],
+  pressesWon: ["成功压迫", "Presses won", "成功压迫", "Press won"],
+  pressAccuracy: ["压迫成功率", "Press success rate", "压迫率", "Press %"],
+  tacklesAttempted: ["尝试抢断", "Tackles attempted", "抢断", "Tackle att"],
+  tacklesWon: ["成功抢断", "Tackles won", "成功抢断", "Tackle won"],
+  tackleAccuracy: ["抢断成功率", "Tackle success rate", "抢断率", "Tackle %"],
+  keyTackles: ["关键抢断", "Key tackles", "关键抢断", "Key tackle"],
+  interceptions: ["拦截", "Interceptions", "拦截", "Intercept"], clearances: ["解围", "Clearances"],
+  blocks: ["防守封堵", "Defensive blocks", "封堵", "Blocks"],
+  errorsLeadingToGoal: ["失误导致失球", "Errors leading to a goal", "失误失球", "Goal error"],
+  aerials: ["争顶次数", "Headers attempted", "争顶", "Aerial att"],
+  aerialsWon: ["争顶成功", "Headers won", "争顶成功", "Aerial won"],
+  aerialAccuracy: ["争顶成功率", "Aerial success rate", "争顶率", "Aerial %"],
+  headersLost: ["争顶失败", "Headers lost", "争顶失败", "Aerial lost"],
+  goalsPrevented: ["阻止预期进球", "Goals prevented", "阻止进球", "Prevented"],
+  goalsConceded: ["失球数", "Goals conceded", "失球", "Conceded"], cleanSheets: ["零封", "Clean sheets", "零封", "Clean sht"],
+  shotsFaced: ["面对射门", "Shots faced", "面对射门", "Faced"],
+  savesHeld: ["扑救抱住", "Saves held", "抱住", "Held"], savesParried: ["扑救扑出", "Saves parried", "扑出", "Parried"],
+  savesTipped: ["指尖扑救", "Saves tipped", "指尖扑救", "Tipped"],
+  penaltiesSaved: ["扑出点球", "Penalties saved", "扑点", "PK saved"], penaltiesFaced: ["面对点球", "Penalties faced", "面对点球", "PK faced"],
+  distance: ["跑动距离（千米）", "Distance (km)", "跑动 km", "Dist km"], sprints: ["冲刺次数", "Sprints", "冲刺", "Sprints"],
+  overallPhysicalCondition: ["身体状态", "Physical condition", "体能", "Condition"], matchSharpness: ["比赛状态", "Match sharpness", "比赛状态", "Sharpness"],
+  yellowCards: ["黄牌", "Yellow cards", "黄牌", "Yellow"], redCards: ["红牌", "Red cards", "红牌", "Red"],
+  fouls: ["犯规", "Fouls"], fouled: ["被犯规", "Fouled"], offsides: ["越位", "Offsides"], ownGoals: ["乌龙球", "Own goals"],
+  corners: ["角球", "Corners"], attackingFreeKicks: ["前场任意球", "Attacking free kicks", "前场任意球", "Att FK"],
+  defensiveFreeKicks: ["后场任意球", "Defensive free kicks", "后场任意球", "Def FK"], throwIns: ["界外球", "Throw-ins"],
+  appearances: ["出场次数", "Appearances", "出场", "Apps"], starts: ["首发次数", "Starts", "首发", "Starts"],
+  substituteAppearances: ["替补出场次数", "Substitute appearances", "替补出场", "Sub apps"], minutes: ["上场分钟", "Minutes played", "分钟", "Minutes"],
+  playerOfMatchAwards: ["全场最佳次数", "Player of the match awards", "全场最佳", "POTM"],
+  wins: ["胜场", "Wins"], losses: ["负场", "Losses"], teamGoals: ["球队进球", "Team goals"],
+  teamGoalsConceded: ["球队失球", "Team goals conceded", "球队失球", "Team GA"],
+}
+
+const groups = {
+  key: ["核心", "Overview"], attack: ["射门", "Shooting"], creation: ["创造机会", "Creation"],
+  passing: ["传球", "Passing"], defence: ["防守", "Defending"],
+  goalkeeping: ["门将", "Goalkeeping"], season: ["赛季记录", "Season record"],
+}
+
+function translations(language: 0 | 1) {
+  return {
+    noStats: language === 0 ? "该赛事暂无统计数据" : "No statistics available for this competition",
+    groups: Object.fromEntries(Object.entries(groups).map(([key, value]) => [key, value[language]])),
+    metrics: Object.fromEntries(Object.entries(labels).map(([key, value]) => [key, value[language]])),
+    headers: Object.fromEntries(Object.entries(labels).map(([key, value]) => [key, value[language + 2] ?? value[language]])),
+  }
+}
+
+export const playerStatLabelsZh = translations(0)
+export const playerStatLabelsEn = translations(1)

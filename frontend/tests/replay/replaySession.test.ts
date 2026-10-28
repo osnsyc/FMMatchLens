@@ -35,7 +35,7 @@ describe("ReplaySession", () => {
     }
     current.players[0].shots = 2
     current.players[0].archiveRatingInputs = {
-      statsPacked: new Uint8Array(34),
+      statsPacked: new Uint8Array(36),
       internalW25: 0, internalW24: 0,
       specialW2C: 0, specialW2D: 0, specialW2E: 0,
       specialW2F: 0, specialW30: 0, specialW31: 0,
@@ -46,6 +46,11 @@ describe("ReplaySession", () => {
       classificationDurations: [{ categoryBit: 7, duration: 10_800 }],
       qualityFlags: [], ratingEvents: [],
     }
+    const packed = current.players[0].archiveRatingInputs!.statsPacked
+    const confirmedStats = { penaltyAttempts: 4, blocks: 5, penaltiesFaced: 6, penaltiesSaved: 7, yellowCards: 9, redCards: 10, openPlayKeyPasses: 11, possessionWon: 15, goalsConceded: 20, chancesCreated: 8, offsides: 21, headersLost: 22, possessionLost: 23, pressesAttempted: 24, pressesWon: 25, shotsOutsideBox: 34, sprints: 35 } as const
+    Object.values(confirmedStats).forEach((index) => { packed[index] = index + 1 })
+    new DataView(packed.buffer).setFloat32(0, 0.375, true)
+    current.players[0].progressivePasses = 9
     const configuration = {
       weightsByCategoryBit: new Map([[7, weights]]),
     }
@@ -59,6 +64,11 @@ describe("ReplaySession", () => {
       undefined, true, configuration, undefined, cache,
     ).players[0]
 
+    for (const [key, index] of Object.entries(confirmedStats)) {
+      expect(first.stats[key as keyof typeof confirmedStats]).toBe(index + 1)
+    }
+    expect(first.stats.progressivePasses).toBe(9)
+    expect(first.stats.openPlayXa).toBe(0.375)
     expect(first.ratingContribution).toBeUndefined()
     expect(first.resolveRatingContribution).toBe(second.resolveRatingContribution)
     const contribution = first.resolveRatingContribution?.()
@@ -72,7 +82,7 @@ describe("ReplaySession", () => {
     const weights = Array<number>(52).fill(0)
     weights[10] = 100
     fixture.frames.forEach((current, index) => {
-      const packed = new Uint8Array(34)
+      const packed = new Uint8Array(36)
       current.players[0].shots = index * 2
       current.ratingModel = {
         ratingBaseCondition: 0,

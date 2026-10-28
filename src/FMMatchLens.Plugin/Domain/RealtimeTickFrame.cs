@@ -105,7 +105,7 @@ internal sealed record RatingResearchPlayerWireData(
 
     internal static byte[] PackStats(RatingStatsInputs value)
     {
-        using var stream = new MemoryStream(34);
+        using var stream = new MemoryStream(36);
         using var writer = new BinaryWriter(stream);
         writer.Write(value.OpenPlayXa);
         writer.Write(value.PenaltyAttempts);
@@ -120,8 +120,9 @@ internal sealed record RatingResearchPlayerWireData(
         writer.Write(value.PossessionLost); writer.Write(value.PressesAttempted); writer.Write(value.PressesWon);
         writer.Write(value.ShortPassesAttemptedCandidate); writer.Write(value.LongPassesAttemptedCandidate);
         writer.Write(value.ShortPassesCompletedCandidate); writer.Write(value.LongPassesCompletedCandidate);
+        writer.Write(value.ShotsOutsideBox); writer.Write(value.Sprints);
         var packed = stream.ToArray();
-        if (packed.Length != 34) throw new InvalidOperationException("Rating-only stats wire size changed unexpectedly.");
+        if (packed.Length != 36) throw new InvalidOperationException("Rating-only stats wire size changed unexpectedly.");
         return packed;
     }
 
@@ -183,7 +184,9 @@ internal readonly record struct RatingStatsInputs(
     short ShortPassesAttemptedCandidate,
     short LongPassesAttemptedCandidate,
     short ShortPassesCompletedCandidate,
-    short LongPassesCompletedCandidate);
+    short LongPassesCompletedCandidate,
+    byte ShotsOutsideBox,
+    byte Sprints);
 
 internal enum MomentumEventUpdateKind
 {

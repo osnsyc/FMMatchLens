@@ -1,3 +1,4 @@
+import { playerStatLabelsZh, playerStatLabelsEn } from "./playerStatLabels"
 import i18n from "i18next"
 import { initReactI18next } from "react-i18next"
 
@@ -656,14 +657,7 @@ const resources = {
           unknown: "未知",
           internationalTotal: "国家队总计",
         },
-        groups: {
-          key: "关键数据",
-          passing: "传球详细数据",
-          attack: "进攻",
-          defence: "防守",
-          goalkeeping: "守门",
-          other: "其他",
-        },
+        ...playerStatLabelsZh,
       },
       playerDetails: {
         title: "{{player}} 的本场详细统计",
@@ -710,6 +704,15 @@ const resources = {
         },
       },
       stats: {
+        goalsConceded: "失球数",
+        chancesCreated: "创造机会",
+        headersLost: "争顶失败",
+        possessionLost: "丢失球权",
+        pressesAttempted: "尝试压迫",
+        pressesWon: "成功压迫",
+        shotsOutsideBox: "禁区外射门",
+        sprints: "冲刺次数",
+
         all: "全部",
         attack: "进攻",
         defence: "防守",
@@ -1535,14 +1538,7 @@ const resources = {
           unknown: "Unknown",
           internationalTotal: "International Total",
         },
-        groups: {
-          key: "Key Data",
-          passing: "Passing Details",
-          attack: "Attack",
-          defence: "Defence",
-          goalkeeping: "Goalkeeping",
-          other: "Other",
-        },
+        ...playerStatLabelsEn,
       },
       playerDetails: {
         title: "{{player}} Match Details",
@@ -1589,6 +1585,15 @@ const resources = {
         },
       },
       stats: {
+        goalsConceded: "Goals Conceded",
+        chancesCreated: "Chances Created",
+        headersLost: "Headers Lost",
+        possessionLost: "Possession Lost",
+        pressesAttempted: "Presses Attempted",
+        pressesWon: "Presses Won",
+        shotsOutsideBox: "Shots Outside Box",
+        sprints: "Sprints",
+
         all: "All",
         attack: "Attack",
         defence: "Defence",

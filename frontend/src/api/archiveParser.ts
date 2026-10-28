@@ -525,9 +525,9 @@ function readRatingModelMetadata(reader: ArchiveBufferReader): RatingModelMetada
 }
 
 function readRatingStatsDelta(reader: ArchiveBufferReader, previous?: Uint8Array) {
-  const result = previous?.slice() ?? new Uint8Array(34)
+  const result = previous?.slice() ?? new Uint8Array(36)
   const changed = reader.readVarUintBig()
-  if ((changed >> 34n) !== 0n) throw new ArchiveError("Rating stats delta contains unknown bits")
+  if ((changed >> 36n) !== 0n) throw new ArchiveError("Rating stats delta contains unknown bits")
   for (let index = 0; index < result.length; index += 1) {
     if ((changed & (1n << BigInt(index))) !== 0n) result[index] ^= reader.readByte()
   }

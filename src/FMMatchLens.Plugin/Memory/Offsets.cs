@@ -778,8 +778,10 @@ internal static class Offsets
         public const int PressesAttempted = 0xE4;
         public const int PressesWon = 0xE5;
         public const int ProgressivePasses = 0xE9;
+        public const int ShotsOutsideBox = 0xEB;
+        public const int Sprints = 0xED;
 
-        // Inclusive of the highest-address player stat above (a byte at +0xE9).
-        public const int RatingInputReadableSize = 0xEA;
+        // Inclusive of the highest-address player stat above (a byte at +0xED).
+        public const int RatingInputReadableSize = 0xEE;
     }
 }

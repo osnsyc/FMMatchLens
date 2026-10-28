@@ -466,7 +466,7 @@ export function decodeRealtimeRatingInputs(
   previous?: ArchiveRatingInputs,
 ): ArchiveRatingInputs {
   const statsPacked = decodeBase64(value.statsPacked)
-  if (statsPacked.byteLength !== 34) throw new Error("Live rating stats payload has an invalid size")
+  if (statsPacked.byteLength !== 36) throw new Error("Live rating stats payload has an invalid size")
   const common = Math.trunc(value.ratingEventsCommonLength)
   if (common < 0 || common > (previous?.ratingEvents.length ?? 0)) {
     throw new Error("Live rating event delta has no matching baseline")
@@ -528,8 +528,8 @@ export function decodeArchiveRatingInputs(
   configuration: RatingWeightConfiguration = observedRatingWeightConfiguration,
 ): RatingCalculationInput {
   const packed = value.statsPacked
-  if (packed.byteLength !== 34) throw new Error("Archive rating stats payload has an invalid size")
-  const raw = new Uint8Array(232)
+  if (packed.byteLength !== 36) throw new Error("Archive rating stats payload has an invalid size")
+  const raw = new Uint8Array(238)
   const view = new DataView(raw.buffer)
   view.setFloat32(0x1c, player.xg ?? 0, true)
   raw.set(packed.subarray(0, 4), 0x28)
@@ -548,6 +548,8 @@ export function decodeArchiveRatingInputs(
   raw.set(packed.subarray(28, 30), 0xde)
   raw.set(packed.subarray(30, 32), 0xe0)
   raw.set(packed.subarray(32, 34), 0xe2)
+  raw[0xeb] = packed[34]
+  raw[0xed] = packed[35]
   return {
     statsRaw: raw,
     internalW25: value.internalW25, internalW24: value.internalW24,

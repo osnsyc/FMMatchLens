@@ -1152,7 +1152,9 @@ internal sealed class GameMatchTickHook : IDisposable
             ReadInt16(source, Offsets.PlayerStats.ShortPassesAttemptedCandidate),
             ReadInt16(source, Offsets.PlayerStats.LongPassesAttemptedCandidate),
             ReadInt16(source, Offsets.PlayerStats.ShortPassesCompletedCandidate),
-            ReadInt16(source, Offsets.PlayerStats.LongPassesCompletedCandidate));
+            ReadInt16(source, Offsets.PlayerStats.LongPassesCompletedCandidate),
+            ReadByte(source, Offsets.PlayerStats.ShotsOutsideBox),
+            ReadByte(source, Offsets.PlayerStats.Sprints));
     }
 
     private IReadOnlyList<byte[]> ReadRawRecords(
