@@ -45,6 +45,7 @@ internal sealed class GameMatchTickHook : IDisposable
     private readonly RealtimeMatchTimeline _timeline;
     private readonly MatchUpdateDelegate _hookDelegate;
     private readonly MemoryReader _memoryReader = new();
+    private readonly PlayerUidCache _playerUids = new(RawRealtimeTickFrame.MaxPlayers, Stopwatch.Frequency);
     private readonly MomentumCalculator _momentumCalculator = new();
     private readonly GameMatchTickRecordBuffer _tickRecords = new(65_536);
     private readonly GameMatchTickRecord[] _drainBatch = new GameMatchTickRecord[2_048];
@@ -237,6 +238,7 @@ internal sealed class GameMatchTickHook : IDisposable
         _detour = null;
         _original = null;
         _started = false;
+        _playerUids.Invalidate();
         ClearRatingCaptureState();
         PluginLogger.Debug("GAME_MATCH match-update hook stopped.");
     }
@@ -288,14 +290,18 @@ internal sealed class GameMatchTickHook : IDisposable
 
     private ulong InvokeOriginalAndCapture(MatchUpdateDelegate original, nint match, ulong param2)
     {
+        VirtualMemory.InvalidateActiveReadScopes();
         var result = original(match, param2);
+        // A fresh scope starts after every Original, including callbacks that
+        // only produce lightweight records. Never carry a map across updates.
+        using var memoryScope = VirtualMemory.BeginReadScope();
 
         Interlocked.Exchange(ref _lastMatch, (long)match);
         Interlocked.Exchange(ref _lastParam2, unchecked((long)param2));
         Interlocked.Exchange(ref _lastResult, unchecked((long)result));
         Interlocked.Increment(ref _callCount);
 
-        if (TryCaptureTickRecord(match, unchecked((uint)param2), out var record))
+        if (TryCaptureTickRecord(match, unchecked((uint)param2), out var record, out var homeValues, out var awayValues))
         {
             _tickRecords.TryWrite(record);
             var selectedAnimated = (nint)Interlocked.Read(ref _selectedAnimated);
@@ -303,7 +309,7 @@ internal sealed class GameMatchTickHook : IDisposable
                 (selectedAnimated == match ||
                  (selectedAnimated == default && record.Tick is >= 0 and <= PreLockCaptureMaxTick)))
             {
-                TryCaptureRealtimeFrame(record);
+                TryCaptureRealtimeFrame(record, homeValues, awayValues);
             }
         }
 
@@ -347,9 +353,12 @@ internal sealed class GameMatchTickHook : IDisposable
         }
     }
 
-    private bool TryCaptureTickRecord(nint match, uint param2, out GameMatchTickRecord record)
+    private bool TryCaptureTickRecord(
+        nint match, uint param2, out GameMatchTickRecord record,
+        out TeamTickSnapshot homeValues, out TeamTickSnapshot awayValues)
     {
         record = default;
+        homeValues = awayValues = default;
         if (match == default || !_memoryReader.TryReadInt32(match + Offsets.GameMatch.Tick, out var tick))
         {
             return false;
@@ -384,6 +393,7 @@ internal sealed class GameMatchTickHook : IDisposable
             {
                 return false;
             }
+            _playerUids.Invalidate();
         }
         else if (!isActive)
         {
@@ -396,8 +406,8 @@ internal sealed class GameMatchTickHook : IDisposable
             _terminalMatches.TryRemove(match, out _);
         }
 
-        ReadTeamTickValues(homeTeam, out var homeGoals, out var homeXg, out var homeShots);
-        ReadTeamTickValues(awayTeam, out var awayGoals, out var awayXg, out var awayShots);
+        homeValues = TeamTickSnapshot.Read(_memoryReader, homeTeam);
+        awayValues = TeamTickSnapshot.Read(_memoryReader, awayTeam);
 
         record = new GameMatchTickRecord(
             Sequence: Interlocked.Increment(ref _tickRecordSequence),
@@ -418,26 +428,13 @@ internal sealed class GameMatchTickHook : IDisposable
             AwayTeam: awayTeam,
             PossessionTeam: possessionTeam,
             CurrentBallHolder: currentBallHolder,
-            HomeGoals: homeGoals,
-            AwayGoals: awayGoals,
-            HomeXg: homeXg,
-            AwayXg: awayXg,
-            HomeShots: homeShots,
-            AwayShots: awayShots);
+            HomeGoals: homeValues.Goals,
+            AwayGoals: awayValues.Goals,
+            HomeXg: homeValues.Xg,
+            AwayXg: awayValues.Xg,
+            HomeShots: homeValues.Shots,
+            AwayShots: awayValues.Shots);
         return true;
-    }
-
-    private int ReadCoordinateCentimeters(nint source, int offset)
-    {
-        if (source == default ||
-            !_memoryReader.TryReadFloat(source + offset, out var meters) ||
-            !float.IsFinite(meters) ||
-            meters is < int.MinValue / 100f or > int.MaxValue / 100f)
-        {
-            return 0;
-        }
-
-        return checked((int)Math.Round(meters * 100f, MidpointRounding.AwayFromZero));
     }
 
     private bool TryReadTeamPlayerCount(nint team, out byte playerCount)
@@ -448,27 +445,8 @@ internal sealed class GameMatchTickHook : IDisposable
                playerCount <= RawRealtimeTickFrame.MaxPlayers;
     }
 
-    private void ReadTeamTickValues(nint team, out byte goals, out float xg, out byte shots)
-    {
-        goals = default;
-        xg = default;
-        shots = default;
-
-        if (!_memoryReader.TryReadPointer(team + Offsets.Team.TeamBase, out var teamBase) || teamBase == default)
-        {
-            return;
-        }
-
-        _memoryReader.TryReadByte(teamBase + Offsets.TeamBase.Goals, out goals);
-        if (_memoryReader.TryReadFloat(teamBase + Offsets.TeamBase.Xg, out var rawXg) && float.IsFinite(rawXg))
-        {
-            xg = rawXg;
-        }
-
-        _memoryReader.TryReadByte(teamBase + Offsets.TeamBase.Shots, out shots);
-    }
-
-    private void TryCaptureRealtimeFrame(in GameMatchTickRecord record)
+    private void TryCaptureRealtimeFrame(
+        in GameMatchTickRecord record, in TeamTickSnapshot homeValues, in TeamTickSnapshot awayValues)
     {
         if (!_realtimeFrames.TryRent(out var frame))
         {
@@ -498,17 +476,19 @@ internal sealed class GameMatchTickHook : IDisposable
                     : null;
             frame.BallHolderPlayerId = 0;
             CaptureBallPosition(record.MatchAddress, frame);
-            frame.Home = ReadTeamFrame(record.HomeTeam);
-            frame.Away = ReadTeamFrame(record.AwayTeam);
+            frame.Home = ReadTeamFrame(homeValues);
+            frame.Away = ReadTeamFrame(awayValues);
             _momentumCalculator.Capture(
                 record.MatchAddress,
+                out var momentumSource,
                 frame.Momentum,
                 out frame.MomentumCount,
                 frame.RollingMomentum,
                 out frame.RollingMomentumCount);
-            CaptureNativeMomentumEvents(record.MatchAddress, frame);
+            CaptureNativeMomentumEvents(record.MatchAddress, frame, momentumSource);
 
             Span<nint> capturedMatchPlayers = stackalloc nint[RawRealtimeTickFrame.MaxPlayers];
+            var uidCapture = _playerUids.Begin(record.MatchAddress, record.HomeTeam, record.AwayTeam, record.Tick, Stopwatch.GetTimestamp());
             CaptureTeamPlayerFrames(
                 frame,
                 record.HomeTeam,
@@ -516,6 +496,7 @@ internal sealed class GameMatchTickHook : IDisposable
                 TeamSide.Home,
                 slotOffset: 0,
                 record.CurrentBallHolder,
+                uidCapture,
                 capturedMatchPlayers);
             CaptureTeamPlayerFrames(
                 frame,
@@ -524,6 +505,7 @@ internal sealed class GameMatchTickHook : IDisposable
                 TeamSide.Away,
                 slotOffset: record.HomePlayerCount,
                 record.CurrentBallHolder,
+                uidCapture,
                 capturedMatchPlayers);
 
             CaptureRatingFrameData(record.MatchAddress, record.Tick, frame, capturedMatchPlayers);
@@ -550,10 +532,10 @@ internal sealed class GameMatchTickHook : IDisposable
 
     private void CaptureBallPosition(nint match, RawRealtimeTickFrame frame)
     {
-        var ballPosition = match + Offsets.GameMatch.BallPosition;
-        frame.BallXCentimeters = ReadCoordinateCentimeters(ballPosition, Offsets.BallPosition.X);
-        frame.BallYCentimeters = ReadCoordinateCentimeters(ballPosition, Offsets.BallPosition.Y);
-        frame.BallZCentimeters = ReadCoordinateCentimeters(ballPosition, Offsets.BallPosition.Z);
+        var ball = BallPositionSnapshot.Read(_memoryReader, match);
+        frame.BallXCentimeters = ball.X;
+        frame.BallYCentimeters = ball.Y;
+        frame.BallZCentimeters = ball.Z;
     }
 
     private void CaptureTeamPlayerFrames(
@@ -563,6 +545,7 @@ internal sealed class GameMatchTickHook : IDisposable
         TeamSide teamSide,
         int slotOffset,
         nint ballHolder,
+        in PlayerUidCache.Capture uidCapture,
         Span<nint> capturedMatchPlayers)
     {
         for (var teamSlot = 0; teamSlot < playerCount && frame.PlayerCount < RawRealtimeTickFrame.MaxPlayers; teamSlot++)
@@ -571,7 +554,7 @@ internal sealed class GameMatchTickHook : IDisposable
             var apiSlot = slotOffset + teamSlot;
             if (!_memoryReader.TryReadPointer(pointerSlot, out var matchPlayer) ||
                 matchPlayer == default ||
-                !TryReadPlayerFrame(matchPlayer, apiSlot, teamSide, ballHolder, out var player))
+                !TryReadPlayerFrame(matchPlayer, apiSlot, teamSide, ballHolder, uidCapture, out var player))
             {
                 continue;
             }
@@ -602,30 +585,14 @@ internal sealed class GameMatchTickHook : IDisposable
         frame.Away = frame.Away with { ShotsOffTarget = awayOffTarget };
     }
 
-    private void CaptureNativeMomentumEvents(nint match, RawRealtimeTickFrame frame)
+    private void CaptureNativeMomentumEvents(nint match, RawRealtimeTickFrame frame, in NativeMomentumSource snapshot)
     {
-        var holder = match + Offsets.GameMatch.MomentumEventSource;
-        if (!VirtualMemory.IsReadable(holder, IntPtr.Size)) return;
-        var source = Marshal.ReadIntPtr(holder);
-        if (!VirtualMemory.IsReadable(source, Offsets.MomentumEventSource.HalfPitchLength + sizeof(float))) return;
-
-        var begin = Marshal.ReadIntPtr(source + Offsets.MomentumEventSource.EventsBegin);
-        var end = Marshal.ReadIntPtr(source + Offsets.MomentumEventSource.EventsEnd);
-        var length = (long)end - (long)begin;
-        if (begin == default || length < 0 || length % Offsets.MomentumEvent.Size != 0 ||
-            length / Offsets.MomentumEvent.Size > 100_000 || length > int.MaxValue ||
-            (length > 0 && !VirtualMemory.IsReadable(begin, (int)length)))
-        {
-            return;
-        }
-
-        var halfWidth = ReadFloatDirect(source + Offsets.MomentumEventSource.HalfPitchWidth);
-        var halfLength = ReadFloatDirect(source + Offsets.MomentumEventSource.HalfPitchLength);
-        if (halfWidth <= 0 || halfLength <= 0) return;
-        frame.HalfPitchWidth = halfWidth;
-        frame.HalfPitchLength = halfLength;
-
-        var eventCount = (int)(length / Offsets.MomentumEvent.Size);
+        if (snapshot.Address == 0) return;
+        var source = snapshot.Address;
+        var begin = snapshot.Begin;
+        frame.HalfPitchWidth = snapshot.HalfWidth;
+        frame.HalfPitchLength = snapshot.HalfLength;
+        var eventCount = snapshot.Count;
         if (eventCount == 0) return;
 
         lock (_nativeMomentumGate)
@@ -792,12 +759,16 @@ internal sealed class GameMatchTickHook : IDisposable
         nint awayTeam,
         int awayPlayerCount)
     {
+        Span<long> ids = stackalloc long[RawRealtimeTickFrame.MaxPlayers];
+        var identities = new FramePlayerIdentityCache(ids, homePlayerCount, awayPlayerCount);
+        for (var index = 0; index < frame.PlayerCount; index++)
+            identities.Remember(frame.Players[index].Slot, frame.Players[index].PlayerId);
         for (var eventIndex = 0; eventIndex < frame.MomentumEventCount; eventIndex++)
         {
             var item = frame.MomentumEvents[eventIndex];
             var team = item.Team == TeamSide.Home ? homeTeam : awayTeam;
             var playerCount = item.Team == TeamSide.Home ? homePlayerCount : awayPlayerCount;
-            var playerId = TryResolveMomentumEventPlayerId(team, playerCount, item.PlayerSlot, out var actorId)
+            var playerId = TryResolveMomentumEventPlayerId(team, playerCount, item.PlayerSlot, item.Team == TeamSide.Home, identities, out var actorId)
                 ? actorId
                 : 0;
             var receiverPlayerId = item.ReceiverPlayerSlot != byte.MaxValue &&
@@ -805,6 +776,8 @@ internal sealed class GameMatchTickHook : IDisposable
                                        team,
                                        playerCount,
                                        item.ReceiverPlayerSlot,
+                                       item.Team == TeamSide.Home,
+                                       identities,
                                        out var receiverId)
                 ? receiverId
                 : 0;
@@ -817,12 +790,17 @@ internal sealed class GameMatchTickHook : IDisposable
         }
     }
 
-    private bool TryResolveMomentumEventPlayerId(nint team, int playerCount, int slot, out long playerId)
+    private bool TryResolveMomentumEventPlayerId(
+        nint team, int playerCount, int slot, bool home, in FramePlayerIdentityCache identities, out long playerId)
     {
         playerId = 0;
         if (team == default || slot is < 0 or >= RawRealtimeTickFrame.MaxPlayers ||
-            slot >= playerCount ||
-            !_memoryReader.TryReadPointer(team + Offsets.Team.PlayerTable + slot * IntPtr.Size, out var matchPlayer) ||
+            slot >= playerCount) return false;
+        if (identities.TryGet(home, slot, out playerId))
+        {
+            return true;
+        }
+        if (!_memoryReader.TryReadPointer(team + Offsets.Team.PlayerTable + slot * IntPtr.Size, out var matchPlayer) ||
             matchPlayer == default ||
             !TryReadPlayerUid(matchPlayer, out var uid))
         {
@@ -860,6 +838,7 @@ internal sealed class GameMatchTickHook : IDisposable
         int slot,
         TeamSide team,
         nint ballHolder,
+        in PlayerUidCache.Capture uidCapture,
         out PlayerTickData player)
     {
         player = default;
@@ -876,7 +855,7 @@ internal sealed class GameMatchTickHook : IDisposable
             return false;
         }
 
-        var playerUid = TryReadPlayerUid(matchPlayer, out var uid) ? uid : (uint?)null;
+        var playerUid = PlayerUidReader.TryReadValidatedPlayer(_memoryReader, uidCapture, slot, matchPlayer, out var uid) ? uid : (uint?)null;
         var playerId = playerUid.HasValue ? playerUid.Value : FallbackPlayerIdentity(slot);
         var starterFlag = ReadByteDirect(stats + Offsets.PlayerStats.StarterSubstituteFlag);
         var subbedOn = ReadByteDirect(stats + Offsets.PlayerStats.SubbedOnMinute);
@@ -1295,20 +1274,20 @@ internal sealed class GameMatchTickHook : IDisposable
         return true;
     }
 
-    private TeamTickData ReadTeamFrame(nint team)
+    private TeamTickData ReadTeamFrame(in TeamTickSnapshot snapshot)
     {
-        if (!_memoryReader.TryReadPointer(team + Offsets.Team.TeamBase, out var teamBase) ||
-            teamBase == default ||
+        var teamBase = snapshot.TeamBase;
+        if (teamBase == default ||
             !VirtualMemory.IsReadable(teamBase, Offsets.TeamBase.MatchSquadUnconfirmed + IntPtr.Size))
         {
             return default;
         }
 
         return new TeamTickData(
-            Goals: ReadByteDirect(teamBase + Offsets.TeamBase.Goals),
-            Xg: ReadFloatDirect(teamBase + Offsets.TeamBase.Xg),
+            Goals: snapshot.Goals,
+            Xg: snapshot.Xg,
             PossessionTime: Marshal.ReadInt32(teamBase + Offsets.TeamBase.PossessionTime),
-            Shots: ReadByteDirect(teamBase + Offsets.TeamBase.Shots),
+            Shots: snapshot.Shots,
             ShotsOnTarget: ReadByteDirect(teamBase + Offsets.TeamBase.ShotsOnTarget),
             FirstHalfShots: ReadByteDirect(teamBase + Offsets.TeamBase.FirstHalfShots),
             SecondHalfShots: ReadByteDirect(teamBase + Offsets.TeamBase.SecondHalfShots),
@@ -1496,8 +1475,7 @@ internal sealed class GameMatchTickHook : IDisposable
         return matchPlayer != default &&
                _memoryReader.TryReadPointer(matchPlayer + Offsets.MatchPlayer.Person, out var person) &&
                person != default &&
-               _memoryReader.TryReadUInt32(person + Offsets.Person.Uid, out uid) &&
-               uid != 0;
+               PlayerUidReader.TryReadPerson(_memoryReader, person, out uid);
     }
 
     private static long FallbackPlayerIdentity(int slot) => -(long)(slot + 1);
@@ -2587,6 +2565,7 @@ internal sealed class GameMatchTickHook : IDisposable
 
     private void ResetCandidateSession(string reason)
     {
+        _playerUids.Invalidate();
         var releasedPreLock = ReleaseExcludedPreLockFrameCaches();
         _candidates.Clear();
         lock (_nativeMomentumGate)

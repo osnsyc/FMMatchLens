@@ -16,7 +16,6 @@ internal sealed class MomentumCalculator : IDisposable
     private const int ExtraTimeEnd = 0x7081;
     private const int NoStartExpansionMask = 0x240201;
     private const int NoEndExpansionMask = 0x120100;
-    private const int MaxEvents = 100_000;
     private const int RollingStep = 120;
     private const int RollingWindow = 1_200;
     private const int MaxOutput = 512;
@@ -101,19 +100,25 @@ internal sealed class MomentumCalculator : IDisposable
     /// <remarks>Runs on the native callback and never waits for calculation.</remarks>
     public void Capture(
         nint match,
+        out NativeMomentumSource source,
         MomentumTickData[] nativeDestination,
         out byte nativeCount,
         MomentumTickData[] rollingDestination,
         out byte rollingCount)
     {
+        source = default;
         lock (_captureGate)
         {
-            CaptureLocked(match, nativeDestination, out nativeCount, rollingDestination, out rollingCount);
+            // Keep source observation ordered with the calculator's state, then
+            // return that same snapshot to the event publisher.
+            if (!_disposed) NativeMomentumSource.TryRead(match, out source);
+            CaptureLocked(match, source, nativeDestination, out nativeCount, rollingDestination, out rollingCount);
         }
     }
 
     private void CaptureLocked(
         nint match,
+        in NativeMomentumSource source,
         MomentumTickData[] nativeDestination,
         out byte nativeCount,
         MomentumTickData[] rollingDestination,
@@ -121,7 +126,7 @@ internal sealed class MomentumCalculator : IDisposable
     {
         nativeCount = 0;
         rollingCount = 0;
-        if (_disposed || match == default || !TryReadSource(match, out var source)) return;
+        if (_disposed || match == default || source.Count == 0 || !source.HasCalculationData) return;
 
         var reset = match != _match || source.Address != _source ||
             source.Begin != _begin || source.Count < _eventCount;
@@ -275,7 +280,7 @@ internal sealed class MomentumCalculator : IDisposable
         _jobReady.Set();
     }
 
-    private static Event[] ReadEvents(in NativeSource source, int start, int count)
+    private static Event[] ReadEvents(in NativeMomentumSource source, int start, int count)
     {
         if (count <= 0) return Array.Empty<Event>();
         var values = new Event[count];
@@ -293,33 +298,7 @@ internal sealed class MomentumCalculator : IDisposable
         return values;
     }
 
-    private static bool TryReadSource(nint match, out NativeSource value)
-    {
-        value = default;
-        var holder = match + Offsets.GameMatch.MomentumEventSource;
-        if (!VirtualMemory.IsReadable(holder, IntPtr.Size)) return false;
-        var source = Marshal.ReadIntPtr(holder);
-        if (!VirtualMemory.IsReadable(source, Offsets.MomentumEventSource.ExtraTimeFlag + 1)) return false;
-        var begin = Marshal.ReadIntPtr(source + Offsets.MomentumEventSource.EventsBegin);
-        var end = Marshal.ReadIntPtr(source + Offsets.MomentumEventSource.EventsEnd);
-        var length = (long)end - (long)begin;
-        if (begin == default || length <= 0 || length % Offsets.MomentumEvent.Size != 0 ||
-            length / Offsets.MomentumEvent.Size > MaxEvents || length > int.MaxValue ||
-            !VirtualMemory.IsReadable(begin, (int)length)) return false;
-        var halfWidth = ReadFloat(source + Offsets.MomentumEventSource.HalfPitchWidth);
-        var halfLength = ReadFloat(source + Offsets.MomentumEventSource.HalfPitchLength);
-        if (!float.IsFinite(halfWidth) || !float.IsFinite(halfLength) || halfWidth <= 0 || halfLength <= 0) return false;
-        value = new NativeSource(
-            source, begin, end, (int)(length / Offsets.MomentumEvent.Size),
-            unchecked((ushort)Marshal.ReadInt16(end - 0x16)), halfWidth, halfLength,
-            unchecked((uint)Marshal.ReadInt32(source + Offsets.MomentumEventSource.FirstHalfEndTick)),
-            unchecked((uint)Marshal.ReadInt32(source + Offsets.MomentumEventSource.FullTimeEndTick)),
-            unchecked((uint)Marshal.ReadInt32(source + Offsets.MomentumEventSource.ExtraTimeFirstHalfEndTick)),
-            Marshal.ReadByte(source + Offsets.MomentumEventSource.ExtraTimeFlag));
-        return true;
-    }
-
-    private static int BuildWindows(in NativeSource source, Window[] windows, out ulong signature)
+    private static int BuildWindows(in NativeMomentumSource source, Window[] windows, out ulong signature)
     {
         var firstEnd = Math.Max(FirstHalfEnd, unchecked((int)source.FirstEnd));
         var fullEnd = Math.Max(FullTimeEnd, unchecked((int)source.FullEnd));
@@ -406,7 +385,7 @@ internal sealed class MomentumCalculator : IDisposable
         return new MomentumTickData(total == 0 ? 0f : (home + home) / (float)total - 1f, tick, home, away);
     }
 
-    private static ulong StableLastSignature(in NativeSource source)
+    private static ulong StableLastSignature(in NativeMomentumSource source)
     {
         var address = source.End - Offsets.MomentumEvent.Size;
         var hash = 1469598103934665603UL;
@@ -449,9 +428,6 @@ internal sealed class MomentumCalculator : IDisposable
     private static ulong Mix(ulong hash, uint value) => (hash ^ value) * 1099511628211UL;
     private static float ReadFloat(nint address) => BitConverter.Int32BitsToSingle(Marshal.ReadInt32(address));
 
-    private readonly record struct NativeSource(
-        nint Address, nint Begin, nint End, int Count, int Tick, float HalfWidth, float HalfLength,
-        uint FirstEnd, uint FullEnd, uint ExtraFirstEnd, byte ExtraFlag);
     private readonly record struct Source(float HalfWidth, float HalfLength);
     private readonly record struct Event(ushort Tick, byte EventType, byte Team, ushort Flags, float X, float Y);
     private readonly record struct Window(int Time, int Start, int End);
