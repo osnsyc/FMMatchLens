@@ -193,7 +193,7 @@ export function PlayerMatchDetailsPopup({
   const availableWidth = side === "home"
     ? window.innerWidth - panelRect.right - viewportGap * 2
     : panelRect.left - viewportGap * 2
-  const width = Math.max(500, Math.min(612, availableWidth))
+  const width = Math.max(500, Math.min(560, availableWidth))
   const desiredTop = anchorRect.top - 8
   const top = Math.max(
     viewportGap,
@@ -234,7 +234,7 @@ export function PlayerMatchDetailsPopup({
         >
         <div
           className="absolute inset-y-0 left-0 grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2"
-          style={{ width: 272 }}
+          style={{ width: 240 }}
         >
           <header className="relative grid min-h-0 grid-cols-[4rem_minmax(0,1fr)] overflow-hidden rounded-md border border-border/70 bg-muted/35">
             <Avatar className="h-full min-h-16 w-16 rounded-none after:hidden">
@@ -287,7 +287,7 @@ export function PlayerMatchDetailsPopup({
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-col gap-2" style={{ marginLeft: 280 }}>
+        <div className="flex min-h-0 flex-col gap-2" style={{ marginLeft: 248 }}>
           <section className="shrink-0 rounded-md border border-border/70 bg-muted/10 p-2">
             {contribution ? (
               <PlayerRatingBreakdown player={player} contribution={contribution} />
@@ -479,14 +479,10 @@ function playerStatSections(
     sections.push({
       id: "attack",
       items: [
-        { id: "goals", value: number(stats.goals) },
-        { id: "assists", value: number(stats.assists) },
-        { id: "expected", value: `${number(stats.xg, 2)} / ${number(stats.xa, 2)}` },
+        { id: "goalsExpected", value: `${number(stats.goals)} / ${number(stats.xg, 2)}` },
+        { id: "assistsExpected", value: `${number(stats.assists)} / ${number(stats.xa, 2)}` },
         { id: "shooting", value: combined(stats.shotsOnTarget, stats.shots) },
-        { id: "shotOutcomes", value: `${number(stats.blockedShots)} / ${number(stats.hitWoodwork)}` },
-        { id: "clearCutChances", value: number(stats.clearCutChances) },
-        { id: "dribbles", value: number(stats.dribbles) },
-        { id: "penalties", value: number(stats.penalties) },
+        { id: "dribblesChances", value: `${number(stats.dribbles)} / ${number(stats.clearCutChances)}` },
       ],
     })
   }
@@ -495,21 +491,18 @@ function playerStatSections(
       id: "passing",
       items: [
         { id: "passSummary", value: combined(stats.passesCompleted, stats.passes) },
-        { id: "keyPasses", value: number(stats.keyPasses) },
+        { id: "keyProgressivePasses", value: `${number(stats.keyPasses)} / ${number(stats.progressivePasses)}` },
         { id: "crossSummary", value: combined(stats.crossesCompleted, stats.crosses) },
-        { id: "restarts", value: `${number(stats.corners)} / ${number(stats.throwIns)}` },
-        { id: "freeKicks", value: `${number(stats.attackingFreeKicks)} / ${number(stats.defensiveFreeKicks)}` },
+        { id: "chancesCreated", value: number(stats.chancesCreated) },
       ],
     },
     {
       id: "defence",
       items: [
         { id: "tackleSummary", value: combined(stats.tacklesWon, stats.tacklesAttempted) },
-        { id: "keyTackles", value: number(stats.keyTackles) },
         { id: "aerialSummary", value: combined(stats.aerialsWon, stats.aerials) },
-        { id: "defensiveActions", value: `${number(stats.interceptions)} / ${number(stats.clearances)}` },
-        { id: "foulSummary", value: `${number(stats.fouls)} / ${number(stats.fouled)}` },
-        { id: "ownGoals", value: number(stats.ownGoals) },
+        { id: "defensiveActions", value: `${number(stats.interceptions)} / ${number(stats.clearances)} / ${number(stats.blocks)}` },
+        { id: "pressesPossessionWon", value: `${number(stats.pressesWon)} / ${number(stats.possessionWon)}` },
       ],
     },
   )
@@ -518,9 +511,9 @@ function playerStatSections(
     sections.push({
       id: "goalkeeping",
       items: [
-        { id: "shotsFaced", value: number(stats.shotsFaced) },
-        { id: "saveSummary", value: `${number(saves)} · ${percent(saves, stats.shotsFaced)}` },
         { id: "saveTypes", value: `${number(stats.savesHeld)} / ${number(stats.savesParried)} / ${number(stats.savesTipped)}` },
+        { id: "saveSummary", value: number(saves) },
+        { id: "concededShotsFaced", value: `${number(stats.goalsConceded)} / ${number(stats.shotsFaced)}` },
       ],
     })
   }
@@ -528,31 +521,21 @@ function playerStatSections(
 }
 
 const playerMetricTranslationKeys: Record<string, string> = {
-  goals: "stats.goals",
-  penalties: "stats.penalties",
-  assists: "stats.assists",
-  expected: "playerDetails.metrics.expected",
+  goalsExpected: "playerDetails.metrics.goalsExpected",
+  assistsExpected: "playerDetails.metrics.assistsExpected",
   shooting: "playerDetails.metrics.shooting",
-  shotOutcomes: "playerDetails.metrics.shotOutcomes",
-  clearCutChances: "stats.clearCutChances",
-  hitWoodwork: "stats.hitWoodwork",
+  dribblesChances: "playerDetails.metrics.dribblesChances",
   passSummary: "playerDetails.metrics.passSummary",
-  keyPasses: "stats.keyPasses",
+  keyProgressivePasses: "playerDetails.metrics.keyProgressivePasses",
   crossSummary: "playerDetails.metrics.crossSummary",
-  restarts: "playerDetails.metrics.restarts",
-  freeKicks: "playerDetails.metrics.freeKicks",
+  chancesCreated: "stats.chancesCreated",
   tackleSummary: "playerDetails.metrics.tackleSummary",
-  keyTackles: "stats.keyTackles",
   aerialSummary: "playerDetails.metrics.aerialSummary",
   defensiveActions: "playerDetails.metrics.defensiveActions",
-  foulSummary: "playerDetails.metrics.foulSummary",
-  shotsFaced: "stats.shotsFaced",
+  pressesPossessionWon: "playerDetails.metrics.pressesPossessionWon",
   saveSummary: "playerDetails.metrics.saveSummary",
   saveTypes: "playerDetails.metrics.saveTypes",
-  ownGoals: "stats.ownGoals",
-  dribbles: "stats.dribbles",
-  fouls: "stats.fouls",
-  fouled: "stats.fouled",
+  concededShotsFaced: "playerDetails.metrics.concededShotsFaced",
 }
 
 function playerMatchMinutes(player: MatchPlayer, matchMinute: number) {
@@ -608,20 +591,19 @@ function MovementAnalysisCard({
   return (
     <section className="flex shrink-0 flex-col overflow-hidden rounded-md border border-border/70 bg-muted/10 p-2">
       <SectionTitle title={t("playerDetails.movement.title")} />
-      <div className="min-h-0">
-        <div className="grid grid-cols-3 gap-1 text-center">
+      <div className="relative min-h-0">
+        <div className="grid w-20 grid-cols-1 gap-2 text-center">
           <MovementMetric label={t("playerDetails.movement.distance")} value={`${(Number(distanceM ?? 0) / 1000).toFixed(2)} km`} />
           <MovementMetric label={t("playerDetails.movement.sprints")} value={sprints == null ? "-" : String(sprints)} />
           <MovementMetric label={t("playerDetails.movement.maximumSpeed")} value={total > 0 ? `${movement.maximumSpeedKmh.toFixed(1)} km/h` : "-"} />
         </div>
         <div
-          className="mt-2 grid items-center gap-2"
-          style={{ gridTemplateColumns: "88px minmax(0, 1fr)" }}
+          className="absolute inset-y-0 left-22 right-0 flex min-w-0 items-center gap-1.5"
         >
           <div
             role="img"
             aria-label={t("playerDetails.movement.distribution")}
-            className="relative h-20 w-20 shrink-0 justify-self-center"
+            className="relative aspect-square h-4/5 shrink-0"
           >
             <svg className="size-full -rotate-90" viewBox="0 0 36 36" aria-hidden="true">
               <circle
@@ -651,7 +633,7 @@ function MovementAnalysisCard({
               {t("playerDetails.movement.speed")}
             </span>
           </div>
-          <div className="grid grid-cols-1 gap-1.5">
+          <div className="grid min-w-0 flex-1 grid-cols-1 gap-3">
             {(["walking", "running", "highSpeedRunning", "sprinting"] as const).map((zone, index) => (
               <div key={zone} className="grid min-w-0 grid-cols-[0.375rem_minmax(0,1fr)_auto] items-center gap-x-1 leading-none">
                 <span className="size-1.5 shrink-0 rounded-sm" style={{ backgroundColor: colors[index] }} />
@@ -687,9 +669,9 @@ function MovementMetric({ label, value }: { label: string; value: string }) {
 
 function HeaderMetric({ label, value, valueClassName = "" }: { label: string; value: string; valueClassName?: string }) {
   return (
-    <div className="flex min-w-0 items-center justify-between gap-2">
+    <div className="flex min-w-0 items-center justify-between gap-1">
       <dt className="truncate text-[9px] uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className={`min-w-10 rounded px-1.5 py-0.5 text-center text-[10px] font-bold leading-4 tabular-nums ${valueClassName}`}>
+      <dd className={`shrink-0 rounded px-1 py-0.5 text-center text-[10px] font-bold leading-4 tabular-nums ${valueClassName}`}>
         {value}
       </dd>
     </div>
