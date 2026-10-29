@@ -1,3 +1,4 @@
+import { useStoredChoice } from "@/hooks/useStoredPreference"
 import {
   memo,
   useEffect,
@@ -129,7 +130,11 @@ export const FormationPitch = memo(function FormationPitch({
 }: FormationPitchProps) {
   const { t } = useTranslation()
   const pitchDimensions = resolvePitchDimensions(match.pitchDimensions)
-  const [view, setView] = useState<FormationView>("home-ip")
+  const [view, setView] = useStoredChoice<FormationView>(
+    "formation.view",
+    "home-ip",
+    ["home-ip", "home-oop", "away-ip", "away-oop"],
+  )
   const liveEntries = useMemo(
     () => formationEntries(match.players),
     [match.players]

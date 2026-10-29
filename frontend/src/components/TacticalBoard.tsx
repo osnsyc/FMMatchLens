@@ -1,3 +1,5 @@
+import { useStoredChoice, useStoredPreference } from "@/hooks/useStoredPreference"
+import { parseMetricSelection } from "@/lib/preferences"
 import type { LiveMotionSource, LiveMotionStatus } from "@/api/liveMotionSource"
 import type {
   ReplayMotionSource,
@@ -129,7 +131,11 @@ export const TacticalBoard = memo(function TacticalBoard({
     "--pitch-frame-gap": `${TACTICAL_EVENT_OVERSCAN_PX}px`,
   } as CSSProperties
   const { settings, resolvedScheme } = useTheme()
-  const [mode, setMode] = useState<"events" | "liveMotion">("events")
+  const [mode, setMode] = useStoredChoice<"events" | "liveMotion">(
+    "tactical.mode",
+    "events",
+    ["events", "liveMotion"],
+  )
   const [liveStatus, setLiveStatus] = useState<
     LiveMotionStatus | ReplayMotionStatus
   >("buffering")
@@ -138,9 +144,11 @@ export const TacticalBoard = memo(function TacticalBoard({
   const [pitchControlEnabled, setPitchControlEnabled] = useState(false)
   const [showNumbers, setShowNumbers] = useState(true)
   const [selectedShotId, setSelectedShotId] = useState<string | null>(null)
-  const [selectedMetrics, setSelectedMetrics] = useState<
-    Record<string, boolean>
-  >(initialSelectedMetrics)
+  const [selectedMetrics, setSelectedMetrics] = useStoredPreference(
+    "tactical.metrics",
+    initialSelectedMetrics,
+    (value) => parseMetricSelection(value, initialSelectedMetrics),
+  )
   const [hovered, setHovered] = useState<HoveredTacticalPoint | null>(null)
   const {
     playback: tacticalPlayback,
@@ -169,7 +177,7 @@ export const TacticalBoard = memo(function TacticalBoard({
         exploreTourTacticalMetricsEventName,
         selectTourMetricGroup
       )
-  }, [clearPlayback])
+  }, [clearPlayback, setSelectedMetrics])
 
   useEffect(() => {
     if (!isPanelActive || liveMode) clearPlayback()

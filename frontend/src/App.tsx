@@ -1,3 +1,4 @@
+import { useStoredChoice } from "@/hooks/useStoredPreference"
 import { LiveMotionSource } from "@/api/liveMotionSource"
 import { ReplayMotionSource } from "@/api/replay/replayMotionSource"
 import {
@@ -190,7 +191,7 @@ export function App() {
     null
   )
   const [spatialMapView, setSpatialMapView] =
-    useState<SpatialMapView>("heatmap")
+    useStoredChoice<SpatialMapView>("spatialMap.view", "heatmap", ["heatmap", "passMap"])
   const [isChromeHidden, setIsChromeHidden] = useState(false)
   const isTacticalFocusMode = focusedPanel === "tactical"
   const [tacticalEventFilterMode, setTacticalEventFilterMode] =
@@ -537,7 +538,7 @@ export function App() {
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [hasMatch, resolvedScheme, schemeLocked, setSchemePreference])
+  }, [hasMatch, resolvedScheme, schemeLocked, setSchemePreference, setSpatialMapView])
 
   if (!match) {
     return (

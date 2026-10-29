@@ -1,5 +1,6 @@
-import { memo, useState, type CSSProperties } from "react"
+import { memo, type CSSProperties } from "react"
 import { useTranslation } from "react-i18next"
+import { useStoredChoice } from "@/hooks/useStoredPreference"
 
 import {
   CardContent,
@@ -174,7 +175,7 @@ export const MatchStatsPanel = memo(function MatchStatsPanel({
   const { t } = useTranslation()
 
   const [activeGroup, setActiveGroup] =
-    useState<StatGroup>("all")
+    useStoredChoice<StatGroup>("matchStats.group", "all", ["all", "attack", "defence"])
 
   const homeColor =
     match.home.color ?? "var(--team-home-fallback)"

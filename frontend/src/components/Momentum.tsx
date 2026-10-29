@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react"
+import { memo, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import {
   Area,
@@ -11,6 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
+import { useStoredChoice } from "@/hooks/useStoredPreference"
 
 import { MomentumEventMap } from "@/components/MomentumEventMap"
 import { CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -64,7 +65,11 @@ export const Momentum = memo(function Momentum({ match, visible = true }: Moment
   const { t } = useTranslation()
   const { settings } = useTheme()
   const colorblind = settings.colorVision === "colorblind"
-  const [mode, setMode] = useState<MomentumMode>("line")
+  const [mode, setMode] = useStoredChoice<MomentumMode>(
+    "momentum.mode",
+    "line",
+    ["line", "bars", "eventMap"],
+  )
   const homeColor = match.home.color ?? "var(--team-home-fallback)"
   const awayColor = match.away.color ?? "var(--team-away-fallback)"
   const nativeBarPoints = useMemo(() => buildNativeMomentum(match.momentum), [match.momentum])

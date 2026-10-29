@@ -1,3 +1,4 @@
+import { useStoredChoice } from "@/hooks/useStoredPreference"
 import { playerStatPosition } from "@/lib/playerStatPosition"
 import { playerStatGroups, type PlayerMetric, type StatGroupId } from "@/lib/playerStatMetrics"
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
@@ -1895,8 +1896,16 @@ function TeamStatsDrawer({
   onClose: () => void
 }) {
   const { t } = useTranslation()
-  const [activeGroup, setActiveGroup] = useState<StatGroupId>("key")
-  const [dataScope, setDataScope] = useState<PlayerDataScope>("match")
+  const [activeGroup, setActiveGroup] = useStoredChoice<StatGroupId>(
+    "squad.group",
+    "key",
+    playerStatGroups.map((group) => group.id),
+  )
+  const [dataScope, setDataScope] = useStoredChoice<PlayerDataScope>(
+    "squad.scope",
+    "match",
+    playerDataScopes,
+  )
   const [sort, setSort] = useState<PlayerSort>({ kind: "initial" })
   const width = Math.min(window.innerWidth - 24, 1440)
   const groups = playerStatGroups.filter((item) => item.fields.some((field) =>

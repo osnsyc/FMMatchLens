@@ -1,5 +1,4 @@
-import { useState } from "react"
-
+import { useStoredChoice } from "@/hooks/useStoredPreference"
 import { PassMap } from "@/components/PassMap"
 import { ZonePanel } from "@/components/ZonePanel"
 import type { SpatialMapView } from "@/components/map/MapPanelControls"
@@ -22,9 +21,13 @@ export function SpatialMapPanel({
   view,
   onViewChange,
 }: SpatialMapPanelProps) {
-  const [selectedTeam, setSelectedTeam] = useState<TeamSide>("home")
+  const [selectedTeam, setSelectedTeam] = useStoredChoice<TeamSide>(
+    "spatialMap.team",
+    "home",
+    ["home", "away"],
+  )
   const [selectedRange, setSelectedRange] =
-    useState<PositionHeatmapRange>("full")
+    useStoredChoice<PositionHeatmapRange>("spatialMap.range", "full", ["full", "half", "recent15"])
   const sharedProps = {
     match,
     selectedTeam,

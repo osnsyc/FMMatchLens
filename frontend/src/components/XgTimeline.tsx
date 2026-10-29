@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react"
+import { memo, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import {
   CartesianGrid,
@@ -9,6 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
+import { useStoredChoice } from "@/hooks/useStoredPreference"
 
 import {
   CardContent,
@@ -55,7 +56,11 @@ export const XgTimeline = memo(function XgTimeline({
 }: XgTimelineProps) {
   const { t } = useTranslation()
   const { settings } = useTheme()
-  const [mode, setMode] = useState<XgViewMode>("timeline")
+  const [mode, setMode] = useStoredChoice<XgViewMode>(
+    "xg.mode",
+    "timeline",
+    ["timeline", "map"],
+  )
   const colorblind = settings.colorVision === "colorblind"
 
   const homeColor =

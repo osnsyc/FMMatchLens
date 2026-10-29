@@ -1,3 +1,4 @@
+import { useStoredChoice } from "@/hooks/useStoredPreference"
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -83,7 +84,11 @@ export function ZonePanel({
   const [selectedPlayerByTeam, setSelectedPlayerByTeam] = useState<
     Record<TeamSide, number | null>
   >({ home: null, away: null })
-  const [selectedPhase, setSelectedPhase] = useState<HeatmapPhase>("all")
+  const [selectedPhase, setSelectedPhase] = useStoredChoice<HeatmapPhase>(
+    "heatmap.phase",
+    "all",
+    ["all", "inPossession", "outOfPossession"],
+  )
   const pitchHostRef = useRef<HTMLDivElement | null>(null)
   const [pitchSize, setPitchSize] = useState({ width: 0, height: 0 })
   const pitchFrameAspect = pitchDimensions.width / pitchDimensions.length
