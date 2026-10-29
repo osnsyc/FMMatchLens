@@ -306,23 +306,7 @@ internal sealed class RealtimeMatchTimeline
 
     internal static RealtimeTickFrame ToWireFrame(
         RealtimeTickFrame frame,
-        RealtimeTickFrame? previous)
-    {
-        var previousBySlot = previous?.Players.ToDictionary(player => player.Slot);
-        var players = frame.Players.Select(player =>
-        {
-            RatingResearchPlayerData? priorResearch = null;
-            if (previousBySlot is not null && previousBySlot.TryGetValue(player.Slot, out var prior))
-            {
-                priorResearch = prior.RatingResearch;
-            }
-            var ratingInputs = player.RatingResearch is null
-                ? null
-                : RatingResearchPlayerWireData.From(player.RatingResearch, priorResearch);
-            return player with { RatingInputs = ratingInputs };
-        }).ToArray();
-        return frame with { Players = players };
-    }
+        RealtimeTickFrame? previous) => frame.ToWireFrame(previous);
 
     public RealtimeMatchMetadata? GetMetadata()
     {

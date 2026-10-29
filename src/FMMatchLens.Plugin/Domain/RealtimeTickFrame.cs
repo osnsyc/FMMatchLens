@@ -31,6 +31,24 @@ internal sealed record RealtimeTickFrame(
 {
     [JsonPropertyName("ratingModel")]
     public RatingResearchMatchData? RatingResearch { get; init; }
+
+    public RealtimeTickFrame ToWireFrame(RealtimeTickFrame? previous = null)
+    {
+        var previousBySlot = previous?.Players.ToDictionary(player => player.Slot);
+        var players = Players.Select(player =>
+        {
+            RatingResearchPlayerData? priorResearch = null;
+            if (previousBySlot is not null && previousBySlot.TryGetValue(player.Slot, out var prior))
+            {
+                priorResearch = prior.RatingResearch;
+            }
+            var ratingInputs = player.RatingResearch is null
+                ? null
+                : RatingResearchPlayerWireData.From(player.RatingResearch, priorResearch);
+            return player with { RatingInputs = ratingInputs };
+        }).ToArray();
+        return this with { Players = players };
+    }
 }
 
 internal sealed record RatingResearchMatchData(

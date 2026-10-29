@@ -1,15 +1,17 @@
 import type {
+  ArchiveRatingInputs,
   RealtimeFrame,
   RealtimeMatchMetadata,
   RealtimeMomentumEvent,
   RealtimeMomentumPoint,
+  RealtimePlayer,
 } from "@/api/realtimeMatch"
 import {
   MomentumEventReconciler,
   sameMomentumEventSemanticContent,
 } from "@/api/momentumEventReconciler"
 import type { LocalArchiveSummary } from "@/api/localArchive"
-import type { RatingWeightConfiguration } from "@/lib/ratingCalculator"
+import { decodeRealtimeRatingInputs, type RatingWeightConfiguration } from "@/lib/ratingCalculator"
 import type {
   ReplayArchive,
   ReplayFrame,
@@ -42,12 +44,18 @@ export async function preprocessReplayArchive(
   const eventReconciler = new MomentumEventReconciler()
   let previousMomentum: readonly RealtimeMomentumPoint[] = []
   let previousRolling: readonly RealtimeMomentumPoint[] = []
+  const ratingInputsBySlot = new Map<number, ReplayRatingPlayer>()
 
   for (let start = 0; start < input.frames.length; start += batchSize) {
     throwIfAborted(options.signal)
     const end = Math.min(input.frames.length, start + batchSize)
     for (let index = start; index < end; index += 1) {
       const source = input.frames[index]
+      const previous = input.frames[index - 1]
+      if (previous && (source.matchId !== previous.matchId || source.tick < previous.tick)) {
+        ratingInputsBySlot.clear()
+      }
+      const players = hydrateReplayPlayers(source.players, ratingInputsBySlot, index)
       const logicalUpdates =
         source.momentumEventUpdates ??
         eventReconciler.apply(source.momentumEvents)
@@ -68,6 +76,7 @@ export async function preprocessReplayArchive(
       ticks[index] = source.tick
       frames[index] = {
         ...source,
+        players,
         momentumEvents: [],
         momentumEventUpdates: [],
         momentum: [],
@@ -92,6 +101,47 @@ export async function preprocessReplayArchive(
     streamRevisions,
     ratingConfiguration: input.ratingConfiguration,
   }
+}
+
+type ReplayRatingPlayer = {
+  playerId: number
+  team: RealtimePlayer["team"]
+  frameIndex: number
+  inputs: ArchiveRatingInputs
+}
+
+function hydrateReplayPlayers(
+  players: RealtimePlayer[],
+  previousBySlot: Map<number, ReplayRatingPlayer>,
+  frameIndex: number,
+) {
+  let hydrated: RealtimePlayer[] | undefined
+  players.forEach((player, index) => {
+    const previous = previousBySlot.get(player.slot)
+    const priorInputs = previous?.frameIndex === frameIndex - 1
+      && previous.playerId === player.playerId && previous.team === player.team
+      ? previous.inputs : undefined
+    const inputs = player.ratingInputs
+      ? decodeRealtimeRatingInputs(player.ratingInputs, priorInputs)
+      : player.archiveRatingInputs
+    if (!inputs) {
+      previousBySlot.delete(player.slot)
+      return
+    }
+    if (previous) {
+      previous.playerId = player.playerId
+      previous.team = player.team
+      previous.frameIndex = frameIndex
+      previous.inputs = inputs
+    } else {
+      previousBySlot.set(player.slot, { playerId: player.playerId, team: player.team, frameIndex, inputs })
+    }
+    if (player.ratingInputs) {
+      hydrated ??= players.slice()
+      hydrated[index] = { ...player, ratingInputs: undefined, archiveRatingInputs: inputs }
+    }
+  })
+  return hydrated ?? players
 }
 
 export function streamRevision<T>(

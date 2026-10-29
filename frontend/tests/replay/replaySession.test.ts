@@ -19,12 +19,109 @@ import {
 } from "@/api/realtimeMatch"
 import { preprocessReplayArchive } from "@/api/replay/replayPreprocessor"
 import {
+  buildInitialReplaySnapshot,
   ReplaySession,
   replayFrameIndexAtPercent,
 } from "@/api/replay/replaySession"
 import { frame, replayFixture } from "./replayTestFixtures"
+import type { RealtimeRatingInputs } from "@/api/realtimeMatch"
+
+function wireRatingInputs(overrides: Partial<RealtimeRatingInputs> = {}): RealtimeRatingInputs {
+  const packed = new Uint8Array(36)
+  packed[35] = 12
+  return {
+    statsPacked: btoa(String.fromCharCode(...packed)),
+    internalW25: 0, internalW24: 0,
+    specialW2C: 0, specialW2D: 0, specialW2E: 0,
+    specialW2F: 0, specialW30: 0, specialW31: 0,
+    rawInternalRating: 6700,
+    specialConditionA: 0, specialConditionB: 0,
+    inPossessionRoleDuty: "128", outOfPossessionRoleDuty: "0",
+    totalEligibleDuration: 100,
+    ratingEventsCommonLength: 0, ratingEventsTail: [],
+    ...overrides,
+  }
+}
 
 describe("ReplaySession", () => {
+  it("keeps server archive ratings and sprints through bootstrap, playback and backward seek", async () => {
+    const fixture = replayFixture()
+    fixture.frames = fixture.frames.slice(0, 3)
+    fixture.frames.forEach((current, index) => {
+      const packed = new Uint8Array(36)
+      packed[35] = index * 3
+      current.ratingModel = {
+        ratingBaseCondition: 0, matchPhase: 0, eventRewardBranch: 0,
+        activeBaseline: 6700, homeBackgroundInput: 0, awayBackgroundInput: 0,
+      }
+      current.players[0].shots = index
+      current.players[0].ratingInputs = wireRatingInputs({ statsPacked: btoa(String.fromCharCode(...packed)) })
+    })
+    const original = structuredClone(fixture.frames)
+    const weights = Array<number>(52).fill(0)
+    weights[10] = 100
+    const archive = await preprocessReplayArchive({
+      ...fixture, ratingConfiguration: { weightsByCategoryBit: new Map([[7, weights]]) },
+    }, { batchSize: 1 })
+    const initial = buildInitialReplaySnapshot(archive).players[0]
+    expect(initial.stats.sprints).toBe(0)
+    expect(initial.ratingContribution?.groupContributionsPreFactor.Shooting).toBe(0)
+    const session = new ReplaySession(archive, { checkpointInterval: 2 })
+    for (const index of [0, 1, 2, 1, 0]) {
+      const player = session.seek(index).players[0]
+      expect(player.stats.sprints).toBe(index * 3)
+      expect(player.ratingContribution?.groupContributionsPreFactor.Shooting).toBe(index * 100)
+    }
+    expect(archive.frames[0].players[0].ratingInputs).toBeUndefined()
+    expect(archive.frames[0].players[0].archiveRatingInputs).toBeDefined()
+    expect(fixture.frames).toEqual(original)
+  })
+
+  it("hydrates server event deltas and role history across preprocessing batches", async () => {
+    const fixture = replayFixture()
+    fixture.frames = fixture.frames.slice(0, 2)
+    const firstEvent = new Uint8Array(16)
+    firstEvent[0] = 1
+    const secondEvent = new Uint8Array(16)
+    secondEvent[0] = 2
+    fixture.frames[0].players[0].ratingInputs = wireRatingInputs({
+      ratingEventsTail: [btoa(String.fromCharCode(...firstEvent))],
+    })
+    fixture.frames[1].players[0].ratingInputs = wireRatingInputs({
+      totalEligibleDuration: 175, inPossessionRoleDuty: "512", outOfPossessionRoleDuty: "1024",
+      ratingEventsCommonLength: 1, ratingEventsTail: [btoa(String.fromCharCode(...secondEvent))],
+    })
+    const archive = await preprocessReplayArchive(fixture, { batchSize: 1 })
+    const inputs = archive.frames[1].players[0].archiveRatingInputs!
+    expect(inputs.ratingEvents).toEqual([firstEvent, secondEvent])
+    expect(inputs.classificationDurations).toEqual([
+      { categoryBit: 7, duration: 100 }, { categoryBit: 9, duration: 75 },
+    ])
+  })
+
+  it("does not carry rating history into a replacement player in the same slot", async () => {
+    const fixture = replayFixture()
+    fixture.frames = fixture.frames.slice(0, 2)
+    fixture.frames[0].players[0].ratingInputs = wireRatingInputs()
+    fixture.frames[1].players[0].playerId = 999
+    fixture.frames[1].players[0].ratingInputs = wireRatingInputs({
+      inPossessionRoleDuty: "512", totalEligibleDuration: 175,
+    })
+    const archive = await preprocessReplayArchive(fixture)
+    expect(archive.frames[1].players[0].archiveRatingInputs!.classificationDurations)
+      .toEqual([{ categoryBit: 9, duration: 175 }])
+  })
+
+  it("leaves legacy replay rating breakdown and sprint counts unavailable", async () => {
+    const fixture = replayFixture()
+    const archive = await preprocessReplayArchive(fixture)
+    const session = new ReplaySession(archive)
+    const player = session.advanceTo(1).players[0]
+    expect(player.ratingContribution).toBeUndefined()
+    expect(player.resolveRatingContribution?.()).toBeUndefined()
+    expect(player.stats.sprints).toBeUndefined()
+  })
+
   it("defers live contribution work and reuses the resolver for unchanged inputs", () => {
     const current = frame(0)
     const weights = Array<number>(52).fill(0)

@@ -323,7 +323,11 @@ internal sealed class LocalApiServer : IDisposable
             return;
         }
 
-        await WriteJsonAsync(context.Response, slice, cancellationToken).ConfigureAwait(false);
+        // ArchiveReader returns internal frames whose rating research is hidden
+        // from JSON. Each returned frame must carry a self-contained wire input,
+        // independent of page boundaries, stride and the requested tick range.
+        var wireSlice = slice with { Frames = slice.Frames.Select(frame => frame.ToWireFrame()).ToArray() };
+        await WriteJsonAsync(context.Response, wireSlice, cancellationToken).ConfigureAwait(false);
     }
 
     private void PublishLatestRealtimeFrame()
