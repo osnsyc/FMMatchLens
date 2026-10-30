@@ -2,10 +2,10 @@
   <PropertyGroup>
     <!-- Repository-wide metadata: update values here instead of hard-coding them in source files. -->
     <ProductName>FMMatchLens</ProductName>
-    <ProjectVersion>0.6.1</ProjectVersion>
+    <ProjectVersion>0.7.0</ProjectVersion>
     <PluginId>com.fmmatchlens.plugin</PluginId>
     <GameName>Football Manager</GameName>
-    <GameVersion>26.x</GameVersion>
+    <GameVersion>27.0</GameVersion>
     <Authors>osnsyc</Authors>
     <MaintainerEmail>osnsyc@gmail.com</MaintainerEmail>
     <ProjectUrl>https://github.com/osnsyc/FMMatchLens</ProjectUrl>
@@ -33,7 +33,7 @@
     <Company>$(Authors)</Company>
     <Description>$(ProjectDescription)</Description>
     <PackageId>FMMatchLens.Plugin</PackageId>
-    <PackageTags>football-manager;fm26;bepinex;match-analysis</PackageTags>
+    <PackageTags>football-manager;fm27;bepinex;match-analysis</PackageTags>
     <PackageProjectUrl>$(ProjectUrl)</PackageProjectUrl>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>

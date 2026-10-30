@@ -3,6 +3,35 @@
 
 This file records the project's important changes. Version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - 2026-10-30
+
+### Added
+
+- Added timeline-aware player rating breakdowns for live matches and archive replay, including per-term contributions and data-quality indicators.
+- Added a Pass Map and a dedicated Event Map, and integrated attacking-focus analysis into the Momentum card.
+- Added player match-detail cards and expanded recorded player statistics, including progressive passes and sprint counts.
+- Added a Sofascore-inspired light/dark theme and an animated brand logo.
+- Remembered panel tabs, Tactical Board metrics and event/live mode, and Pass Map/Heatmap view and filter preferences in browser local storage.
+- Added native capture support for Football Manager 27, with a verified Steam build fingerprint and an updated five-argument match-update hook.
+
+### Changed
+
+- Extended `.fmlens` archive format to 2.8 to preserve rating inputs, events, tactical roles, and classification durations for replay, while retaining read compatibility with earlier supported 2.x archives.
+- Reorganized the squad statistics drawer and player match-detail layouts, standardized English text, and extracted Chinese nationality names into shared data.
+- Reduced native capture overhead by reusing validated memory regions within each completed update, sharing snapshots and momentum reads, and caching player identities with bounded lifetimes.
+- Switched the native capture target from FM26 to FM27, updating match, ball, team, manager, player-stat, tactical assignment, and rating input layouts. FM26 users should keep the 0.6.x plugin; existing compatible FM26 archives remain available for replay.
+- Retained a default FM27 hook RVA for unrecognized builds, logging the fallback before attempting installation. Other platforms with the same native layout can use this path, but are not independently verified.
+- Kept `.fmlens` archive format 2.8 and read compatibility with formats 2.1–2.8; this adaptation does not introduce another archive format change.
+
+### Fixed
+
+- Restored player rating breakdowns and sprint counts during archive replay.
+- Serialized momentum capture state to keep concurrent native callbacks consistent.
+- Updated match-instance pairing to the observed FM27 720-tick simulation lead, fixing capture remaining in the waiting state after successful hook installation.
+- Used the native matchday squad count instead of the full player-table count, excluding non-selected players with aliased or missing match statistics and keeping frame, metadata, and event slots aligned.
+- Corrected player-stat tail offsets and their validated read range, rating-event and category-history vectors, internal rating inputs, and team header fields.
+- Matched rating-duration filtering to FM27's native category mask lookup and validated momentum trajectory vector ordering, alignment, size, and readability before retaining points.
+
 ## [0.6.0] - 2026-10-15
 
 ### Added
