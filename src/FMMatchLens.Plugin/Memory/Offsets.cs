@@ -2,6 +2,9 @@ namespace FMMatchLens.Plugin.Memory;
 
 internal static class Offsets
 {
+    // FM27 game_plugin.dll BC940E472418FC5C214208D7CF30FECF600F689B6F9D71C11BA19A2DF0FE057F.
+    // Native hook activation is restricted to the matching build catalog entry.
+    // Unchanged player substructure fields still require FM27 feature regression.
     public static class GameMatch
     {
         public const int Competition = 0x678;
@@ -9,38 +12,38 @@ internal static class Offsets
         public const int CompetitionPrimaryColour = 0x68C;
         public const int CompetitionSecondaryColour = 0x690;
         public const int CompetitionTertiaryColour = 0x694;
-        public const int EventRewardBranch = 0x740;
-        public const int BallPosition = 0x126B0;
-        // public const int MatchPlayersCount = 0x13A20; //deprecated
-        // public const int FirstMatchPlayer = 0x13A28;  //deprecated
-        public const int MomentumEventSource = 0x139F0;
-        public const int WaitingReceiver = 0x13D10;
-        public const int HomeTeam = 0x14100;
-        public const int AwayTeam = 0x14108;
-        public const int PreviousBallHolder = 0x14118;
-        public const int CurrentBallHolder = 0x14120;
-        public const int Referee = 0x14170;
-        public const int StadiumColourObject = 0x14178;
-        public const int PossessionTeam = 0x141C0;
-        public const int AssistantRefereeOne = 0x141D0;
-        public const int AssistantRefereeTwo = 0x141D8;
-        public const int FourthOfficialOne = 0x141E0;
-        public const int FourthOfficialTwo = 0x141E8;
-        public const int DisplayTick = 0x141EC;
-        public const int Tick = 0x14278;
-        public const int RatingBaseCondition = 0x1428C;
-        public const int Period = 0x142D4;
-        public const int LifecycleStateA = 0x142F8;
-        public const int LifecycleStateB = 0x142F9;
-        public const int LifecycleStateC = 0x142FA;
-        public const int LifecycleStateD = 0x142FB;
+        public const int EventRewardBranch = 0xAD2;
+        public const int BallPosition = 0x12A40; // inline structure, not a pointer
+        public const int MomentumEventSource = 0x14EA8;
+        public const int WaitingReceiver = 0x12E70;
+        public const int HomeTeam = 0x15380;
+        public const int AwayTeam = 0x15388;
+        public const int PreviousBallHolder = 0x15398;
+        public const int CurrentBallHolder = 0x153A0;
+        public const int Referee = 0x153F0;
+        public const int StadiumColourObject = 0x153F8;
+        public const int PossessionTeam = 0x15440;
+        // RTTI-verified official objects; the former FM26 constants pointed to
+        // auxiliary data and timestamps rather than these officials.
+        public const int AssistantRefereeOne = 0x15350;
+        public const int AssistantRefereeTwo = 0x15358;
+        public const int FourthOfficialOne = 0x15360;
+        public const int FourthOfficialTwo = 0x15368;
+        public const int DisplayTick = 0x15464;
+        public const int Tick = 0x154EC;
+        public const int RatingBaseCondition = 0x15500;
+        public const int Period = 0x15547;
+        public const int LifecycleStateA = 0x15568;
+        public const int LifecycleStateB = 0x15569;
+        public const int LifecycleStateC = 0x1556A;
+        public const int LifecycleStateD = 0x1556B;
     }
 
     public static class BallPosition
     {
-        public const int X = 0x160;
-        public const int Y = 0x164;
-        public const int Z = 0x168;
+        public const int X = 0x170;
+        public const int Y = 0x174;
+        public const int Z = 0x178;
     }
 
     public static class Competition
@@ -55,12 +58,12 @@ internal static class Offsets
     {
         public const int EventsBegin = 0x08;
         public const int EventsEnd = 0x10;
-        public const int HalfPitchWidth = 0x108;
-        public const int HalfPitchLength = 0x10C;
-        public const int FirstHalfEndTick = 0x110;
-        public const int FullTimeEndTick = 0x114;
-        public const int ExtraTimeFirstHalfEndTick = 0x118;
-        public const int ExtraTimeFlag = 0x11C;
+        public const int HalfPitchWidth = 0xE0;
+        public const int HalfPitchLength = 0xE4;
+        public const int FirstHalfEndTick = 0xE8;
+        public const int FullTimeEndTick = 0xEC;
+        public const int ExtraTimeFirstHalfEndTick = 0xF0;
+        public const int ExtraTimeFlag = 0xF4;
     }
 
     public static class MomentumEvent
@@ -75,9 +78,9 @@ internal static class Offsets
         public const int Tick = 0x22;
         // Display-clock minute/second at event start. In the second half these exclude
         // first-half stoppage ticks and resume at 45:xx instead of using raw event Tick.
-        // public const int EventMinute = 0x25;
-        // public const int EventSecond = 0x26;
-        // Zero-based index into Team.PlayerTable (+0x130)
+        public const int EventMinute = 0x25; // byte; layout reference, not separately collected
+        public const int EventSecond = 0x26; // byte
+        // Zero-based index into Team.PlayerTable (+0x138)
         public const int PlayerSlot = 0x27;
         public const int Team = 0x28;
         // Uses the same team-roster slot space as PlayerSlot; 0xFF means that
@@ -158,15 +161,18 @@ internal static class Offsets
         public const byte UnknownEvent55 = 55;
     }
 
-    // Input object consumed by FUN_1823073e0/FUN_182868850 while producing or
-    // annotating a MomentumEvent. These are not offsets inside the 0x38 output record.
+    // FM27 RVA 0x3BDE0 consumes this input while producing a MomentumEvent.
+    // These are not offsets inside the 0x38 output record and are not collected
+    // through a second native read path.
     public static class RawMomentumEvent
     {
-        public const int Tick = 0x44;
-        public const int Flags = 0x64;
-        public const int EventType = 0x68;
-        public const int Team = 0x6A;
-        public const int PlayerSlot = 0x6B;
+        public const int Tick = 0x44; // int32; output event retains the low uint16
+        public const int Flags = 0x64; // uint32; input and output flag bits differ
+        public const int EventType = 0x68; // byte; converted before writing the output type
+        public const int Team = 0x6A; // byte
+        public const int PlayerSlot = 0x6B; // byte
+        public const int EventMinute = 0x6C; // byte
+        public const int EventSecond = 0x6D; // byte
     }
 
     public static class MomentumEventTrajectoryPoint
@@ -179,21 +185,26 @@ internal static class Offsets
     {
         // Pointer to the team's manager wrapper. Manager.Person resolves to the
         // shared Person subobject for both human managers and AI staff.
-        public const int Manager = 0x528;
+        public const int Manager = 0x630;
         // Inline table of MATCH_PLAYER pointers. MomentumEvent player slots are
         // zero-based indexes into this table.
-        public const int PlayerTable = 0x130;
-        // One-byte count of valid entries in PlayerTable.
-        public const int PlayerCount = 0x632;
+        public const int PlayerTable = 0x138;
+        // Total entries can include players outside this match's squad. Those
+        // entries may alias another player's Stats or have no Stats at all.
+        public const int PlayerTableCount = 0x72D;
+        // One-byte matchday count: the selected prefix of PlayerTable, including
+        // starters and substitutes. Use it for frames, metadata and event slots.
+        public const int PlayerCount = 0x72E;
         public const int UniqueId = 0x2C;
         public const int BackgroundColour = 0x30;
         public const int ForegroundColour = 0x34;
         public const int OutlineColour = 0x38;
-        public const int ContainerUniqueId = 0x8C;
-        public const int LogoNumber = 0x126;
-        public const int DbTeam = 0xA8;
+        public const int ContainerUniqueId = 0x94;
+        public const int LogoNumber = 0x133;
+        public const int DbTeam = 0xB0;
+        // Unverified legacy location inside PlayerTable, not a validated list.
         public const int PlayerListUnconfirmed = 0x200;
-        public const int TeamBase = 0x588;
+        public const int TeamBase = 0x690;
     }
 
     public static class Manager
@@ -207,12 +218,14 @@ internal static class Offsets
         // RTTI metadata, whose +4 field is the complete-object/subobject offset.
         public const int Metadata = -0x08;
         public const int SubobjectOffset = 0x04;
-        public const uint HumanManagerPersonOffset = 0x450;
+        public const uint HumanManagerPersonOffset = 0x440;
         public const uint StaffPersonOffset = 0x100;
     }
 
     public static class StadiumColour
     {
+        // Base is [GameMatch + GameMatch.StadiumColourObject], NOT DbTeam.Stadium.
+        // Sampled ARGB values are plausible; independent UI color matching is pending.
         public const int PrimaryColour = 0x148;
         public const int SecondaryColour = 0x14C;
     }
@@ -228,6 +241,8 @@ internal static class Offsets
 
     public static class Schedule
     {
+        // Inline 0x28 records, not pointers. CurrentMatch can retain unplayed
+        // score sentinels while the corresponding live GAME_MATCH is running.
         public const int PreviousMatch = 0x00;
         public const int CurrentMatch = 0x28;
     }
@@ -235,6 +250,7 @@ internal static class Offsets
     public static class ScheduleMatch
     {
         public const int Size = 0x28;
+        public const int FixtureName = 0x00; // pointer; FIXTURE_NAME@db RTTI
         public const int Team = 0x08;
         public const int Opponent = 0x10;
         // uint32 FM date: year = raw >> 16, one-based day-of-year = raw & 0x1FF.
@@ -243,6 +259,10 @@ internal static class Offsets
         // needs an away-team historical sample before assigning semantic names.
         public const int FirstScore = 0x20;
         public const int SecondScore = 0x21;
+        public const int Venue = 0x22; // byte, relative to Team
+        public const byte HomeVenue = 1;
+        public const byte AwayVenue = 2;
+        public const byte UnplayedScore = 0xFF;
     }
 
     public static class Club
@@ -322,24 +342,24 @@ internal static class Offsets
         public const int RatingContext298 = 0x298;
         public const int MatchTick = 0x2A8;
         public const int ShirtNumber = 0xC9C;
-        public const int InPossessionPosition = 0xD50;
-        public const int InPossessionRoleDuty = 0xD90;
-        public const int OutOfPossessionPosition = 0xDE0;
-        public const int OutOfPossessionRoleDuty = 0xE20;
-        public const int Stats = 0x1800;
-        public const int RatingEventsBegin = 0x1A88;
-        public const int RatingEventsEnd = 0x1A90;
-        public const int CategoryHistoryBegin = 0x1AA0;
-        public const int CategoryHistoryEnd = 0x1AA8;
-        public const int SpecialW2C = 0x1ACD;
-        public const int SpecialW2E = 0x1ACE;
-        public const int SpecialW2D = 0x1ACF;
-        public const int InternalW25 = 0x1B88;
-        public const int InternalW24 = 0x1C14;
-        public const int RawInternalRating = 0x1D24;
-        public const int SpecialW2F = 0x1E20;
-        public const int SpecialW30 = 0x1E21;
-        public const int SpecialW31 = 0x1E22;
+        public const int InPossessionPosition = 0xD70;
+        public const int InPossessionRoleDuty = 0xDB0;
+        public const int OutOfPossessionPosition = 0xE00;
+        public const int OutOfPossessionRoleDuty = 0xE40;
+        public const int Stats = 0x1880;
+        public const int RatingEventsBegin = 0x1AA8;
+        public const int RatingEventsEnd = 0x1AB0;
+        public const int CategoryHistoryBegin = 0x1AC0;
+        public const int CategoryHistoryEnd = 0x1AC8;
+        public const int SpecialW2C = 0x1AED;
+        public const int SpecialW2E = 0x1AEE;
+        public const int SpecialW2D = 0x1AEF;
+        public const int InternalW25 = 0x1BBC;
+        public const int InternalW24 = 0x1C48;
+        public const int RawInternalRating = 0x1D58;
+        public const int SpecialW2F = 0x1E4A;
+        public const int SpecialW30 = 0x1E4B;
+        public const int SpecialW31 = 0x1E4C;
     }
 
     public static class RatingContext
@@ -347,20 +367,31 @@ internal static class Offsets
         // Raw team-context inputs used by the W04/W05 event-reward branch.
         // Their football semantics and the exact mode-dependent expression are
         // still candidates, so retain the original bytes without relabelling.
-        public const int EventAdjustmentCandidate = 0x116;
-        public const int SpecialCondition = 0x62D;
-        public const int EventCounterCandidate = 0x62E;
-        public const int MatchBackgroundInput = 0x2A48;
+        public const int EventAdjustmentCandidate = 0x122;
+        public const int SpecialCondition = 0x729;
+        public const int EventCounterCandidate = 0x72A;
+        public const int MatchBackgroundInput = 0x34C4;
     }
 
     public static class RatingEvent
     {
         public const int Size = 0x10;
+        // FM27 scoring RVA 0x457F100 consumes these same 16 raw bytes.
+        // Context and Flag remain raw inputs; their full football semantics
+        // are not inferred from the field locations.
+        public const int CategoryMask = 0x00; // uint64
+        public const int Tick = 0x08; // int32, not an overlapping uint64 timestamp
+        public const int Type = 0x0C; // byte
+        public const int Context = 0x0D; // byte
+        public const int Flag = 0x0E; // byte
     }
 
     public static class RatingCategoryHistory
     {
         public const int Size = 0x28;
+        public const int EncodedCategory = 0x00; // uint16
+        public const int Duration = 0x20; // int32, ticks
+        public const ushort ExcludedMask = 0x2000;
     }
 
     public static class PositionHistory
@@ -377,6 +408,8 @@ internal static class Offsets
     {
         public const int ActualPlayerDelta = -0x288;
         public const int Uid = 0x0C;
+        // Legacy candidates: neither a gender bit/mask nor its encoding has
+        // been verified for FM27. Do not infer gender from these raw bytes.
         public const int FemaleBit = 0x10;
         public const int Gender = 0x19;
         public const int FirstName = 0x50;
@@ -549,8 +582,8 @@ internal static class Offsets
 
     public static class ActualPlayer
     {
-        public const int Id = 0x8;
-        public const int ObjDuni = 0xC;
+        // +0x08 is the MSVC vbptr, not a player ID; use Person.Uid.
+        // Its upper 32 bits at +0x0C are not a separate identity field.
         public const int SeasonStats = 0x108;
         public const int PositionGk = 0x150;
         public const int Crossing = 0x15F;
@@ -618,6 +651,8 @@ internal static class Offsets
 
     public static class SeasonStats
     {
+        // FM27 pointer/aggregation samples support this layout; category labels
+        // and every counter still need independent player-profile UI checks.
         // Each field points to a SeasonStatsSlot object.
         public const int Friendly = 0x20;
         public const int League = 0x28;
@@ -652,6 +687,8 @@ internal static class Offsets
 
     public static class SeasonDetailedStats
     {
+        // The 42 declared counters passed ClubTotal = League + Cup + Other in
+        // 41 sampled cases. This does not map the unnamed/nonadditive words.
         public const int Size = 0x78;
         public const int TeamGoals = 0x00; // u16
         public const int TeamGoalsConceded = 0x02; // u16
@@ -749,39 +786,41 @@ internal static class Offsets
         public const int PassesCompleted = 0xBB;
         public const int KeyPasses = 0xBC;
         public const int OpenPlayKeyPasses = 0xBD;
-        public const int TacklesAttempted = 0xBE;
-        public const int TacklesWon = 0xBF;
-        public const int KeyTackles = 0xC0;
-        public const int Aerials = 0xC2;
-        public const int AerialsWon = 0xC3;
-        public const int HeadersLost = 0xC4;
-        public const int Interceptions = 0xC7;
-        public const int ErrorsLeadingToShotOrGoalCandidate = 0xC8;
-        public const int TeamGoalsWhileOnPitch = 0xC9;
-        public const int TeamConcededWhileOnPitch = 0xCA;
-        public const int ThrowIns = 0xCB;
-        public const int Corners = 0xCC;
-        public const int DefensiveFreeKicks = 0xCD;
-        public const int AttackingFreeKicks = 0xCE;
-        public const int PossessionWon = 0xCF;
-        public const int PossessionLost = 0xD0;
-        public const int Clearances = 0xD1;
-        public const int ShotsFaced = 0xD5;
-        public const int CrossAttemptsTypeOne = 0xD7;
-        public const int CrossAttemptsTypeTwo = 0xD8;
-        public const int CrossCompletionsTypeOne = 0xD9;
-        public const int CrossCompletionsTypeTwo = 0xDA;
-        public const int ShortPassesAttemptedCandidate = 0xDC;
-        public const int LongPassesAttemptedCandidate = 0xDE;
-        public const int ShortPassesCompletedCandidate = 0xE0;
-        public const int LongPassesCompletedCandidate = 0xE2;
-        public const int PressesAttempted = 0xE4;
-        public const int PressesWon = 0xE5;
-        public const int ProgressivePasses = 0xE9;
-        public const int ShotsOutsideBox = 0xEB;
-        public const int Sprints = 0xED;
+        // FM27 inserts eight bytes after +0xBD; retain candidate semantics
+        // for fields whose football meaning was already unconfirmed.
+        public const int TacklesAttempted = 0xC6;
+        public const int TacklesWon = 0xC7;
+        public const int KeyTackles = 0xC8;
+        public const int Aerials = 0xCA;
+        public const int AerialsWon = 0xCB;
+        public const int HeadersLost = 0xCC;
+        public const int Interceptions = 0xCF;
+        public const int ErrorsLeadingToShotOrGoalCandidate = 0xD0;
+        public const int TeamGoalsWhileOnPitch = 0xD1;
+        public const int TeamConcededWhileOnPitch = 0xD2;
+        public const int ThrowIns = 0xD3;
+        public const int Corners = 0xD4;
+        public const int DefensiveFreeKicks = 0xD5;
+        public const int AttackingFreeKicks = 0xD6;
+        public const int PossessionWon = 0xD7;
+        public const int PossessionLost = 0xD8;
+        public const int Clearances = 0xD9;
+        public const int ShotsFaced = 0xDD;
+        public const int CrossAttemptsTypeOne = 0xDF;
+        public const int CrossAttemptsTypeTwo = 0xE0;
+        public const int CrossCompletionsTypeOne = 0xE1;
+        public const int CrossCompletionsTypeTwo = 0xE2;
+        public const int ShortPassesAttemptedCandidate = 0xE4;
+        public const int LongPassesAttemptedCandidate = 0xE6;
+        public const int ShortPassesCompletedCandidate = 0xE8;
+        public const int LongPassesCompletedCandidate = 0xEA;
+        public const int PressesAttempted = 0xEC;
+        public const int PressesWon = 0xED;
+        public const int ProgressivePasses = 0xF1;
+        public const int ShotsOutsideBox = 0xF3;
+        public const int Sprints = 0xF5;
 
-        // Inclusive of the highest-address player stat above (a byte at +0xED).
-        public const int RatingInputReadableSize = 0xEE;
+        // Inclusive of the highest-address player stat above (a byte at +0xF5).
+        public const int RatingInputReadableSize = 0xF6;
     }
 }

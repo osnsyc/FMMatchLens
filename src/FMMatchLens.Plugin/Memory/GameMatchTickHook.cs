@@ -18,7 +18,9 @@ internal sealed class GameMatchTickHook : IDisposable
     private const int CandidateIdentityRetryMilliseconds = 500;
     private const int CandidatePairConfirmationCount = 3;
     private const int CandidateRecentSeconds = 2;
-    private const int CandidateExpectedTickDelta = 360;
+    // The supported FM27 build runs simulation 180 game seconds ahead of the
+    // displayed instance (4 ticks/second). FM26's 360-tick lead rejects this pair.
+    private const int CandidateExpectedTickDelta = 720;
     private const int CandidateTickDeltaTolerance = 16;
     private const int LockHealthLogSeconds = 5;
     private const int DrainHealthLogSeconds = 5;
@@ -39,6 +41,7 @@ internal sealed class GameMatchTickHook : IDisposable
     // the event anchor remains available separately as the logical action origin.
     // Keep this limit in sync with ArchiveFrameCodec.MaxTrajectoryPoints.
     private const int MaxStoredMomentumTrajectoryPoints = 4;
+    private const int MaxNativeMomentumTrajectoryPoints = 4_096;
     private const int MonitoredMomentumEventCount = 4;
     private const int ActiveRatingBaseline = 6_700;
 
@@ -160,7 +163,7 @@ internal sealed class GameMatchTickHook : IDisposable
             if (!supportedBuild)
             {
                 PluginLogger.Warning(
-                    $"Unsupported game_plugin.dll build; using fallback GAME_MATCH hook RVA " +
+                    $"Unrecognized game_plugin.dll build; trying fallback GAME_MATCH hook RVA " +
                     $"0x{build.MatchTickHookRva:X} for sha256={sha256}.");
             }
         }
@@ -249,7 +252,7 @@ internal sealed class GameMatchTickHook : IDisposable
         _momentumCalculator.Dispose();
     }
 
-    private ulong MatchUpdateHook(nint match, ulong param2)
+    private ulong MatchUpdateHook(nint match, ulong param2, nint param3, nint param4, nint param5)
     {
         try
         {
@@ -266,11 +269,11 @@ internal sealed class GameMatchTickHook : IDisposable
             {
                 lock (_animatedUpdateGate)
                 {
-                    return InvokeOriginalAndCapture(original, match, param2);
+                    return InvokeOriginalAndCapture(original, match, param2, param3, param4, param5);
                 }
             }
 
-            return InvokeOriginalAndCapture(original, match, param2);
+            return InvokeOriginalAndCapture(original, match, param2, param3, param4, param5);
         }
         catch (Exception ex)
         {
@@ -288,10 +291,11 @@ internal sealed class GameMatchTickHook : IDisposable
         }
     }
 
-    private ulong InvokeOriginalAndCapture(MatchUpdateDelegate original, nint match, ulong param2)
+    private ulong InvokeOriginalAndCapture(
+        MatchUpdateDelegate original, nint match, ulong param2, nint param3, nint param4, nint param5)
     {
         VirtualMemory.InvalidateActiveReadScopes();
-        var result = original(match, param2);
+        var result = original(match, param2, param3, param4, param5);
         // A fresh scope starts after every Original, including callbacks that
         // only produce lightweight records. Never carry a map across updates.
         using var memoryScope = VirtualMemory.BeginReadScope();
@@ -301,7 +305,7 @@ internal sealed class GameMatchTickHook : IDisposable
         Interlocked.Exchange(ref _lastResult, unchecked((long)result));
         Interlocked.Increment(ref _callCount);
 
-        if (TryCaptureTickRecord(match, unchecked((uint)param2), out var record, out var homeValues, out var awayValues))
+        if (TryCaptureTickRecord(match, param2, out var record, out var homeValues, out var awayValues))
         {
             _tickRecords.TryWrite(record);
             var selectedAnimated = (nint)Interlocked.Read(ref _selectedAnimated);
@@ -354,7 +358,7 @@ internal sealed class GameMatchTickHook : IDisposable
     }
 
     private bool TryCaptureTickRecord(
-        nint match, uint param2, out GameMatchTickRecord record,
+        nint match, ulong param2, out GameMatchTickRecord record,
         out TeamTickSnapshot homeValues, out TeamTickSnapshot awayValues)
     {
         record = default;
@@ -370,10 +374,10 @@ internal sealed class GameMatchTickHook : IDisposable
         var awayPlayerCountRead = TryReadTeamPlayerCount(awayTeam, out var awayPlayerCount);
         _memoryReader.TryReadInt32(match + Offsets.GameMatch.DisplayTick, out var displayTick);
         _memoryReader.TryReadByte(match + Offsets.GameMatch.Period, out var period);
-        _memoryReader.TryReadByte(match + Offsets.GameMatch.LifecycleStateA, out var state142F8);
-        _memoryReader.TryReadByte(match + Offsets.GameMatch.LifecycleStateB, out var state142F9);
-        _memoryReader.TryReadByte(match + Offsets.GameMatch.LifecycleStateC, out var state142FA);
-        _memoryReader.TryReadByte(match + Offsets.GameMatch.LifecycleStateD, out var state142FB);
+        _memoryReader.TryReadByte(match + Offsets.GameMatch.LifecycleStateA, out var lifecycleStateA);
+        _memoryReader.TryReadByte(match + Offsets.GameMatch.LifecycleStateB, out var lifecycleStateB);
+        _memoryReader.TryReadByte(match + Offsets.GameMatch.LifecycleStateC, out var lifecycleStateC);
+        _memoryReader.TryReadByte(match + Offsets.GameMatch.LifecycleStateD, out var lifecycleStateD);
         _memoryReader.TryReadPointer(match + Offsets.GameMatch.PossessionTeam, out var possessionTeam);
         _memoryReader.TryReadPointer(match + Offsets.GameMatch.CurrentBallHolder, out var currentBallHolder);
 
@@ -418,10 +422,10 @@ internal sealed class GameMatchTickHook : IDisposable
             Tick: tick,
             DisplayTick: displayTick,
             Period: period,
-            State142F8: state142F8,
-            State142F9: state142F9,
-            State142FA: state142FA,
-            State142FB: state142FB,
+            LifecycleStateA: lifecycleStateA,
+            LifecycleStateB: lifecycleStateB,
+            LifecycleStateC: lifecycleStateC,
+            LifecycleStateD: lifecycleStateD,
             HomePlayerCount: homePlayerCount,
             AwayPlayerCount: awayPlayerCount,
             HomeTeam: homeTeam,
@@ -694,7 +698,7 @@ internal sealed class GameMatchTickHook : IDisposable
 
     private static bool IsPublishedMomentumEventType(byte eventType)
     {
-        // Preserve every output currently reachable from FUN_183cf0930. The UI
+        // Preserve the native output type range. The UI
         // may ignore unnamed types, but archives retain them for later mapping.
         return eventType is >= Offsets.MomentumEvent.ShotGoal and <= Offsets.MomentumEvent.UnknownEvent55;
     }
@@ -738,17 +742,40 @@ internal sealed class GameMatchTickHook : IDisposable
 
     private static bool TryGetMomentumEventTrajectory(nint address, out nint begin, out int pointCount)
     {
+        // Callers validate the complete MomentumEvent before reading its header.
         begin = Marshal.ReadIntPtr(address + Offsets.MomentumEvent.TrajectoryPointsBegin);
         var end = Marshal.ReadIntPtr(address + Offsets.MomentumEvent.TrajectoryPointsEnd);
-        var length = (long)end - (long)begin;
-        if (begin == default || length < Offsets.MomentumEvent.TrajectoryPointSize ||
-            length % Offsets.MomentumEvent.TrajectoryPointSize != 0 || length > int.MaxValue)
+        var capacity = Marshal.ReadIntPtr(address + Offsets.MomentumEvent.TrajectoryPointsCapacity);
+        pointCount = 0;
+        var startAddress = (ulong)begin;
+        var endAddress = (ulong)end;
+        var capacityAddress = (ulong)capacity;
+        if (begin == default || endAddress <= startAddress || capacityAddress < endAddress)
         {
-            pointCount = 0;
             return false;
         }
 
-        pointCount = checked((int)(length / Offsets.MomentumEvent.TrajectoryPointSize));
+        var length = endAddress - startAddress;
+        if (length % Offsets.MomentumEvent.TrajectoryPointSize != 0 ||
+            (capacityAddress - startAddress) % Offsets.MomentumEvent.TrajectoryPointSize != 0 ||
+            length / Offsets.MomentumEvent.TrajectoryPointSize > MaxNativeMomentumTrajectoryPoints)
+        {
+            return false;
+        }
+
+        var count = (int)(length / Offsets.MomentumEvent.TrajectoryPointSize);
+        if (!VirtualMemory.IsReadable(begin, (int)length))
+        {
+            // Preserve valid vectors crossing readable regions. The original
+            // per-point read also rejected a point crossing a region boundary.
+            for (var index = 0; index < count; index++)
+            {
+                if (!VirtualMemory.IsReadable(
+                        begin + index * Offsets.MomentumEvent.TrajectoryPointSize,
+                        Offsets.MomentumEvent.TrajectoryPointSize)) return false;
+            }
+        }
+        pointCount = count;
         return true;
     }
 
@@ -1221,9 +1248,9 @@ internal sealed class GameMatchTickHook : IDisposable
         for (var index = 0; index < count; index++)
         {
             var record = begin + index * Offsets.RatingCategoryHistory.Size;
-            var encoded = unchecked((ushort)Marshal.ReadInt16(record));
-            if (encoded == 0x3F41 || ((encoded >> 8) & 0x20) != 0) continue;
-            var duration = Marshal.ReadInt32(record + 0x20);
+            var encoded = unchecked((ushort)Marshal.ReadInt16(record + Offsets.RatingCategoryHistory.EncodedCategory));
+            if (!RatingCategoryHistoryDecoder.IsEligible(encoded)) continue;
+            var duration = Marshal.ReadInt32(record + Offsets.RatingCategoryHistory.Duration);
             if (duration > 0) total += duration;
         }
         return checked((int)Math.Min(total, int.MaxValue));
@@ -2490,7 +2517,7 @@ internal sealed class GameMatchTickHook : IDisposable
             $"GAME_MATCH end details: match={FormatPointer(record.MatchAddress)}, terminalTick={record.Tick}, " +
             $"finalDataTick={final.Tick}, period={record.Period}, " +
             $"runtimeTeams={FormatPointer(record.HomeTeam)}/{FormatPointer(record.AwayTeam)}, " +
-            $"lifecycleStates={record.State142F8}/{record.State142F9}/{record.State142FA}/{record.State142FB}.");
+            $"lifecycleStates={record.LifecycleStateA}/{record.LifecycleStateB}/{record.LifecycleStateC}/{record.LifecycleStateD}.");
 
         if (record.MatchAddress == _stableAnimated)
         {
@@ -2867,11 +2894,11 @@ internal sealed class GameMatchTickHook : IDisposable
         return address == default ? "0x0" : $"0x{(long)address:X}";
     }
 
-    // ABI note: this matches the current Ghidra decompile:
-    // ulonglong FUN_183e08ad0(longlong param_1, ulonglong param_2).
-    // The function returns uVar23 & 0xffffffff, but the native ABI return register is RAX.
+    // FM27 RVA 0x4530BC0 receives RCX/RDX/R8/R9 plus a fifth stack argument.
+    // Forward every argument unchanged; the former FM26 two-argument ABI loses
+    // the context pointers used by the new update function.
     [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate ulong MatchUpdateDelegate(nint match, ulong param2);
+    private delegate ulong MatchUpdateDelegate(nint match, ulong param2, nint param3, nint param4, nint param5);
 
     private enum DiagnosticSeverity
     {

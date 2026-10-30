@@ -8,22 +8,13 @@ namespace FMMatchLens.Plugin.Memory;
 internal static class GamePluginBuildCatalog
 {
     private const int MaximumWindowsPathLength = 32_768;
-    private const int DefaultMatchTickHookRva = 0x3E08AD0;
-
+    private const int DefaultMatchTickHookRva = 0x4530BC0;
     private static readonly GamePluginBuild[] SupportedBuilds =
     [
         new(
             "Steam",
-            "eb6c86fab56e051fe41482c7b93d8cb0af716a1cc2c6197ce1babbff68372bb8",
+            "bc940e472418fc5c214208d7cf30fecf600f689b6f9d71c11ba19a2df0fe057f",
             DefaultMatchTickHookRva),
-        new(
-            "Epic",
-            "d86f511cec5a8de871ceedebf3eab05cec057bf2f82ee9ee0ef2e923e1a60944",
-            DefaultMatchTickHookRva),
-        new(
-            "XGP",
-            "5de88e91e8c63f7ca1502b44313891d1eed85336c90316b900f8df7a37ad9091",
-            0x3CF98D0),
     ];
 
     public static bool TryResolve(
@@ -42,7 +33,11 @@ internal static class GamePluginBuildCatalog
             FileOptions.SequentialScan);
         using var algorithm = SHA256.Create();
         sha256 = Convert.ToHexString(algorithm.ComputeHash(stream)).ToLowerInvariant();
+        return TryResolveHash(sha256, out build);
+    }
 
+    internal static bool TryResolveHash(string sha256, out GamePluginBuild build)
+    {
         foreach (var candidate in SupportedBuilds)
         {
             if (string.Equals(candidate.Sha256, sha256, StringComparison.OrdinalIgnoreCase))
@@ -52,6 +47,8 @@ internal static class GamePluginBuildCatalog
             }
         }
 
+        // Other FM27 distributions may share this layout. Return false to
+        // distinguish an unverified fallback from an exact fingerprint match.
         build = new GamePluginBuild("Fallback", sha256, DefaultMatchTickHookRva);
         return false;
     }
