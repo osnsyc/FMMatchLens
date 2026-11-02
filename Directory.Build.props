@@ -3,6 +3,8 @@
     <!-- Repository-wide metadata: update values here instead of hard-coding them in source files. -->
     <ProductName>FMMatchLens</ProductName>
     <ProjectVersion>0.7.0</ProjectVersion>
+    <SdkApiMajor>1</SdkApiMajor>
+    <SdkApiMinor>0</SdkApiMinor>
     <PluginId>com.fmmatchlens.plugin</PluginId>
     <GameName>Football Manager</GameName>
     <GameVersion>27.0</GameVersion>

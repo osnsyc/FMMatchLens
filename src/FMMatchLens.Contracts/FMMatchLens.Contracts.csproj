@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>FMMatchLens.Contracts</AssemblyName>
+    <PackageId>FMMatchLens.Contracts</PackageId>
+    <Version>$(SdkApiMajor).$(SdkApiMinor).0</Version>
+    <VersionPrefix>$(Version)</VersionPrefix>
+    <InformationalVersion>$(Version)</InformationalVersion>
+    <AssemblyVersion>$(SdkApiMajor).0.0.0</AssemblyVersion>
+    <FileVersion>$(SdkApiMajor).$(SdkApiMinor).0.0</FileVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="LensApiMajor" Value="$(SdkApiMajor)" />
+    <AssemblyMetadata Include="LensApiMinor" Value="$(SdkApiMinor)" />
+  </ItemGroup>
+  <Target Name="GenerateLensHostIdentity" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <LensIdentityLine Include="namespace FMMatchLens.Contracts%3B" />
+      <LensIdentityLine Include="public static partial class LensApi { public const string PluginId = &quot;$(PluginId)&quot;%3B }" />
+      <Compile Include="$(IntermediateOutputPath)LensHostIdentity.g.cs" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(IntermediateOutputPath)LensHostIdentity.g.cs" Lines="@(LensIdentityLine)" Overwrite="true" />
+  </Target>
+</Project>

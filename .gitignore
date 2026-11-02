@@ -38,3 +38,6 @@ exports/
 tools/
 dev/
 src/FMMatchLens.Plugin/lib/
+
+# Local design and validation documents
+/docs/
