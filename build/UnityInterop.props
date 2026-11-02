@@ -1,0 +1,25 @@
+<Project>
+  <PropertyGroup>
+    <EnableUnityIntegration Condition="'$(EnableUnityIntegration)' == ''">true</EnableUnityIntegration>
+    <DefineConstants Condition="'$(EnableUnityIntegration)' == 'true'">$(DefineConstants);LENS_UNITY</DefineConstants>
+    <BepInExCoreDir Condition="'$(BepInExCoreDir)' == ''">$(MSBuildThisFileDirectory)../src/FMMatchLens.Plugin/lib</BepInExCoreDir>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(EnableUnityIntegration)' == 'true'">
+    <!-- Generated Unity assemblies may define compiler attributes; keep them out of the global namespace. -->
+    <Reference Include="UnityEngine.CoreModule"><Aliases>UnityInterop</Aliases><HintPath>$(FMInteropDir)/UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><Aliases>UnityInterop</Aliases><HintPath>$(FMInteropDir)/UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Il2Cppmscorlib"><HintPath>$(FMInteropDir)/Il2Cppmscorlib.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Il2CppInterop.Runtime"><HintPath>$(BepInExCoreDir)/Il2CppInterop.Runtime.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="BepInEx.Unity.Common"><HintPath>$(BepInExCoreDir)/BepInEx.Unity.Common.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+  <Target Name="RequireUnityInterop" BeforeTargets="ResolveReferences" Condition="'$(EnableUnityIntegration)' == 'true'">
+    <Error Condition="!Exists('$(FMInteropDir)/UnityEngine.CoreModule.dll') Or !Exists('$(FMInteropDir)/UnityEngine.IMGUIModule.dll') Or !Exists('$(FMInteropDir)/Il2Cppmscorlib.dll')"
+           Text="Set FMInteropDir to FM27's generated BepInEx/interop directory. Public CI may explicitly use -p:EnableUnityIntegration=false for a non-release capture-only build." />
+    <Error Condition="!Exists('$(BepInExCoreDir)/Il2CppInterop.Runtime.dll') Or !Exists('$(BepInExCoreDir)/BepInEx.Unity.Common.dll')"
+           Text="Run .github/scripts/prepare-plugin-dependencies.ps1 to prepare the pinned BepInEx compile references." />
+  </Target>
+  <Target Name="ValidateUnityBuildMode" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(EnableUnityIntegration)' != 'true' And '$(EnableUnityIntegration)' != 'false'"
+      Text="EnableUnityIntegration must be true or false." />
+  </Target>
+</Project>

@@ -11,8 +11,10 @@
     <Deterministic>true</Deterministic>
   </PropertyGroup>
 
+  <Import Project="../../build/UnityInterop.props" />
   <ItemGroup>
     <ProjectReference Include="../FMMatchLens.Contracts/FMMatchLens.Contracts.csproj" />
+    <AssemblyMetadata Include="LensUnityIntegration" Value="$(EnableUnityIntegration)" />
   </ItemGroup>
 
   <ItemGroup>

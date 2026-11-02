@@ -8,6 +8,11 @@
 ## debug: includes detailed hook and frame diagnostics
 Mode = release
 
+[DataSdk]
+
+## Read-only in-process data for verified game builds. No additional network port.
+Enabled = true
+
 [Graphics]
 
 ## Root directory of Football Manager graphics packs and config.xml files.

@@ -51,8 +51,8 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/prepare-plugin-dependencies.ps1
 
-      - name: Build plugin
-        run: dotnet build src/FMMatchLens.Plugin/FMMatchLens.Plugin.csproj --configuration Release
+      - name: Build capture-only plugin (no proprietary Unity references)
+        run: dotnet build src/FMMatchLens.Plugin/FMMatchLens.Plugin.csproj --configuration Release -p:EnableUnityIntegration=false
 
       - name: Test SDK, timeline and archive compatibility
         run: dotnet test tests/FMMatchLens.Sdk.Tests --configuration Release
@@ -72,9 +72,10 @@ jobs:
       - name: Upload build outputs
         uses: actions/upload-artifact@v7
         with:
-          name: fmmatchlens-ci-${{ github.sha }}
+          name: fmmatchlens-capture-only-ci-${{ github.sha }}
           if-no-files-found: error
           retention-days: 7
           path: |
             src/FMMatchLens.Plugin/bin/Release/net6.0/FMMatchLens.Plugin.dll
+            src/FMMatchLens.Plugin/bin/Release/net6.0/FMMatchLens.Contracts.dll
             frontend/dist/

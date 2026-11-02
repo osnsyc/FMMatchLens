@@ -35,6 +35,9 @@ try {
   $dependencies = @(
     "BepInEx.Core.dll",
     "BepInEx.Unity.IL2CPP.dll",
+    "BepInEx.Unity.Common.dll",
+    "Il2CppInterop.Runtime.dll",
+    "MonoMod.Backports.dll",
     "MonoMod.RuntimeDetour.dll",
     "MonoMod.Utils.dll"
   )

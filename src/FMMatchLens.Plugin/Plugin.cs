@@ -4,6 +4,8 @@ using BepInEx.Unity.IL2CPP;
 using FMMatchLens.Plugin.Diagnostics;
 using FMMatchLens.Plugin.Memory;
 using FMMatchLens.Plugin.Services;
+using FMMatchLens.Plugin.Sdk;
+using FMMatchLens.Contracts;
 using System.Threading;
 
 namespace FMMatchLens.Plugin;
@@ -17,6 +19,11 @@ public sealed class Plugin : BasePlugin
     private GraphicsAssetIndex? _graphicsAssets;
     private Timer? _hookRetryTimer;
     private int _isInstallingHook;
+    private MatchDataHub? _sdkHub;
+    private IDisposable? _sdkRegistration;
+#if LENS_UNITY
+    private SdkUpdatePump? _sdkPump;
+#endif
 
     internal static ManualLogSource PluginLog { get; private set; } = null!;
 
@@ -44,11 +51,37 @@ public sealed class Plugin : BasePlugin
             options.GraphicsPath.Value,
             Path.Combine(dataPath, "graphics-index-cache.json"));
         _graphicsAssets.Build();
-        var realtimeTimeline = new RealtimeMatchTimeline(_archiveStore, _graphicsAssets);
+        if (options.DataSdkEnabled.Value)
+        {
+#if LENS_UNITY
+            try
+            {
+                _sdkHub = new MatchDataHub(PluginLogger.Warning);
+                _sdkPump = AddComponent<SdkUpdatePump>();
+                _sdkPump.Attach(_sdkHub);
+                _sdkRegistration = LensApi.RegisterProvider(_sdkHub);
+            }
+            catch (Exception)
+            {
+                _sdkPump?.Detach();
+                _sdkHub?.Dispose();
+                _sdkHub = null;
+                PluginLogger.Warning("Data SDK initialization failed; capture, Web and archive remain enabled.");
+            }
+#else
+            PluginLogger.Warning("This capture-only build has no Unity SDK dispatcher. Data SDK is disabled.");
+#endif
+        }
+        var realtimeTimeline = new RealtimeMatchTimeline(_archiveStore, _graphicsAssets, _sdkHub);
 
         _apiServer = new LocalApiServer(realtimeTimeline, _archiveStore, _graphicsAssets);
 
-        _apiServer.Start();
+        try { _apiServer.Start(); }
+        catch (Exception)
+        {
+            _apiServer.Stop();
+            PluginLogger.Warning("Local HTTP server could not start; capture, archive and Data SDK remain enabled.");
+        }
         _gameMatchTickHook = new GameMatchTickHook(realtimeTimeline);
         if (!_gameMatchTickHook.Start())
         {
@@ -66,6 +99,14 @@ public sealed class Plugin : BasePlugin
 
     public override bool Unload()
     {
+        _sdkRegistration?.Dispose();
+        _sdkRegistration = null;
+#if LENS_UNITY
+        _sdkPump?.Detach();
+        _sdkPump = null;
+#endif
+        _sdkHub?.Dispose();
+        _sdkHub = null;
         _hookRetryTimer?.Dispose();
         _hookRetryTimer = null;
         _gameMatchTickHook?.Stop();

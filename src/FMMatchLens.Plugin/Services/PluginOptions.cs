@@ -6,6 +6,8 @@ internal sealed class PluginOptions
 {
     public PluginOptions(ConfigFile config)
     {
+        DataSdkEnabled = config.Bind("DataSdk", "Enabled", true,
+            "Expose the read-only in-process SDK for verified game builds. Requires a Unity-enabled plugin build.");
         LogMode = config.Bind(
             "Logging",
             "Mode",
@@ -48,6 +50,7 @@ internal sealed class PluginOptions
     }
 
     public ConfigEntry<string> LogMode { get; }
+    public ConfigEntry<bool> DataSdkEnabled { get; }
 
     public ConfigEntry<string> GraphicsPath { get; }
 
