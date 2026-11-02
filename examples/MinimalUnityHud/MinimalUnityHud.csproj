@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>FMMatchLens.Examples.MinimalUnityHud</AssemblyName>
+    <PackageId>FMMatchLens.Examples.MinimalUnityHud</PackageId>
+    <ContractsPath Condition="'$(ContractsPath)' == '' And Exists('../../lib/FMMatchLens.Contracts.dll')">../../lib/FMMatchLens.Contracts.dll</ContractsPath>
+    <ContractsPath Condition="'$(ContractsPath)' == ''">../../src/FMMatchLens.Contracts/bin/Release/net6.0/FMMatchLens.Contracts.dll</ContractsPath>
+  </PropertyGroup>
+  <Import Project="../../build/UnityInterop.props" />
+  <ItemGroup>
+    <!-- This is deliberately a DLL reference, never a reference to the host implementation. -->
+    <Reference Include="FMMatchLens.Contracts"><HintPath>$(ContractsPath)</HintPath><Private>false</Private></Reference>
+    <Reference Include="BepInEx.Core"><HintPath>$(BepInExCoreDir)/BepInEx.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="BepInEx.Unity.IL2CPP"><HintPath>$(BepInExCoreDir)/BepInEx.Unity.IL2CPP.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+  <Target Name="RequireHudUnity" BeforeTargets="CoreCompile">
+    <Error Condition="'$(EnableUnityIntegration)' != 'true'" Text="The HUD requires real FM27 Unity interop references; capture-only mode is not supported." />
+  </Target>
+  <Target Name="GenerateHudVersion" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <HudLine Include="internal static class HudMetadata { public const string Version = &quot;$(ProjectVersion)&quot;%3B }" />
+      <Compile Include="$(IntermediateOutputPath)HudMetadata.g.cs" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(IntermediateOutputPath)HudMetadata.g.cs" Lines="@(HudLine)" Overwrite="true" />
+  </Target>
+</Project>
