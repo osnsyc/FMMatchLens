@@ -54,6 +54,9 @@ jobs:
       - name: Build plugin
         run: dotnet build src/FMMatchLens.Plugin/FMMatchLens.Plugin.csproj --configuration Release
 
+      - name: Test SDK, timeline and archive compatibility
+        run: dotnet test tests/FMMatchLens.Sdk.Tests --configuration Release
+
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci

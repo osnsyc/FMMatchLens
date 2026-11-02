@@ -12,6 +12,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../FMMatchLens.Contracts/FMMatchLens.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!--
       BepInEx/IL2CPP references are intentionally local file references.
       Copy the required DLLs from the target BepInEx installation into ./lib

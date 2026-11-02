@@ -1,6 +1,7 @@
 using FMMatchLens.Plugin.Domain;
 using FMMatchLens.Plugin.Diagnostics;
 using FMMatchLens.Plugin.Memory;
+using FMMatchLens.Plugin.Sdk;
 
 namespace FMMatchLens.Plugin.Services;
 
@@ -16,6 +17,7 @@ internal sealed class RealtimeMatchTimeline
     private readonly object _gate = new();
     private readonly MatchArchiveStore _archives;
     private readonly GraphicsAssetIndex _graphicsAssets;
+    private readonly MatchDataHub? _sdk;
     private readonly List<RealtimeTickFrame[]> _chunks = new();
     private readonly List<RealtimeMetadataTimelineEntry> _metadataTimeline = new();
     private readonly MomentumEventReconciler _momentumEventReconciler = new(PluginLogger.Warning);
@@ -36,11 +38,15 @@ internal sealed class RealtimeMatchTimeline
     private bool _hasCompleteMetadata;
     private long _lastMetadataRefreshTimestamp;
 
-    public RealtimeMatchTimeline(MatchArchiveStore archives, GraphicsAssetIndex graphicsAssets)
+    public RealtimeMatchTimeline(MatchArchiveStore archives, GraphicsAssetIndex graphicsAssets, MatchDataHub? sdk = null)
     {
         _archives = archives;
         _graphicsAssets = graphicsAssets;
+        _sdk = sdk;
     }
+
+    internal void SetCaptureAvailability(bool verified, string reason) => _sdk?.SetSourceAvailability(verified, reason);
+    internal void MarkCaptureLost(string reason) => _sdk?.MarkLost(reason);
 
     public bool NeedsPlayerMetadata
     {
@@ -76,6 +82,7 @@ internal sealed class RealtimeMatchTimeline
             _matchId = $"match-{_startedUnixMilliseconds}";
             _status = "live";
             _archives.Begin(_matchId, _startedUnixMilliseconds);
+            _sdk?.Begin(_matchId);
         }
     }
 
@@ -206,6 +213,8 @@ internal sealed class RealtimeMatchTimeline
                 }
             }
 
+            // SDK never serializes internal fields or invokes consumers on this drain path.
+            _sdk?.Publish(frame, _metadata);
             _archives.Append(frame);
 
             return true;
@@ -248,6 +257,7 @@ internal sealed class RealtimeMatchTimeline
             _hasCompleteMetadata = IsMetadataComplete(candidate);
             AppendMetadataTimelineEntryLocked(_metadata, _current);
             _archives.WriteMetadata(_metadata);
+            _sdk?.UpdateMetadata(_metadata);
         }
     }
 
@@ -260,6 +270,7 @@ internal sealed class RealtimeMatchTimeline
                 _status = "ended";
                 if (_matchId is not null)
                 {
+                    _sdk?.End(_matchId);
                     _archives.Complete(_matchId);
                 }
             }

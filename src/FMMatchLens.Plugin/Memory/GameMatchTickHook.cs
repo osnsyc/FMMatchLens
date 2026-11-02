@@ -193,6 +193,8 @@ internal sealed class GameMatchTickHook : IDisposable
                 out MatchUpdateDelegate original);
             _original = original;
             _started = true;
+            _timeline.SetCaptureAvailability(supportedBuild,
+                supportedBuild ? "Verified capture source ready" : "Unverified game build; SDK data disabled");
             Interlocked.Exchange(ref _lastDrainCompletedTimestamp, Stopwatch.GetTimestamp());
             // This timer is also the non-critical log pump. Keep it alive in
             // release mode so queued lifecycle warnings never run on the native
@@ -219,6 +221,7 @@ internal sealed class GameMatchTickHook : IDisposable
         catch (Exception ex)
         {
             PluginLogger.Warning($"Unable to install GAME_MATCH match-update hook: {ex.Message}");
+            _timeline.SetCaptureAvailability(false, "Capture hook installation failed");
             _detour?.Dispose();
             _detour = null;
             _original = null;
@@ -228,6 +231,7 @@ internal sealed class GameMatchTickHook : IDisposable
 
     public void Stop()
     {
+        _timeline.SetCaptureAvailability(false, "Capture stopped");
         if (!_started)
         {
             return;
@@ -2088,6 +2092,7 @@ internal sealed class GameMatchTickHook : IDisposable
         catch (Exception ex)
         {
             QueueDiagnostic(DiagnosticSeverity.Warning, $"Unable to drain GAME_MATCH tick records: {ex.Message}");
+            _timeline.MarkCaptureLost("Managed capture drain failed");
         }
         finally
         {
@@ -2570,6 +2575,7 @@ internal sealed class GameMatchTickHook : IDisposable
             out var awayTeam);
         if (!homeTeamRead || !awayTeamRead)
         {
+            _timeline.MarkCaptureLost("Selected match runtime teams unreadable");
             QueueDiagnostic(
                 DiagnosticSeverity.Debug,
                 $"GAME_MATCH locked animation terminal probe: address={FormatPointer(animated)}, " +
