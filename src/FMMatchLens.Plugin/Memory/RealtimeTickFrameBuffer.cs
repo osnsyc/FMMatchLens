@@ -142,6 +142,7 @@ internal sealed class RawRealtimeTickFrame
     public int BallXCentimeters;
     public int BallYCentimeters;
     public int BallZCentimeters;
+    public bool BallPositionValid;
     public float HalfPitchWidth;
     public float HalfPitchLength;
     public byte MomentumEventCount;

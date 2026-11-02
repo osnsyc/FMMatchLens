@@ -29,6 +29,9 @@ internal sealed record RealtimeTickFrame(
     IReadOnlyList<PlayerTickData> Players,
     IReadOnlyList<MomentumEventUpdate>? MomentumEventUpdates = null)
 {
+    [JsonIgnore]
+    public bool BallPositionValid { get; init; }
+
     [JsonPropertyName("ratingModel")]
     public RatingResearchMatchData? RatingResearch { get; init; }
 
@@ -349,6 +352,12 @@ internal readonly record struct PlayerTickData(
     int SavesTipped,
     float DistanceM)
 {
+    [JsonIgnore]
+    public bool PositionValid { get; init; }
+
+    [JsonIgnore]
+    public bool MovementValid { get; init; }
+
     [JsonIgnore]
     public RatingResearchPlayerData? RatingResearch { get; init; }
 

@@ -540,6 +540,7 @@ internal sealed class GameMatchTickHook : IDisposable
         frame.BallXCentimeters = ball.X;
         frame.BallYCentimeters = ball.Y;
         frame.BallZCentimeters = ball.Z;
+        frame.BallPositionValid = ball.IsValid;
     }
 
     private void CaptureTeamPlayerFrames(
@@ -887,15 +888,17 @@ internal sealed class GameMatchTickHook : IDisposable
         var starterFlag = ReadByteDirect(stats + Offsets.PlayerStats.StarterSubstituteFlag);
         var subbedOn = ReadByteDirect(stats + Offsets.PlayerStats.SubbedOnMinute);
         var subbedOff = ReadByteDirect(stats + Offsets.PlayerStats.SubbedOffMinute);
-        ReadPlayerMovement(matchPlayer, out var speedCentimetersPerSecond, out var angleDegrees);
+        ReadPlayerMovement(matchPlayer, out var speedCentimetersPerSecond, out var angleDegrees, out var movementValid);
+        var positionX = BitConverter.Int32BitsToSingle(Marshal.ReadInt32(matchPlayer + Offsets.MatchPlayer.PositionX));
+        var positionY = BitConverter.Int32BitsToSingle(Marshal.ReadInt32(matchPlayer + Offsets.MatchPlayer.PositionY));
 
         player = new PlayerTickData(
             Slot: slot,
             PlayerId: playerId,
             Team: team,
             IsBallHolder: matchPlayer == ballHolder,
-            X: ReadFloatDirect(matchPlayer + Offsets.MatchPlayer.PositionX),
-            Y: ReadFloatDirect(matchPlayer + Offsets.MatchPlayer.PositionY),
+            X: float.IsFinite(positionX) ? positionX : 0f,
+            Y: float.IsFinite(positionY) ? positionY : 0f,
             SpeedCentimetersPerSecond: speedCentimetersPerSecond,
             AngleDegrees: angleDegrees,
             Rating: Marshal.ReadInt16(stats + Offsets.PlayerStats.RatingTimes100) / 100f,
@@ -940,7 +943,11 @@ internal sealed class GameMatchTickHook : IDisposable
             SavesHeld: ReadByteDirect(stats + Offsets.PlayerStats.SavesHeld),
             SavesParried: ReadByteDirect(stats + Offsets.PlayerStats.SavesParried),
             SavesTipped: ReadByteDirect(stats + Offsets.PlayerStats.SavesTipped),
-            DistanceM: ReadFloatDirect(stats + Offsets.PlayerStats.DistanceM));
+            DistanceM: ReadFloatDirect(stats + Offsets.PlayerStats.DistanceM))
+        {
+            PositionValid = float.IsFinite(positionX) && float.IsFinite(positionY),
+            MovementValid = movementValid,
+        };
         return true;
     }
 
@@ -1270,10 +1277,12 @@ internal sealed class GameMatchTickHook : IDisposable
     private bool ReadPlayerMovement(
         nint matchPlayer,
         out ushort speedCentimetersPerSecond,
-        out ushort? angleDegrees)
+        out ushort? angleDegrees,
+        out bool movementValid)
     {
         speedCentimetersPerSecond = 0;
         angleDegrees = null;
+        movementValid = false;
         if (!_memoryReader.TryReadPointer(
                 matchPlayer + Offsets.MatchPlayer.PositionHistory,
                 out var positionHistory) ||
@@ -1285,7 +1294,9 @@ internal sealed class GameMatchTickHook : IDisposable
             return false;
         }
 
-        var speedMetersPerSecond = ReadFloatDirect(positionHistory + Offsets.PositionHistory.Speed);
+        var rawSpeed = BitConverter.Int32BitsToSingle(Marshal.ReadInt32(positionHistory + Offsets.PositionHistory.Speed));
+        // Preserve the existing wire fallback while retaining validity for the SDK.
+        var speedMetersPerSecond = float.IsFinite(rawSpeed) ? rawSpeed : 0f;
         var angle = unchecked((ushort)Marshal.ReadInt16(
             positionHistory + Offsets.PositionHistory.Angle));
         if (!float.IsFinite(speedMetersPerSecond) || speedMetersPerSecond < 0 ||
@@ -1298,6 +1309,7 @@ internal sealed class GameMatchTickHook : IDisposable
             speedMetersPerSecond * 100f,
             MidpointRounding.AwayFromZero));
         angleDegrees = angle;
+        movementValid = float.IsFinite(rawSpeed);
         return true;
     }
 

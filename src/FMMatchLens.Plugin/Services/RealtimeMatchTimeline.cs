@@ -144,6 +144,7 @@ internal sealed class RealtimeMatchTimeline
                 MomentumEventUpdates: momentumEventUpdates)
             {
                 RatingResearch = raw.RatingResearch,
+                BallPositionValid = raw.BallPositionValid,
             };
 
             if (_chunks.Count == 0 || _lastChunkCount == ChunkSize)
