@@ -70,4 +70,9 @@
       Overwrite="true"
       Encoding="UTF-8" />
   </Target>
+  <Target Name="WriteLensBuildManifest" AfterTargets="Build">
+    <WriteLinesToFile File="$(TargetDir)lens-build.json"
+      Lines="{ &quot;unityIntegration&quot;: $(EnableUnityIntegration), &quot;productVersion&quot;: &quot;$(ProjectVersion)&quot;, &quot;sdkApiVersion&quot;: &quot;$(SdkApiMajor).$(SdkApiMinor)&quot; }"
+      Overwrite="true" />
+  </Target>
 </Project>

@@ -5,7 +5,7 @@
 <h1 align="center">FMMatchLens</h1>
 
 <p align="center">
-  <strong>English</strong> | <a href="README.zh-cn.md">简体中文</a>
+  <strong>English</strong> | <a href="README.zh-cn.md">Simplified Chinese</a>
 </p>
 
 <p align="center">
@@ -243,13 +243,40 @@ Do not place quotation marks around the path. Match archives, the graphics index
 
 ## Developer guide
 
+### Data SDK (FM27)
+
+The current source targets FM27. The SDK stays at API 1.0 during development; historical development interfaces are not compatibility targets. The read-only in-process SDK provides complete snapshots, lightweight module reads/subscriptions
+and bounded Unity-main-thread events for third-party BepInEx plugins. See the
+[standalone HUD source](examples/MinimalUnityHud/Plugin.cs), the public interfaces in
+`FMMatchLens.Contracts.dll`, and [validation and packaging](CONTRIBUTING.md#sdk-validation-and-packaging).
+Full builds require `-p:FMInteropDir="C:/FM27/BepInEx/interop"`; without game references,
+use `-p:EnableUnityIntegration=false` for a capture-only build with no SDK provider.
+SDK preview artifacts have not passed real-game validation. FM26 live capture requires the older 0.6.x plugin.
+
+Install a single `FMMatchLens.Contracts.dll` with the host. Consumers reference that DLL with
+`Private=false` and declare a BepInEx dependency on `LensApi.PluginId`. Discover the provider through
+`LensApi.TryGetProvider()`, check API major 1, and query immutable managed snapshots or subscribe to
+Motion, Summary, Statistics, Metadata, Momentum, events and lifecycle notifications. Callbacks run on
+Unity Update; dispose every subscription on unload. Clear retained views and events when Status is
+not Active or its SessionId changes. Queries perform no native memory reads or HTTP calls.
+
+Build the independent HUD after building the host:
+
+```powershell
+dotnet build examples/MinimalUnityHud -c Release -p:FMInteropDir="C:/FM27/BepInEx/interop"
+```
+
+From the unpacked developer SDK, also pass `-p:BepInExCoreDir="C:/FM27/BepInEx/core"`.
+Copy only `FMMatchLens.Examples.MinimalUnityHud.dll` into its own plugin directory. F8 toggles
+visibility; F9 switches between full-snapshot polling and Summary/Motion subscriptions.
+
 This section is for contributors who want to modify, debug, or build FMMatchLens. Users installing a release should follow the Quick Start instructions above.
 
 ### Requirements
 
 - [.NET SDK 10](https://dotnet.microsoft.com/download), with the version policy defined by `global.json`
 - [Node.js 22 or newer](https://nodejs.org/) and npm
-- Football Manager 2026 with BepInEx 6 IL2CPP installed for in-game debugging
+- Football Manager 2027 with BepInEx 6 IL2CPP installed for in-game debugging
 
 ### Clone the repository and install dependencies
 
@@ -261,11 +288,13 @@ cd FMMatchLens
 The plugin project depends on BepInEx and MonoMod runtime assemblies. To avoid redistributing third-party DLLs in this repository and to keep compile-time dependencies aligned with the target game environment, Git does not track `src/FMMatchLens.Plugin/lib/`. Before the first build, open PowerShell at the repository root and copy the dependencies from the BepInEx installation where the plugin will run. Replace `$bepInExCore` below with the actual path on your computer:
 
 ```powershell
-$bepInExCore = "C:\Path\To\Football Manager 2026\BepInEx\core"
+$bepInExCore = "C:\Path\To\Football Manager 2027\BepInEx\core"
 $pluginLib = Join-Path $PWD "src\FMMatchLens.Plugin\lib"
 $pluginReferences = @(
   "BepInEx.Core.dll",
   "BepInEx.Unity.IL2CPP.dll",
+  "BepInEx.Unity.Common.dll",
+  "Il2CppInterop.Runtime.dll",
   "MonoMod.Backports.dll",
   "MonoMod.RuntimeDetour.dll",
   "MonoMod.Utils.dll"
@@ -305,7 +334,8 @@ Vite prints the local URL. The frontend connects directly to the plugin API at `
 Run from the repository root:
 
 ```powershell
-dotnet build src/FMMatchLens.Plugin/FMMatchLens.Plugin.csproj -c Release
+dotnet build src/FMMatchLens.Plugin/FMMatchLens.Plugin.csproj -c Release -p:FMInteropDir="C:/FM27/BepInEx/interop"
+dotnet test tests/FMMatchLens.Sdk.Tests -c Release
 
 cd frontend
 npm run typecheck
@@ -325,10 +355,10 @@ Build outputs:
 After completing a Release build, copy the plugin DLL into the existing BepInEx installation:
 
 ```powershell
-$gameRoot = "C:\Path\To\Football Manager 2026"
+$gameRoot = "C:\Path\To\Football Manager 2027"
 $pluginRoot = Join-Path $gameRoot "BepInEx\plugins\FMMatchLens"
 New-Item -ItemType Directory -Force -Path $pluginRoot
-Copy-Item "src\FMMatchLens.Plugin\bin\Release\net6.0\FMMatchLens.Plugin.dll" $pluginRoot -Force
+Copy-Item "src\FMMatchLens.Plugin\bin\Release\net6.0\FMMatchLens.Plugin.dll", "src\FMMatchLens.Plugin\bin\Release\net6.0\FMMatchLens.Contracts.dll" $pluginRoot -Force
 ```
 
 Start the game and search the BepInEx log for `FMMatchLens` to confirm that it loaded. Set `Logging.Mode` to `debug` and restart the game when investigating Hook or data collection problems.

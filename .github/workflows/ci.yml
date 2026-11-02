@@ -57,6 +57,9 @@ jobs:
       - name: Test SDK, timeline and archive compatibility
         run: dotnet test tests/FMMatchLens.Sdk.Tests --configuration Release
 
+      - name: Test release packaging gates
+        run: python -m unittest discover -s tests/packaging -v
+
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
@@ -69,6 +72,10 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      - name: Test frontend
+        working-directory: frontend
+        run: npm test
+
       - name: Upload build outputs
         uses: actions/upload-artifact@v7
         with:
@@ -78,4 +85,5 @@ jobs:
           path: |
             src/FMMatchLens.Plugin/bin/Release/net6.0/FMMatchLens.Plugin.dll
             src/FMMatchLens.Plugin/bin/Release/net6.0/FMMatchLens.Contracts.dll
+            src/FMMatchLens.Plugin/bin/Release/net6.0/lens-build.json
             frontend/dist/

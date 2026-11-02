@@ -244,13 +244,22 @@ GraphicsPath = D:\FM Graphics
 
 ## 开发者指南
 
+### Data SDK（FM27）
+
+当前源码目标为 FM27。SDK 开发默认保持 1.0，不维护历史开发接口兼容；为第三方 BepInEx 插件提供完整快照、细粒度模块读取/订阅及有界主线程事件。
+参见 [独立 HUD 示例](examples/MinimalUnityHud/Plugin.cs)、`FMMatchLens.Contracts.dll` 公开接口和
+[验收与打包说明](CONTRIBUTING.md#sdk-validation-and-packaging)。
+完整构建需传入 `-p:FMInteropDir="C:/FM27/BepInEx/interop"`；无游戏引用时使用
+`-p:EnableUnityIntegration=false` 仅编译采集版本，该构建不注册 SDK Provider。
+SDK 预览包尚不代表游戏内验收通过；FM26 实时采集需使用旧版 0.6.x 插件。
+
 以下内容只适用于需要修改源码、调试或自行构建 FMMatchLens 的开发者。普通用户按照上面的“快速开始”安装 Release 即可。
 
 ### 环境要求
 
 - [.NET SDK 10](https://dotnet.microsoft.com/download)（版本由 `global.json` 管理）
 - [Node.js 22 或更高版本](https://nodejs.org/) 与 npm
-- 已安装 BepInEx 6 IL2CPP 的 Football Manager 2026，用于游戏内调试
+- 已安装 BepInEx 6 IL2CPP 的 Football Manager 2027，用于游戏内调试
 
 ### 获取源码并安装依赖
 
@@ -262,11 +271,13 @@ cd FMMatchLens
 插件项目依赖 BepInEx 与 MonoMod 的运行时程序集。为避免在仓库中分发第三方 DLL，并确保编译时版本与实际游戏环境一致，`src/FMMatchLens.Plugin/lib/` 不受 Git 跟踪。首次构建前，请在仓库根目录打开 PowerShell，从准备运行插件的 BepInEx 安装中复制依赖。先把下面的 `$bepInExCore` 改为自己机器上的真实路径：
 
 ```powershell
-$bepInExCore = "C:\Path\To\Football Manager 2026\BepInEx\core"
+$bepInExCore = "C:\Path\To\Football Manager 2027\BepInEx\core"
 $pluginLib = Join-Path $PWD "src\FMMatchLens.Plugin\lib"
 $pluginReferences = @(
   "BepInEx.Core.dll",
   "BepInEx.Unity.IL2CPP.dll",
+  "BepInEx.Unity.Common.dll",
+  "Il2CppInterop.Runtime.dll",
   "MonoMod.Backports.dll",
   "MonoMod.RuntimeDetour.dll",
   "MonoMod.Utils.dll"
@@ -306,7 +317,8 @@ Vite 会输出本地访问地址。前端会直接连接插件提供的 `127.0.0
 在仓库根目录执行：
 
 ```powershell
-dotnet build src/FMMatchLens.Plugin/FMMatchLens.Plugin.csproj -c Release
+dotnet build src/FMMatchLens.Plugin/FMMatchLens.Plugin.csproj -c Release -p:FMInteropDir="C:/FM27/BepInEx/interop"
+dotnet test tests/FMMatchLens.Sdk.Tests -c Release
 
 cd frontend
 npm run typecheck
@@ -326,10 +338,10 @@ npm run build
 完成 Release 构建后，将 DLL 复制到现有 BepInEx 安装中：
 
 ```powershell
-$gameRoot = "C:\Path\To\Football Manager 2026"
+$gameRoot = "C:\Path\To\Football Manager 2027"
 $pluginRoot = Join-Path $gameRoot "BepInEx\plugins\FMMatchLens"
 New-Item -ItemType Directory -Force -Path $pluginRoot
-Copy-Item "src\FMMatchLens.Plugin\bin\Release\net6.0\FMMatchLens.Plugin.dll" $pluginRoot -Force
+Copy-Item "src\FMMatchLens.Plugin\bin\Release\net6.0\FMMatchLens.Plugin.dll", "src\FMMatchLens.Plugin\bin\Release\net6.0\FMMatchLens.Contracts.dll" $pluginRoot -Force
 ```
 
 启动游戏后，可在 BepInEx 日志中搜索 `FMMatchLens` 确认加载状态。需要排查 Hook 或采集问题时，将 `Logging.Mode` 改为 `debug` 并重启游戏。

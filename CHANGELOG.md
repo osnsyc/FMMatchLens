@@ -3,6 +3,24 @@
 
 This file records the project's important changes. Version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Kept the developing Data SDK at API 1.0 and removed historical development ABI compatibility requirements. Complete immutable snapshots remain available.
+- Added independent Motion, Summary, Statistics, Metadata and Momentum reads/subscriptions, with frozen team/player selection, configurable rates, shared lazy projections and latest-state coalescing.
+- Unified SDK events as future-only filtered upsert/scope-exit notifications, and added coalesced/suppressed/session diagnostics plus F9 full/module HUD comparison.
+- Exposed detailed team/player counters, valid speed/facing, cached profiles/attributes/tactics/season data, competition/managers/kit metadata and immutable captured event trajectory points.
+- Added Data SDK API 1.0: shared pure .NET Contracts, independent sessions, immutable cached snapshots, lifecycle notifications and existing logical-event upserts for verified FM27 builds.
+- Added bounded Unity-main-thread subscriptions with per-consumer drop/error diagnostics, dispatch budgets and slow-callback disablement.
+- Added an independent IMGUI HUD example, SDK documentation, managed timeline/archive regression tests, and Windows validation/package helpers.
+
+### Changed
+
+- Preserved internal position-read validity for SDK null values without changing HTTP/WebSocket payloads or `.fmlens` format 2.8.
+- Isolated local HTTP startup failures so capture, archives and SDK can continue.
+- Full plugin builds now require FM27 Unity interop references. Public CI explicitly builds capture-only previews; formal SDK packaging/publication requires local Windows validation of exact binaries.
+
 ## [0.7.0] - 2026-10-30
 
 ### Added
