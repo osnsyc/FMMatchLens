@@ -53,6 +53,22 @@ internal static class GamePluginBuildCatalog
         return false;
     }
 
+    // A game update can move the hook target. Detouring an address inside a
+    // function corrupts it, so an unverified fallback must land on an entry
+    // point recorded in the module's unwind table.
+    internal static bool IsFunctionEntry(nint moduleHandle, int rva)
+    {
+        var address = (ulong)(moduleHandle + rva);
+        var functionEntry = RtlLookupFunctionEntry(address, out var imageBase, default);
+        if (functionEntry == default || imageBase != (ulong)moduleHandle)
+        {
+            return false;
+        }
+
+        // RUNTIME_FUNCTION starts with the function's BeginAddress RVA.
+        return Marshal.ReadInt32(functionEntry) == rva;
+    }
+
     private static string GetModulePath(nint moduleHandle)
     {
         var buffer = new StringBuilder(MaximumWindowsPathLength);
@@ -72,6 +88,9 @@ internal static class GamePluginBuildCatalog
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern int GetModuleFileName(nint moduleHandle, StringBuilder fileName, int size);
+
+    [DllImport("kernel32.dll")]
+    private static extern nint RtlLookupFunctionEntry(ulong controlPc, out ulong imageBase, nint historyTable);
 }
 
 internal readonly record struct GamePluginBuild(string Distribution, string Sha256, int MatchTickHookRva);
