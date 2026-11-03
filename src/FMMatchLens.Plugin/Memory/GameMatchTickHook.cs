@@ -113,6 +113,7 @@ internal sealed class GameMatchTickHook : IDisposable
     private int _isLoggingDiagnostics;
     private int _instructionOffset;
     private bool _started;
+    private bool _buildRejected;
 
     public GameMatchTickHook(RealtimeMatchTimeline timeline)
     {
@@ -121,7 +122,7 @@ internal sealed class GameMatchTickHook : IDisposable
     }
 
     public bool IsStarted => _started;
-    public bool ShouldRetry => true;
+    public bool ShouldRetry => !_buildRejected;
 
     public bool Start(bool logModuleNotLoaded = true)
     {
@@ -162,6 +163,15 @@ internal sealed class GameMatchTickHook : IDisposable
 
             if (!supportedBuild)
             {
+                if (!GamePluginBuildCatalog.IsFunctionEntry(moduleBase, build.MatchTickHookRva))
+                {
+                    _buildRejected = true;
+                    PluginLogger.Warning(
+                        $"Unrecognized game_plugin.dll build; match capture is disabled because fallback RVA " +
+                        $"0x{build.MatchTickHookRva:X} is not a function entry for sha256={sha256}.");
+                    return false;
+                }
+
                 PluginLogger.Warning(
                     $"Unrecognized game_plugin.dll build; trying fallback GAME_MATCH hook RVA " +
                     $"0x{build.MatchTickHookRva:X} for sha256={sha256}.");

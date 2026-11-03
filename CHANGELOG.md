@@ -3,6 +3,12 @@
 
 This file records the project's important changes. Version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Fixed a startup crash after a game update moved the native match-update function. An unrecognized build now uses the fallback hook only when the fallback RVA is a function entry; otherwise match capture is disabled and the game starts normally.
+
 ## [0.7.0] - 2026-10-30
 
 ### Added
