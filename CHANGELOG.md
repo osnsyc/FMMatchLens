@@ -3,7 +3,11 @@
 
 This file records the project's important changes. Version numbers follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.7.1] - 2026-11-03
+
+### Added
+
+- Support steam version 26340721.
 
 ### Fixed
 
