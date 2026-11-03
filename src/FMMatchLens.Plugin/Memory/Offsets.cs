@@ -2,9 +2,6 @@ namespace FMMatchLens.Plugin.Memory;
 
 internal static class Offsets
 {
-    // FM27 game_plugin.dll BC940E472418FC5C214208D7CF30FECF600F689B6F9D71C11BA19A2DF0FE057F.
-    // Native hook activation is restricted to the matching build catalog entry.
-    // Unchanged player substructure fields still require FM27 feature regression.
     public static class GameMatch
     {
         public const int Competition = 0x678;
