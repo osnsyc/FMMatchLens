@@ -262,7 +262,7 @@ internal sealed class GameMatchTickHook : IDisposable
         _momentumCalculator.Dispose();
     }
 
-    private ulong MatchUpdateHook(nint match, ulong param2, nint param3, nint param4, nint param5)
+    private ulong MatchUpdateHook(nint match, uint param2)
     {
         try
         {
@@ -279,11 +279,11 @@ internal sealed class GameMatchTickHook : IDisposable
             {
                 lock (_animatedUpdateGate)
                 {
-                    return InvokeOriginalAndCapture(original, match, param2, param3, param4, param5);
+                    return InvokeOriginalAndCapture(original, match, param2);
                 }
             }
 
-            return InvokeOriginalAndCapture(original, match, param2, param3, param4, param5);
+            return InvokeOriginalAndCapture(original, match, param2);
         }
         catch (Exception ex)
         {
@@ -302,10 +302,10 @@ internal sealed class GameMatchTickHook : IDisposable
     }
 
     private ulong InvokeOriginalAndCapture(
-        MatchUpdateDelegate original, nint match, ulong param2, nint param3, nint param4, nint param5)
+        MatchUpdateDelegate original, nint match, uint param2)
     {
         VirtualMemory.InvalidateActiveReadScopes();
-        var result = original(match, param2, param3, param4, param5);
+        var result = original(match, param2);
         // A fresh scope starts after every Original, including callbacks that
         // only produce lightweight records. Never carry a map across updates.
         using var memoryScope = VirtualMemory.BeginReadScope();
@@ -2904,11 +2904,10 @@ internal sealed class GameMatchTickHook : IDisposable
         return address == default ? "0x0" : $"0x{(long)address:X}";
     }
 
-    // FM27 RVA 0x4530BC0 receives RCX/RDX/R8/R9 plus a fifth stack argument.
-    // Forward every argument unchanged; the former FM26 two-argument ABI loses
-    // the context pointers used by the new update function.
+    // FM27 outer update receives the GAME_MATCH pointer in RCX and a 32-bit value in EDX.
+    // Capture after it returns, once the native tick increment has completed.
     [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate ulong MatchUpdateDelegate(nint match, ulong param2, nint param3, nint param4, nint param5);
+    private delegate ulong MatchUpdateDelegate(nint match, uint param2);
 
     private enum DiagnosticSeverity
     {

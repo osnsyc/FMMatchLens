@@ -8,17 +8,17 @@ namespace FMMatchLens.Plugin.Memory;
 internal static class GamePluginBuildCatalog
 {
     private const int MaximumWindowsPathLength = 32_768;
-    private const int DefaultMatchTickHookRva = 0x4532A00;
+    private const int DefaultMatchTickHookRva = 0x45210F0;
     private static readonly GamePluginBuild[] SupportedBuilds =
     [
         new(
             "steam-26340721",
             "252ff8fb5b7a4a5a5464db6ba632e309eef9b6e65ffa992ae20575a189e66c6a",
-            0x4532A00),
+            0x45210F0),
         new(
             "steam-26227640",
             "bc940e472418fc5c214208d7cf30fecf600f689b6f9d71c11ba19a2df0fe057f",
-            0x4530BC0),
+            0x451F2B0),
     ];
 
     public static bool TryResolve(
