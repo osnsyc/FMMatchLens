@@ -50,6 +50,9 @@ internal sealed class ArchiveWriter : IDisposable
     private readonly Task _worker;
     private readonly Timer _sealTimer;
     private readonly List<RealtimeTickFrame> _pendingFrames;
+    // Keep one mutable tail outside sealed chunks so a same-tick final snapshot
+    // can replace it without introducing duplicate ticks or a new wire format.
+    private RealtimeTickFrame? _tailFrame;
     private long _lastSealTimestamp;
     private uint _metadataRevision;
     private RealtimeMatchMetadata? _metadataSnapshot;
@@ -99,7 +102,17 @@ internal sealed class ArchiveWriter : IDisposable
         lock (_gate)
         {
             if (!_accepting || _failure is not null || frame.MatchId != _matchId) return;
-            _pendingFrames.Add(frame);
+            if (_tailFrame is { } tail)
+            {
+                if (frame.Tick < tail.Tick) return;
+                if (frame.Tick == tail.Tick)
+                {
+                    _tailFrame = frame;
+                    return;
+                }
+                _pendingFrames.Add(tail);
+            }
+            _tailFrame = frame;
             var now = Environment.TickCount64;
             if (_pendingFrames.Count >= _options.ChunkTicks || now - _lastSealTimestamp >= _options.MaxChunkLatencyMilliseconds)
             {
@@ -173,6 +186,7 @@ internal sealed class ArchiveWriter : IDisposable
             _sealTimer.Change(Timeout.Infinite, Timeout.Infinite);
             if (_accepting)
             {
+                FlushTailFrameLocked();
                 SealChunkLocked(Environment.TickCount64);
                 EnqueueLocked(new CompleteWorkItem(endedUnixMilliseconds));
                 _accepting = false;
@@ -193,6 +207,7 @@ internal sealed class ArchiveWriter : IDisposable
             _sealTimer.Change(Timeout.Infinite, Timeout.Infinite);
             if (_accepting)
             {
+                FlushTailFrameLocked();
                 SealChunkLocked(Environment.TickCount64);
                 _accepting = false;
                 if (!_queue.IsAddingCompleted) _queue.CompleteAdding();
@@ -201,6 +216,13 @@ internal sealed class ArchiveWriter : IDisposable
         WaitForWorker(TimeSpan.FromSeconds(_completed ? 15 : 3));
         _sealTimer.Dispose();
         _queue.Dispose();
+    }
+
+    private void FlushTailFrameLocked()
+    {
+        if (_tailFrame is not { } tail) return;
+        _pendingFrames.Add(tail);
+        _tailFrame = null;
     }
 
     private void SealChunkLocked(long now)

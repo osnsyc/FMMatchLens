@@ -115,6 +115,14 @@ internal sealed class MatchArchiveStore : IDisposable
         }
     }
 
+    public void CloseIncomplete(string matchId)
+    {
+        lock (_gate)
+        {
+            if (matchId == _currentMatchId) CloseWriterLocked();
+        }
+    }
+
     public MatchArchivePage List(int page, int pageSize)
     {
         lock (_gate)

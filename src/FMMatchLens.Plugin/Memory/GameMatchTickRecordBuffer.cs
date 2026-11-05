@@ -27,6 +27,10 @@ internal readonly record struct GameMatchTickRecord(
     byte AwayShots)
 {
     public int PlayerCount => HomePlayerCount + AwayPlayerCount;
+    public bool FinishedByFlags { get; init; }
+    public bool FinalFrameQueued { get; init; }
+    public long InstanceGeneration { get; init; }
+    public MatchInstanceIdentity? Identity { get; init; }
 }
 
 /// <summary>

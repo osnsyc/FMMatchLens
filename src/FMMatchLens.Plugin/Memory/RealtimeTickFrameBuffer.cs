@@ -131,6 +131,8 @@ internal sealed class RawRealtimeTickFrame
 
     public int PoolIndex { get; }
     public long Sequence;
+    public long InstanceGeneration;
+    public bool FinishedByFlags;
     public long CapturedTimestamp;
     public nint MatchAddress;
     public int Tick;

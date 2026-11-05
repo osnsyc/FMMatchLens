@@ -5,8 +5,8 @@ using FMMatchLens.Plugin.Memory;
 namespace FMMatchLens.Plugin.Services;
 
 /// <summary>
-/// Chunked, append-only storage for the current animated match. The final active
-/// frame remains available after the terminal native state has been observed.
+/// Chunked storage for the current animated match, with a replaceable final tick.
+/// The final frame remains available after the terminal native state is observed.
 /// </summary>
 internal sealed class RealtimeMatchTimeline
 {
@@ -88,7 +88,9 @@ internal sealed class RealtimeMatchTimeline
                 return false;
             }
 
-            if (raw.Tick == _lastTick)
+            var replaceFinalTick = raw.FinishedByFlags && raw.Tick == _lastTick &&
+                                   _current is not null && raw.Sequence > _current.Sequence;
+            if (raw.Tick == _lastTick && !replaceFinalTick)
             {
                 _duplicateTickCount++;
                 return false;
@@ -146,14 +148,33 @@ internal sealed class RealtimeMatchTimeline
                 RatingResearch = raw.RatingResearch,
             };
 
-            if (_chunks.Count == 0 || _lastChunkCount == ChunkSize)
+            if (replaceFinalTick)
             {
-                _chunks.Add(new RealtimeTickFrame[ChunkSize]);
-                _lastChunkCount = 0;
+                // These are deltas already consumed from native sources. Retain
+                // the earlier observation when replacing this tick's snapshot.
+                frame = frame with
+                {
+                    Momentum = _current!.Momentum.Concat(frame.Momentum)
+                        .GroupBy(value => value.TimeTicks).Select(group => group.Last()).ToArray(),
+                    RollingMomentum = _current.RollingMomentum.Concat(frame.RollingMomentum)
+                        .GroupBy(value => value.TimeTicks).Select(group => group.Last()).ToArray(),
+                    MomentumEvents = _current.MomentumEvents.Concat(frame.MomentumEvents)
+                        .GroupBy(value => value.SequenceIndex).Select(group => group.Last()).ToArray(),
+                    MomentumEventUpdates = (_current.MomentumEventUpdates ?? Array.Empty<MomentumEventUpdate>())
+                        .Concat(frame.MomentumEventUpdates ?? Array.Empty<MomentumEventUpdate>()).ToArray()
+                };
+                _chunks[^1][_lastChunkCount - 1] = frame;
             }
-
-            _chunks[^1][_lastChunkCount++] = frame;
-            _frameCount++;
+            else
+            {
+                if (_chunks.Count == 0 || _lastChunkCount == ChunkSize)
+                {
+                    _chunks.Add(new RealtimeTickFrame[ChunkSize]);
+                    _lastChunkCount = 0;
+                }
+                _chunks[^1][_lastChunkCount++] = frame;
+                _frameCount++;
+            }
             _lastTick = frame.Tick;
             _current = frame;
             _status = "live";
@@ -204,6 +225,10 @@ internal sealed class RealtimeMatchTimeline
                         forceAppend: true);
                 }
             }
+
+            if (replaceFinalTick && _metadataTimeline.Count > 0 &&
+                _metadataTimeline[^1].Frame?.Tick == frame.Tick)
+                _metadataTimeline[^1] = _metadataTimeline[^1] with { Frame = frame };
 
             _archives.Append(frame);
 
@@ -262,6 +287,17 @@ internal sealed class RealtimeMatchTimeline
                     _archives.Complete(_matchId);
                 }
             }
+        }
+    }
+
+    public void MarkInterrupted(nint sourceMatchAddress)
+    {
+        lock (_gate)
+        {
+            if (sourceMatchAddress != _sourceMatchAddress) return;
+            if (_matchId is not null) _archives.CloseIncomplete(_matchId);
+            _sourceMatchAddress = default;
+            _status = "waiting";
         }
     }
 
