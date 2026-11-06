@@ -37,4 +37,5 @@ exports/
 
 tools/
 dev/
+docs-local
 src/FMMatchLens.Plugin/lib/
