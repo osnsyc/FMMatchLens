@@ -40,6 +40,8 @@ import {
 import { ScoreHeader } from "@/components/ScoreHeader"
 import { PlayerComparisonPopup, SquadPanel } from "@/components/SquadPanel"
 import { PlayerMatchDetailsPopup } from "@/components/PlayerMatchDetailsPopup"
+import { useMatchKits } from "@/hooks/useMatchKits"
+import { MatchKitSymbols } from "@/components/PlayerShirt"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useTheme } from "@/components/theme-provider"
 import { useRealtimeMatch, type RealtimeFrame } from "@/api/realtimeMatch"
@@ -445,6 +447,7 @@ export function App() {
     preset,
   ])
   const hasMatch = match !== null
+  const kits = useMatchKits(match?.home.colorSource, match?.away.colorSource)
 
   const setPinnedPlayer = useCallback((side: TeamSide, playerId?: number) => {
     setPinnedPlayers((current) => updatePinnedPlayer(current, side, playerId))
@@ -805,6 +808,7 @@ export function App() {
 
   return (
     <main className="scrollbar-hidden h-svh w-full overflow-auto bg-background p-4 sm:p-6">
+      <MatchKitSymbols kits={kits} />
       {exploreTour.Tour}
       {exploreTour.spotlightLayer}
       {exploreTour.cueLayer}
@@ -873,6 +877,8 @@ export function App() {
                   allPlayers={match.players}
                   events={match.events}
                   teamColor={match.home.color}
+                  outfieldKit={kits[0]}
+                  goalkeeperKit={kits[1]}
                   pinnedPlayerId={pinnedHomePlayer?.id}
                   attackingOpponent={
                     pinnedPlayers.attackingSide === "away"
@@ -1050,6 +1056,8 @@ export function App() {
                   allPlayers={match.players}
                   events={match.events}
                   teamColor={match.away.color}
+                  outfieldKit={kits[2]}
+                  goalkeeperKit={kits[3]}
                   pinnedPlayerId={pinnedAwayPlayer?.id}
                   attackingOpponent={
                     pinnedPlayers.attackingSide === "home"

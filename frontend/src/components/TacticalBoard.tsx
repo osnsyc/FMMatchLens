@@ -295,8 +295,8 @@ export const TacticalBoard = memo(function TacticalBoard({
     () => ({
       homeColor: match.home.color ?? "var(--team-home-fallback)",
       awayColor: match.away.color ?? "var(--team-away-fallback)",
-      homeGoalkeeperColor: match.home.colorSource?.shirtBackgroundColorGK,
-      awayGoalkeeperColor: match.away.colorSource?.shirtBackgroundColorGK,
+      homeGoalkeeperColor: match.home.colorSource?.goalkeeperShirtBackgroundColor,
+      awayGoalkeeperColor: match.away.colorSource?.goalkeeperShirtBackgroundColor,
       showNumbers,
       tokens: cssVizTokens(
         settings.presetId,
@@ -306,9 +306,9 @@ export const TacticalBoard = memo(function TacticalBoard({
     }),
     [
       match.away.color,
-      match.away.colorSource?.shirtBackgroundColorGK,
+      match.away.colorSource?.goalkeeperShirtBackgroundColor,
       match.home.color,
-      match.home.colorSource?.shirtBackgroundColorGK,
+      match.home.colorSource?.goalkeeperShirtBackgroundColor,
       resolvedScheme,
       settings.colorVision,
       settings.presetId,

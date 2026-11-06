@@ -271,23 +271,37 @@ internal static class Offsets
 
     public static class TeamBase
     {
-        // Live-match samples confirm that twenty-two consecutive uint32 ARGB
-        // colours occupy +0x04 through +0x58.
-        //
-        // GameAssembly.dll research reference (this is NOT a direct layout map):
-        // PlayerKitSetup contains 16-byte Color fields named as follows:
-        // +0x04 shirtBackgroundColor, +0x14 shirtForegroundColor,
-        // +0x24 shirtOutlineColor, +0x34 shirtNumberColor,
-        // +0x44 shirtNumberOutlineColor, +0x54 shortsBackgroundColor,
-        // +0x64 shortsForegroundColor, +0x74 socksBackgroundColor,
-        // +0x84 socksForegroundColor, +0x94 iconBackgroundColor,
-        // +0xA4 iconForegroundColor, +0xB4 iconOutlineColor, and
-        // +0xC4 iconNumberColor. PlayerKitSetup uses larger Color values,
-        // whereas this TeamBase block is twenty-two packed 4-byte ARGB values;
-        // do not transfer those offsets here without tracing the conversion.
-        public const int shirtNumberColor = 0x04;
-        public const int shirtBackgroundColor = 0x0C;
-        public const int shirtBackgroundColorGK = 0x1C;
+        // Packed uint32 ARGB, traced from the selected-match kit cache by
+        // FUN_184963fe0 (steam-26340721); independently sampled in a live match.
+        // These are TeamBase offsets, not Unity PlayerKitSetup Color offsets.
+        public const int IconForegroundColor = 0x04;
+        public const int IconOutlineColor = 0x08;
+        public const int IconBackgroundColor = 0x0C;
+        public const int IconNumberColor = 0x10;
+        public const int GoalkeeperShirtForegroundColorDuplicate = 0x14;
+        public const int GoalkeeperShirtOutlineColorDuplicate = 0x18;
+        public const int GoalkeeperShirtBackgroundColorDuplicate = 0x1C;
+        public const int GoalkeeperShirtNumberColorDuplicate = 0x20;
+        public const int GoalkeeperShirtNumberOutlineColorDuplicate = 0x24;
+        public const int TitleForegroundColor = 0x28;
+        public const int TitleOutlineColor = 0x2C;
+        public const int TitleBackgroundColor = 0x30;
+        public const int ShirtForegroundColor = 0x34;
+        public const int ShirtOutlineColor = 0x38;
+        public const int ShirtBackgroundColor = 0x3C;
+        public const int ShirtNumberColor = 0x40;
+        public const int ShirtNumberOutlineColor = 0x44;
+        public const int GoalkeeperShirtForegroundColor = 0x48;
+        public const int GoalkeeperShirtOutlineColor = 0x4C;
+        public const int GoalkeeperShirtBackgroundColor = 0x50;
+        public const int GoalkeeperShirtNumberColor = 0x54;
+        public const int GoalkeeperShirtNumberOutlineColor = 0x58;
+        // Byte fields, confirmed by KitReference UI properties. Back type:
+        // 0 = same, 1 = square for number, 2 = plain (same resource, style 1).
+        public const int ShirtStyle = 0x1A4;
+        public const int GoalkeeperShirtStyle = 0x1A5;
+        public const int ShirtBackType = 0x1A7;
+        public const int GoalkeeperShirtBackType = 0x1A8;
         public const int Xg = 0x60;
         public const int PossessionTime = 0x7C;
         public const int Unknown84 = 0x84;

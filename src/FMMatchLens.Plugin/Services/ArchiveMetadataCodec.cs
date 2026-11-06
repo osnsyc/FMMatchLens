@@ -458,26 +458,75 @@ internal static class ArchiveMetadataCodec
         WriteNullableUInt(writer, team.ForegroundColour);
         WriteNullableUInt(writer, team.OutlineColour);
         WriteStringId(writer, team.LogoPath, ids);
-        if (structureMinor >= 7)
+        if (structureMinor >= 9)
         {
-            WriteNullableUInt(writer, team.ShirtNumberColor);
             WriteNullableUInt(writer, team.ShirtBackgroundColor);
-            WriteNullableUInt(writer, team.ShirtBackgroundColorGK);
+            WriteNullableUInt(writer, team.ShirtForegroundColor);
+            WriteNullableUInt(writer, team.ShirtOutlineColor);
+            WriteNullableUInt(writer, team.GoalkeeperShirtBackgroundColor);
+            WriteNullableUInt(writer, team.GoalkeeperShirtForegroundColor);
+            WriteNullableUInt(writer, team.GoalkeeperShirtOutlineColor);
+            WriteNullableUInt(writer, team.ShirtStyle);
+            WriteNullableUInt(writer, team.ShirtBackType);
+            WriteNullableUInt(writer, team.GoalkeeperShirtStyle);
+            WriteNullableUInt(writer, team.GoalkeeperShirtBackType);
+            WriteNullableUInt(writer, team.ShirtNumberColor);
+            WriteNullableUInt(writer, team.ShirtNumberOutlineColor);
+            WriteNullableUInt(writer, team.GoalkeeperShirtNumberColor);
+            WriteNullableUInt(writer, team.GoalkeeperShirtNumberOutlineColor);
+        }
+        else if (structureMinor >= 7)
+        {
+            // 2.7/2.8 stored icon colours under misleading shirt names.
+            WriteNullableUInt(writer, team.IconForegroundColor);
+            WriteNullableUInt(writer, team.IconBackgroundColor);
+            WriteNullableUInt(writer, team.GoalkeeperShirtBackgroundColor);
         }
     }
 
-    private static RealtimeTeamMetadata ReadTeam(BinaryReader reader, IReadOnlyList<string> strings, ushort structureMinor) => new(
-        ReadNullableUInt(reader),
-        ReadNullableUInt(reader),
-        ReadStringId(reader, strings) ?? string.Empty,
-        ReadNullableUInt(reader),
-        ReadNullableUInt(reader),
-        ReadNullableUInt(reader),
-        ReadStringId(reader, strings),
-        Manager: null,
-        ShirtNumberColor: structureMinor >= 7 ? ReadNullableUInt(reader) : null,
-        ShirtBackgroundColor: structureMinor >= 7 ? ReadNullableUInt(reader) : null,
-        ShirtBackgroundColorGK: structureMinor >= 7 ? ReadNullableUInt(reader) : null);
+    private static RealtimeTeamMetadata ReadTeam(BinaryReader reader, IReadOnlyList<string> strings, ushort structureMinor)
+    {
+        var team = new RealtimeTeamMetadata(
+            ReadNullableUInt(reader),
+            ReadNullableUInt(reader),
+            ReadStringId(reader, strings) ?? string.Empty,
+            ReadNullableUInt(reader),
+            ReadNullableUInt(reader),
+            ReadNullableUInt(reader),
+            ReadStringId(reader, strings));
+        if (structureMinor >= 9)
+            return team with
+            {
+                ShirtBackgroundColor = ReadNullableUInt(reader),
+                ShirtForegroundColor = ReadNullableUInt(reader),
+                ShirtOutlineColor = ReadNullableUInt(reader),
+                GoalkeeperShirtBackgroundColor = ReadNullableUInt(reader),
+                GoalkeeperShirtForegroundColor = ReadNullableUInt(reader),
+                GoalkeeperShirtOutlineColor = ReadNullableUInt(reader),
+                ShirtStyle = ReadNullableKitByte(reader),
+                ShirtBackType = ReadNullableKitByte(reader),
+                GoalkeeperShirtStyle = ReadNullableKitByte(reader),
+                GoalkeeperShirtBackType = ReadNullableKitByte(reader),
+                ShirtNumberColor = ReadNullableUInt(reader),
+                ShirtNumberOutlineColor = ReadNullableUInt(reader),
+                GoalkeeperShirtNumberColor = ReadNullableUInt(reader),
+                GoalkeeperShirtNumberOutlineColor = ReadNullableUInt(reader)
+            };
+        return structureMinor >= 7 ? team with
+        {
+            IconForegroundColor = ReadNullableUInt(reader),
+            IconBackgroundColor = ReadNullableUInt(reader),
+            GoalkeeperShirtBackgroundColor = ReadNullableUInt(reader)
+        } : team;
+    }
+
+    private static byte? ReadNullableKitByte(BinaryReader reader)
+    {
+        var value = ReadNullableUInt(reader);
+        if (value > byte.MaxValue)
+            throw new ArchiveFormatException("invalid_kit_byte", "Kit style exceeds one byte.");
+        return (byte?)value;
+    }
 
     private static void WriteCompetition(
         BinaryWriter writer,

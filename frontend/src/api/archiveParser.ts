@@ -21,7 +21,7 @@ import {
 const magic = "FMLENS2\0"
 const archiveStructureMajor = 2
 const firstSupportedStructureMinor = 1
-const archiveStructureMinor = 8
+const archiveStructureMinor = 9
 const legacy21FramePayloadMarker = 1
 const legacy21BlockStructure = 1
 const metadataRecord = 1
@@ -820,14 +820,38 @@ function readPitchHalf(reader: ArchiveBufferReader) {
 }
 
 function readTeamMetadata(reader: ArchiveBufferReader, strings: Array<string | undefined>, structureMinor: number): RealtimeTeamMetadata {
-  return {
+  const team: RealtimeTeamMetadata = {
     uid: readNullableUint(reader), clubUid: readNullableUint(reader), name: readStringId(reader, strings) ?? "",
     backgroundColour: readNullableUint(reader), foregroundColour: readNullableUint(reader), outlineColour: readNullableUint(reader),
     logoPath: readStringId(reader, strings),
-    shirtNumberColor: structureMinor >= 7 ? readNullableUint(reader) : undefined,
-    shirtBackgroundColor: structureMinor >= 7 ? readNullableUint(reader) : undefined,
-    shirtBackgroundColorGK: structureMinor >= 7 ? readNullableUint(reader) : undefined,
   }
+  if (structureMinor >= 9) {
+    team.shirtBackgroundColor = readNullableUint(reader)
+    team.shirtForegroundColor = readNullableUint(reader)
+    team.shirtOutlineColor = readNullableUint(reader)
+    team.goalkeeperShirtBackgroundColor = readNullableUint(reader)
+    team.goalkeeperShirtForegroundColor = readNullableUint(reader)
+    team.goalkeeperShirtOutlineColor = readNullableUint(reader)
+    team.shirtStyle = readNullableKitByte(reader)
+    team.shirtBackType = readNullableKitByte(reader)
+    team.goalkeeperShirtStyle = readNullableKitByte(reader)
+    team.goalkeeperShirtBackType = readNullableKitByte(reader)
+    team.shirtNumberColor = readNullableUint(reader)
+    team.shirtNumberOutlineColor = readNullableUint(reader)
+    team.goalkeeperShirtNumberColor = readNullableUint(reader)
+    team.goalkeeperShirtNumberOutlineColor = readNullableUint(reader)
+  } else if (structureMinor >= 7) {
+    team.iconForegroundColor = readNullableUint(reader)
+    team.iconBackgroundColor = readNullableUint(reader)
+    team.goalkeeperShirtBackgroundColor = readNullableUint(reader)
+  }
+  return team
+}
+
+function readNullableKitByte(reader: ArchiveBufferReader) {
+  const value = readNullableUint(reader)
+  if (value !== undefined && value > 255) throw new ArchiveError("Kit style exceeds one byte")
+  return value
 }
 
 function readCompetitionMetadata(reader: ArchiveBufferReader, strings: Array<string | undefined>) {

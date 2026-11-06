@@ -247,7 +247,7 @@ export function PlayerMatchDetailsPopup({
             </Avatar>
             <div className="flex min-w-0 flex-col justify-center px-3 py-2">
               <div className="flex min-w-0 items-center gap-1.5">
-                <h2 className="min-w-0 truncate text-sm font-bold">{player.fullName ?? player.name}</h2>
+                <h2 className="min-w-0 truncate text-sm font-bold" title={player.fullName ?? player.name}>{player.fullName ?? player.name}</h2>
                 <span className="shrink-0 text-[11px] font-bold" style={{ color: teamColor }}>#{player.shirtNumber ?? "-"}</span>
                 <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
                   {player.position ?? player.inPossession?.position ?? "-"}

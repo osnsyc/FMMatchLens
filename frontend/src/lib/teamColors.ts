@@ -2,9 +2,22 @@ export type TeamColorSource = {
   backgroundColour?: number
   foregroundColour?: number
   outlineColour?: number
-  shirtNumberColor?: number
+  iconForegroundColor?: number
+  iconBackgroundColor?: number
   shirtBackgroundColor?: number
-  shirtBackgroundColorGK?: number
+  shirtForegroundColor?: number
+  shirtOutlineColor?: number
+  goalkeeperShirtBackgroundColor?: number
+  goalkeeperShirtForegroundColor?: number
+  goalkeeperShirtOutlineColor?: number
+  shirtStyle?: number
+  shirtBackType?: number
+  goalkeeperShirtStyle?: number
+  goalkeeperShirtBackType?: number
+  shirtNumberColor?: number
+  shirtNumberOutlineColor?: number
+  goalkeeperShirtNumberColor?: number
+  goalkeeperShirtNumberOutlineColor?: number
 }
 
 export type TeamThemeColors = {
@@ -64,7 +77,7 @@ export function selectTeamDisplayColors(
   }
 
   const sourceKey = [homeSource, awaySource]
-    .flatMap((source) => [source?.shirtBackgroundColor, source?.backgroundColour, source?.foregroundColour, source?.outlineColour])
+    .flatMap((source) => [source?.shirtBackgroundColor ?? source?.iconBackgroundColor, source?.backgroundColour, source?.foregroundColour, source?.outlineColour])
     .join(":")
   const cacheKey = `${appearance.presetId}:${appearance.resolvedScheme}:${appearance.colorVision}:${sourceKey}`
   const cached = displayColorCache.get(cacheKey)
@@ -165,7 +178,7 @@ function candidatesFrom(
   fallback: string
 ): Candidate[] {
   const colors = [
-    source?.shirtBackgroundColor,
+    source?.shirtBackgroundColor ?? source?.iconBackgroundColor,
     source?.backgroundColour,
     source?.foregroundColour,
     source?.outlineColour,

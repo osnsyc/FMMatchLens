@@ -31,6 +31,16 @@ const appearance = { presetId: "fm", resolvedScheme: "light", colorVision: "stan
 const away = { backgroundColour: 0xff000088 }
 
 describe("shirt background team colors", () => {
+  it("selects the same colours live and in 2.9 archives that omit live-only icon colours", () => {
+    const saved = { shirtBackgroundColor: 0xffaa0000, backgroundColour: 0xff000000 }
+    expect(selectTeamDisplayColors({ ...saved, iconBackgroundColor: 0xff008800 }, away, appearance))
+      .toEqual(selectTeamDisplayColors(saved, away, appearance))
+  })
+  it("retains the legacy icon-background fallback and refreshes its cache on changes", () => {
+    const home = { iconBackgroundColor: 0xffaa0000, backgroundColour: 0xff000000 }
+    expect(selectTeamDisplayColors(home, away, appearance).home).toBe("#AA0000")
+    expect(selectTeamDisplayColors({ ...home, iconBackgroundColor: 0xff008800 }, away, appearance).home).toBe("#008800")
+  })
   it("prefers readable shirt background over club colors in both selection paths", () => {
     const home = { shirtBackgroundColor: 0xffbb0000, backgroundColour: 0xff000000 }
     expect(selectTeamDisplayColors(home, away, appearance).home).toBe("#BB0000")
@@ -48,8 +58,8 @@ describe("shirt background team colors", () => {
       expect(selectTeamDisplayColors({
         shirtBackgroundColor,
         backgroundColour: 0xff990000,
-        shirtNumberColor: 0xff000000,
-        shirtBackgroundColorGK: 0xff004400,
+        iconForegroundColor: 0xff000000,
+        goalkeeperShirtBackgroundColor: 0xff004400,
       }, away, appearance).home).toBe("#990000")
     }
   })

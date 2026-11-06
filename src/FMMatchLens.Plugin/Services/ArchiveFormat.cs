@@ -34,8 +34,9 @@ internal static class ArchiveWireFormat
     // Static pre-match player match sharpness and season statistics, plus the
     // authoritative match shirt name/number, retained contract squad number,
     // quantized per-tick player speed/facing angle, and per-tick football XYZ
-    // coordinates stored as integer centimeters, plus team shirt number,
-    // background, and goalkeeper background colors, signed centimeter player
+    // coordinates stored as integer centimeters, plus team icon foreground,
+    // icon background, and goalkeeper shirt background colors (originally
+    // misnamed as shirt colours), signed centimeter player
     // XY, integer-meter cumulative distance deltas, and separate distance/stats
     // change flags, optional speed/angle deltas with cyclic angle encoding,
     // VarUInt movement keyframes, and per-axis football change flags define
@@ -55,7 +56,9 @@ internal static class ArchiveWireFormat
     // add an independent version byte inside ArchiveFrameCodec payloads.
     internal const ushort StructureMajor = 2;
     internal const ushort FirstSupportedStructureMinor = 1;
-    internal const ushort StructureMinor = 8;
+    // 2.9 replaces the three legacy misnamed colour slots with ten shirt
+    // colours (including numbers/outlines) and four style bytes per team; frame payloads retain 2.8 layout.
+    internal const ushort StructureMinor = 9;
     internal const byte Legacy21BlockStructure = 1;
     internal const byte Legacy21FramePayloadMarker = 1;
 }

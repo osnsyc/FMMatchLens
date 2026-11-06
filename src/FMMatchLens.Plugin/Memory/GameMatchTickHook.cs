@@ -1626,9 +1626,29 @@ internal sealed class GameMatchTickHook : IDisposable
             ReadUInt32(team + Offsets.Team.OutlineColour),
             null,
             ReadManagerMetadata(team),
-            teamBase != default ? ReadUInt32(teamBase + Offsets.TeamBase.shirtNumberColor) : null,
-            teamBase != default ? ReadUInt32(teamBase + Offsets.TeamBase.shirtBackgroundColor) : null,
-            teamBase != default ? ReadUInt32(teamBase + Offsets.TeamBase.shirtBackgroundColorGK) : null);
+            IconForegroundColor: KitColor(Offsets.TeamBase.IconForegroundColor),
+            IconBackgroundColor: KitColor(Offsets.TeamBase.IconBackgroundColor),
+            ShirtBackgroundColor: KitColor(Offsets.TeamBase.ShirtBackgroundColor),
+            ShirtForegroundColor: KitColor(Offsets.TeamBase.ShirtForegroundColor),
+            ShirtOutlineColor: KitColor(Offsets.TeamBase.ShirtOutlineColor),
+            GoalkeeperShirtBackgroundColor: KitColor(Offsets.TeamBase.GoalkeeperShirtBackgroundColor),
+            GoalkeeperShirtForegroundColor: KitColor(Offsets.TeamBase.GoalkeeperShirtForegroundColor),
+            GoalkeeperShirtOutlineColor: KitColor(Offsets.TeamBase.GoalkeeperShirtOutlineColor),
+            ShirtStyle: KitByte(Offsets.TeamBase.ShirtStyle),
+            ShirtBackType: KitByte(Offsets.TeamBase.ShirtBackType),
+            GoalkeeperShirtStyle: KitByte(Offsets.TeamBase.GoalkeeperShirtStyle),
+            GoalkeeperShirtBackType: KitByte(Offsets.TeamBase.GoalkeeperShirtBackType),
+            ShirtNumberColor: KitColor(Offsets.TeamBase.ShirtNumberColor),
+            ShirtNumberOutlineColor: KitColor(Offsets.TeamBase.ShirtNumberOutlineColor),
+            GoalkeeperShirtNumberColor: KitColor(Offsets.TeamBase.GoalkeeperShirtNumberColor),
+            GoalkeeperShirtNumberOutlineColor: KitColor(Offsets.TeamBase.GoalkeeperShirtNumberOutlineColor));
+
+        // Static metadata refresh only, never a second per-player/tick path.
+        // Each target is checked through MemoryReader, including style bytes
+        // beyond the colour block. Failed reads remain nullable for retries.
+        uint? KitColor(int offset) => teamBase != default ? ReadUInt32(teamBase + offset) : null;
+        byte? KitByte(int offset) => teamBase != default &&
+            _memoryReader.TryReadByte(teamBase + offset, out var value) ? value : null;
     }
 
     private RealtimeManagerMetadata? ReadManagerMetadata(nint team)

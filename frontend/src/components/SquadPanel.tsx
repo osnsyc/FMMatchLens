@@ -7,6 +7,8 @@ import { ArrowDataTransferHorizontalIcon, FootballIcon, Pin02Icon, SidebarLeft01
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { AssistIcon } from "@/components/AssistIcon"
+import { PlayerShirt } from "@/components/PlayerShirt"
+import type { MatchKit } from "@/lib/kitRendering"
 import { FootIcon } from "@/components/FootIcon"
 import { Avatar, AvatarBadge, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -56,6 +58,8 @@ type SquadPanelProps = {
   allPlayers?: MatchPlayer[]
   events: MatchEvent[]
   teamColor?: string
+  outfieldKit?: MatchKit
+  goalkeeperKit?: MatchKit
   pinnedPlayerId?: number
   attackingOpponent?: MatchPlayer
   profilePopupSuppressed?: boolean
@@ -232,6 +236,8 @@ export const SquadPanel = memo(function SquadPanel({
   allPlayers = players,
   events,
   teamColor,
+  outfieldKit,
+  goalkeeperKit,
   pinnedPlayerId,
   attackingOpponent,
   profilePopupSuppressed = false,
@@ -575,6 +581,7 @@ export const SquadPanel = memo(function SquadPanel({
           player={player}
           side={side}
           teamColor={resolvedTeamColor}
+          kit={playerIsGoalkeeper(player) ? goalkeeperKit : outfieldKit}
           panelRef={panelRef}
           pinned={pinnedPlayerId === player.id}
           hoverEnabled={!tacticalSelectionActive && !profilePopupSuppressed && (pinnedPlayerId == null || pinnedPlayerId === player.id)}
@@ -829,6 +836,8 @@ function sameSquadPanelProps(previous: SquadPanelProps, next: SquadPanelProps) {
     && previous.teamUid === next.teamUid
     && previous.side === next.side
     && previous.teamColor === next.teamColor
+    && previous.outfieldKit === next.outfieldKit
+    && previous.goalkeeperKit === next.goalkeeperKit
     && previous.pinnedPlayerId === next.pinnedPlayerId
     && previous.attackingOpponent === next.attackingOpponent
     && previous.profilePopupSuppressed === next.profilePopupSuppressed
@@ -852,6 +861,7 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   player,
   side,
   teamColor,
+  kit,
   panelRef,
   pinned,
   hoverEnabled,
@@ -863,6 +873,7 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   player: MatchPlayer
   side: TeamSide
   teamColor: string
+  kit?: MatchKit
   panelRef: React.RefObject<HTMLElement | null>
   pinned: boolean
   hoverEnabled: boolean
@@ -876,7 +887,7 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   const [hoverOpen, setHoverOpen] = useState(false)
   const pinRequestedRef = useRef(false)
   const open = !popupSuppressed && (pinned || (hoverEnabled && hoverOpen))
-  const isGoalkeeper = (player.positionFamiliarities?.GK ?? 0) >= 15 || player.position === "GK"
+  const isGoalkeeper = playerIsGoalkeeper(player)
   const attributeColumns = player.attributes
     ? buildAttributeColumns(isGoalkeeper)
     : []
@@ -960,11 +971,11 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
             </Avatar>
             <div className="grid min-w-0 grid-rows-[auto_1fr]">
               <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_15.5rem] items-center gap-3 px-3 pb-2 pt-3">
-                <div className="min-w-0">
-                  <CardTitle className="truncate text-lg font-bold">{player.name}</CardTitle>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                    <span className="font-semibold" style={{ color: teamColor }}>#{player.shirtNumber ?? "-"}</span>
-                    <span>{familiarPosition(player)}</span>
+                <div className="flex min-w-0 items-center gap-2">
+                  {kit && <PlayerShirt kit={kit} number={player.shirtNumber} shirtName={player.shirtName} />}
+                  <div className="min-w-0">
+                    <h3 className="truncate text-lg font-bold" title={player.fullName ?? player.name}>{player.name}</h3>
+                    <div className="mt-1 text-xs text-muted-foreground">{familiarPosition(player)}</div>
                   </div>
                 </div>
                 <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] gap-x-2 border-l border-border/70 pl-3 text-[10px]">
@@ -1035,6 +1046,7 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
 }, (previous, next) =>
   previous.side === next.side &&
   previous.teamColor === next.teamColor &&
+  previous.kit === next.kit &&
   previous.panelRef === next.panelRef &&
   previous.pinned === next.pinned &&
   previous.hoverEnabled === next.hoverEnabled &&
@@ -1043,9 +1055,13 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   previous.onPinnedPlayerChange === next.onPinnedPlayerChange &&
   previous.player.uid === next.player.uid &&
   previous.player.name === next.player.name &&
+  previous.player.fullName === next.player.fullName &&
   previous.player.shirtNumber === next.player.shirtNumber &&
+  previous.player.shirtName === next.player.shirtName &&
   previous.player.position === next.player.position &&
+  previous.player.positionFamiliarities === next.player.positionFamiliarities &&
   previous.player.inPossession === next.player.inPossession &&
+  previous.player.outOfPossession === next.player.outOfPossession &&
   previous.player.portraitUrl === next.player.portraitUrl &&
   previous.player.profile === next.player.profile &&
   previous.player.attributes === next.player.attributes

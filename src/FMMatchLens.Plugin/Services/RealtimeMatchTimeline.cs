@@ -621,9 +621,22 @@ internal sealed class RealtimeMatchTimeline
             incoming.OutlineColour ?? current.OutlineColour,
             incoming.LogoPath ?? current.LogoPath,
             incoming.Manager ?? current.Manager,
-            incoming.ShirtNumberColor ?? current.ShirtNumberColor,
+            incoming.IconForegroundColor ?? current.IconForegroundColor,
+            incoming.IconBackgroundColor ?? current.IconBackgroundColor,
             incoming.ShirtBackgroundColor ?? current.ShirtBackgroundColor,
-            incoming.ShirtBackgroundColorGK ?? current.ShirtBackgroundColorGK);
+            incoming.ShirtForegroundColor ?? current.ShirtForegroundColor,
+            incoming.ShirtOutlineColor ?? current.ShirtOutlineColor,
+            incoming.GoalkeeperShirtBackgroundColor ?? current.GoalkeeperShirtBackgroundColor,
+            incoming.GoalkeeperShirtForegroundColor ?? current.GoalkeeperShirtForegroundColor,
+            incoming.GoalkeeperShirtOutlineColor ?? current.GoalkeeperShirtOutlineColor,
+            incoming.ShirtStyle ?? current.ShirtStyle,
+            incoming.ShirtBackType ?? current.ShirtBackType,
+            incoming.GoalkeeperShirtStyle ?? current.GoalkeeperShirtStyle,
+            incoming.GoalkeeperShirtBackType ?? current.GoalkeeperShirtBackType,
+            incoming.ShirtNumberColor ?? current.ShirtNumberColor,
+            incoming.ShirtNumberOutlineColor ?? current.ShirtNumberOutlineColor,
+            incoming.GoalkeeperShirtNumberColor ?? current.GoalkeeperShirtNumberColor,
+            incoming.GoalkeeperShirtNumberOutlineColor ?? current.GoalkeeperShirtNumberOutlineColor);
     }
 
     private static bool IsMetadataComplete(RealtimeMatchMetadata metadata)
