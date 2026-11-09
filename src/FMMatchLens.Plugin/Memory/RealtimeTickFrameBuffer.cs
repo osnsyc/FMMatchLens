@@ -80,6 +80,7 @@ internal sealed class RealtimeTickFrameBuffer
 
     public void Release(RawRealtimeTickFrame frame)
     {
+        frame.Tactics = null;
         lock (_gate)
         {
             _free.Push(frame.PoolIndex);
@@ -106,6 +107,7 @@ internal sealed class RealtimeTickFrameBuffer
         {
             for (var i = 0; i < count; i++)
             {
+                frames[i].Tactics = null;
                 _free.Push(frames[i].PoolIndex);
                 frames[i] = null!;
             }
@@ -132,6 +134,7 @@ internal sealed class RawRealtimeTickFrame
     public int PoolIndex { get; }
     public long Sequence;
     public long InstanceGeneration;
+    public TacticalSnapshot? Tactics;
     public bool FinishedByFlags;
     public long CapturedTimestamp;
     public nint MatchAddress;

@@ -26,6 +26,7 @@ import {
 
 import type {
   FormationSnapshot,
+  TacticalSnapshot,
   MatchPlayer,
   MatchEvent,
   MatchSnapshot,
@@ -188,6 +189,8 @@ export type RatingContributionTerm = {
 }
 
 export type RealtimeFrame = {
+  tactics?: TacticalSnapshot | null
+  tacticsUnchangedFrom?: number
   sequence: number
   matchId: string
   tick: number

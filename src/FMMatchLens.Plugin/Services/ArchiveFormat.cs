@@ -56,9 +56,9 @@ internal static class ArchiveWireFormat
     // add an independent version byte inside ArchiveFrameCodec payloads.
     internal const ushort StructureMajor = 2;
     internal const ushort FirstSupportedStructureMinor = 1;
-    // 2.9 replaces the three legacy misnamed colour slots with ten shirt
-    // colours (including numbers/outlines) and four style bytes per team; frame payloads retain 2.8 layout.
-    internal const ushort StructureMinor = 9;
+    // 2.9 adds kit metadata. 2.10 appends tactical state tails: legacy JSON (2)
+    // or binary deltas (3) with bounded dictionaries scoped to each chunk.
+    internal const ushort StructureMinor = 10;
     internal const byte Legacy21BlockStructure = 1;
     internal const byte Legacy21FramePayloadMarker = 1;
 }

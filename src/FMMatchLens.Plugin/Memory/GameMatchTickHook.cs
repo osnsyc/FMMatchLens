@@ -8,6 +8,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
+using Tactics = FMMatchLens.Plugin.Memory.Offsets.Tactics;
 
 namespace FMMatchLens.Plugin.Memory;
 
@@ -111,6 +112,7 @@ internal sealed class GameMatchTickHook : IDisposable
     private int _instructionOffset;
     private bool _started;
     private bool _buildRejected;
+    private bool _tacticsLayoutSupported;
     private int _activeHookCalls;
 
     public GameMatchTickHook(RealtimeMatchTimeline timeline)
@@ -186,6 +188,8 @@ internal sealed class GameMatchTickHook : IDisposable
         }
 
         _instructionOffset = build.MatchTickHookRva;
+        // Tactical offsets have only been verified against this exact binary.
+        _tacticsLayoutSupported = supportedBuild && build.Distribution == "steam-26340721";
         _targetAddress = moduleBase + _instructionOffset;
 
         try
@@ -485,6 +489,7 @@ internal sealed class GameMatchTickHook : IDisposable
             frame.MomentumCount = 0;
             frame.RollingMomentumCount = 0;
             frame.RatingResearch = null;
+            frame.Tactics = null;
             frame.PossessionTeam = record.PossessionTeam == record.HomeTeam
                 ? TeamSide.Home
                 : record.PossessionTeam == record.AwayTeam
@@ -528,6 +533,9 @@ internal sealed class GameMatchTickHook : IDisposable
                 capturedMatchPlayers);
 
             CaptureRatingFrameData(record.MatchAddress, record.Tick, frame, capturedMatchPlayers);
+            if (_tacticsLayoutSupported && _activeSession is { Invalidated: false } tacticalSession &&
+                tacticalSession.Animated == record.MatchAddress && tacticalSession.Generation == record.InstanceGeneration)
+                frame.Tactics = tacticalSession.Tactics.Capture(record.HomeTeam, record.AwayTeam, frame, capturedMatchPlayers);
 
             ResolveDerivedTeamStats(frame);
             ResolveMomentumEventPlayerIds(
@@ -3241,6 +3249,7 @@ internal sealed class GameMatchTickHook : IDisposable
     {
         public readonly object CaptureGate = new();
         public readonly MomentumCalculator Momentum = new();
+        public readonly TacticalStateSampler Tactics = new();
         public readonly nint Animated = animated, Simulation = simulation;
         public readonly long Generation = generation;
         public readonly long SimulationGeneration = simulationGeneration;
@@ -3297,4 +3306,182 @@ internal sealed class GameMatchTickHook : IDisposable
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern nint GetModuleHandle(string moduleName);
+
+    // Owned by one confirmed animated-match session. Called only inside the hook's
+    // existing post-Original read scope; never retains native pointers in snapshots.
+    internal sealed class TacticalStateSampler
+    {
+        private readonly object _gate = new();
+        private readonly MemoryReader _reader = new();
+        private TacticalSnapshot? _snapshot;
+        private nint _home, _away, _homeContext, _awayContext;
+        private int _lastTick = -1;
+        private long _nextSample;
+        private long _revision;
+        private int _remainingVectorBytes;
+
+        public TacticalSnapshot? Capture(nint home, nint away, RawRealtimeTickFrame frame, ReadOnlySpan<nint> players)
+        {
+            // A nested/concurrent callback must not wait behind native memory traversal.
+            if (!Monitor.TryEnter(_gate)) return null;
+            try
+            {
+                var now = Stopwatch.GetTimestamp();
+                if (home != _home || away != _away || frame.Tick < _lastTick)
+                {
+                    _home = home;
+                    _away = away;
+                    _snapshot = null;
+                    _nextSample = 0;
+                }
+                _lastTick = frame.Tick;
+                if (now < _nextSample && !frame.FinishedByFlags) return _snapshot;
+                _nextSample = now + Stopwatch.Frequency;
+                _remainingVectorBytes = 131_072;
+                _reader.TryReadPointer(home + Offsets.Team.Manager, out var homeContext);
+                _reader.TryReadPointer(away + Offsets.Team.Manager, out var awayContext);
+                if (homeContext != _homeContext || awayContext != _awayContext)
+                {
+                    _snapshot = null;
+                    _homeContext = homeContext;
+                    _awayContext = awayContext;
+                }
+                var next = new TacticalSnapshot(frame.Tick, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    ReadTeam(homeContext, TeamSide.Home, frame, players), ReadTeam(awayContext, TeamSide.Away, frame, players));
+                if (!TacticalSnapshotEquality.Same(_snapshot, next)) _snapshot = next with { Revision = ++_revision };
+                return _snapshot;
+            }
+            finally { Monitor.Exit(_gate); }
+        }
+
+        private TacticalTeamData ReadTeam(nint context, TeamSide side, RawRealtimeTickFrame frame, ReadOnlySpan<nint> pointers)
+        {
+            var players = new List<TacticalPlayerSlot>();
+            for (var i = 0; i < frame.PlayerCount; i++)
+            {
+                var player = frame.Players[i];
+                if (player.Team != side) continue;
+                int? roster = _reader.TryReadByte(pointers[i] + Offsets.MatchPlayer.TacticalRosterSlot, out var r) ? unchecked((sbyte)r) : null;
+                int? tactic = _reader.TryReadByte(pointers[i] + Offsets.MatchPlayer.TacticalFormationSlot, out var t) ? unchecked((sbyte)t) : null;
+                uint? oppositionPosition = _reader.TryReadUInt32(pointers[i] + Offsets.MatchPlayer.OppositionPositionKey, out var key) ? key : null;
+                players.Add(new(player.Slot, player.PlayerId, roster, tactic, oppositionPosition));
+            }
+            if (context == 0) return new("unavailable", null, null, null, null, players.ToArray());
+            var processing = ReadConfiguration(context + Tactics.Context.ProcessingConfiguration);
+            var command = ReadConfiguration(context + Tactics.Context.CommandConfiguration);
+            var personal = ReadBytes(context + Tactics.Context.PersonalOpposition, Tactics.PersonalOppositionCount * Tactics.PersonalOppositionRecordSize);
+            TacticalOppositionPosition[]? positions = null;
+            if (_reader.TryReadByte(context + Tactics.Context.PositionOppositionCount, out var count) && count <= Tactics.PositionOppositionCapacity &&
+                (count == 0 || VirtualMemory.IsReadable(context + Tactics.Context.PositionOppositionEntries, count * Tactics.OppositionPosition.Size)))
+            {
+                positions = new TacticalOppositionPosition[count];
+                for (var i = 0; i < count; i++)
+                {
+                    var record = context + Tactics.Context.PositionOppositionEntries + i * Tactics.OppositionPosition.Size;
+                    var packed = (uint)(Marshal.ReadByte(record + Tactics.OppositionPosition.Instructions) | Marshal.ReadByte(record + Tactics.OppositionPosition.Instructions + 1) << 8 | Marshal.ReadByte(record + Tactics.OppositionPosition.Instructions + 2) << 16);
+                    positions[i] = new(unchecked((uint)Marshal.ReadInt32(record + Tactics.OppositionPosition.PositionKey)), packed);
+                }
+            }
+            var complete = processing is not null && command is not null && personal is not null && positions is not null &&
+                Complete(processing) && Complete(command) && players.All(p => p.RosterSlot.HasValue && p.TacticSlot.HasValue && p.OppositionPositionKey.HasValue);
+            return new(complete ? "complete" : "partial", processing, command, personal, positions, players.ToArray());
+        }
+
+        private static bool Complete(TacticalConfiguration config) => config.NameUtf8 is not null && config.InPossessionOverrides is not null && config.OutOfPossessionOverrides is not null &&
+            config.InPossession.Concat(config.OutOfPossession).All(p => p.Instructions is not null && p.Applicability is not null) &&
+            config.InPossessionOverrides.Concat(config.OutOfPossessionOverrides).SelectMany(p => p.Positions).All(p => p.Instructions is not null && p.Applicability is not null);
+
+        private TacticalConfiguration? ReadConfiguration(nint address)
+        {
+            if (!VirtualMemory.IsReadable(address, Tactics.Configuration.Size)) return null;
+            byte[]? name = null;
+            var text = Marshal.ReadIntPtr(address + Tactics.Configuration.Name);
+            if (text == default) name = Array.Empty<byte>();
+            else if (_reader.TryReadInt32(text + Tactics.Text.Length, out var length) && length is >= 0 and <= 1024)
+                name = length == 0 ? Array.Empty<byte>() : ReadBytes(text + Tactics.Text.Utf8, length);
+            return new(ReadBytesDirect(address + Tactics.Configuration.TeamInstructions, Tactics.Configuration.TeamInstructionsSize), unchecked((uint)Marshal.ReadInt32(address + Tactics.Configuration.StyleKey)), name,
+                Marshal.ReadByte(address + Tactics.Configuration.AdditionalState), Marshal.ReadByte(address + Tactics.Configuration.Mentality), ReadBytesDirect(address + Tactics.Configuration.PhaseSlotMapping, Tactics.FormationSlotCount),
+                ReadPositionsDirect(address + Tactics.Configuration.InPossession, Tactics.FormationSlotCount), ReadPositionsDirect(address + Tactics.Configuration.OutOfPossession, Tactics.FormationSlotCount),
+                ReadOverrides(address + Tactics.Configuration.InPossessionOverrides), ReadOverrides(address + Tactics.Configuration.OutOfPossessionOverrides));
+        }
+
+        private TacticalPosition[] ReadPositionsDirect(nint address, int count)
+        {
+            var positions = new TacticalPosition[count];
+            for (var i = 0; i < count; i++)
+            {
+                var p = address + i * Tactics.Position.Size;
+                TacticalRoleInstructions[]? roles = null;
+                if (TryVector(p + Tactics.Position.Instructions, Tactics.RoleInstructions.Size, 64, out var start, out var length))
+                {
+                    roles = new TacticalRoleInstructions[length];
+                    for (var j = 0; j < length; j++)
+                    {
+                        var item = start + j * Tactics.RoleInstructions.Size;
+                        roles[j] = new(Hex(item + Tactics.RoleInstructions.RoleKey), Hex(item + Tactics.RoleInstructions.Bits), unchecked((uint)Marshal.ReadInt32(item + Tactics.RoleInstructions.MarkPosition)), unchecked((sbyte)Marshal.ReadByte(item + Tactics.RoleInstructions.MarkPlayer)));
+                    }
+                }
+                TacticalApplicability[]? applicability = null;
+                if (TryVector(p + Tactics.Position.Applicability, Tactics.Applicability.Size, 64, out start, out length))
+                {
+                    applicability = new TacticalApplicability[length];
+                    for (var j = 0; j < length; j++) applicability[j] = new(Marshal.ReadInt32(start + j * Tactics.Applicability.Size + Tactics.Applicability.InstructionId), Hex(start + j * Tactics.Applicability.Size + Tactics.Applicability.RoleMask));
+                }
+                positions[i] = new(unchecked((uint)Marshal.ReadInt32(p + Tactics.Position.PositionMask)), Marshal.ReadByte(p + Tactics.Position.Auxiliary), Marshal.ReadByte(p + Tactics.Position.Flags), Hex(p + Tactics.Position.RoleDuty), roles, applicability);
+            }
+            return positions;
+        }
+
+        private TacticalPersonalOverride[]? ReadOverrides(nint tree)
+        {
+            if (!_reader.TryReadPointer(tree + Tactics.OverrideTree.Header, out var header) || header == 0 ||
+                !_reader.TryReadUInt64(tree + Tactics.OverrideTree.Count, out var declaredCount) || declaredCount > Tactics.PersonalOppositionCount ||
+                !VirtualMemory.IsReadable(header, Tactics.OverrideTree.HeaderSize)) return null;
+            var result = new List<TacticalPersonalOverride>();
+            var pending = new Stack<nint>();
+            var visited = new HashSet<nint>();
+            pending.Push(Marshal.ReadIntPtr(header + Tactics.OverrideTree.Root));
+            while (pending.Count != 0)
+            {
+                var node = pending.Pop();
+                if (node == header) continue;
+                if (node == 0 || !visited.Add(node) || visited.Count > Tactics.PersonalOppositionCount || !VirtualMemory.IsReadable(node, Tactics.OverrideTree.NodeSize)) return null;
+                if (Marshal.ReadByte(node + Tactics.OverrideTree.Sentinel) != 0) return null;
+                if (!TryVector(node + Tactics.OverrideTree.Positions, Tactics.Position.Size, Tactics.FormationSlotCount, out var begin, out var count)) return null;
+                result.Add(new(unchecked((uint)Marshal.ReadInt32(node + Tactics.OverrideTree.PersonKey)), ReadPositionsDirect(begin, count)));
+                pending.Push(Marshal.ReadIntPtr(node + Tactics.OverrideTree.Left));
+                pending.Push(Marshal.ReadIntPtr(node + Tactics.OverrideTree.Right));
+            }
+            if ((ulong)result.Count != declaredCount) return null;
+            return result.OrderBy(value => value.PersonKey).ToArray();
+        }
+
+        private bool TryVector(nint vector, int stride, int maximum, out nint begin, out int count)
+        {
+            begin = 0;
+            count = 0;
+            if (!VirtualMemory.IsReadable(vector, Tactics.Vector.Size)) return false;
+            begin = Marshal.ReadIntPtr(vector + Tactics.Vector.Begin);
+            var end = Marshal.ReadIntPtr(vector + Tactics.Vector.End);
+            var capacity = Marshal.ReadIntPtr(vector + Tactics.Vector.Capacity);
+            if (begin == 0) return end == default && capacity == default;
+            var bytes = (long)end - (long)begin;
+            var capacityBytes = (long)capacity - (long)begin;
+            if ((long)begin < 0 || (long)end < 0 || (long)capacity < 0 || bytes < 0 || capacityBytes < bytes || bytes % stride != 0 || capacityBytes % stride != 0 ||
+                bytes / stride > maximum || bytes > _remainingVectorBytes || bytes > int.MaxValue) return false;
+            if (bytes > 0 && !VirtualMemory.IsReadable(begin, (int)bytes)) return false;
+            _remainingVectorBytes -= (int)bytes;
+            count = (int)(bytes / stride);
+            return true;
+        }
+
+        private byte[]? ReadBytes(nint address, int count) => VirtualMemory.IsReadable(address, count) ? ReadBytesDirect(address, count) : null;
+        private static byte[] ReadBytesDirect(nint address, int count)
+        {
+            var result = new byte[count];
+            Marshal.Copy(address, result, 0, count);
+            return result;
+        }
+        private static string Hex(nint address) => unchecked((ulong)Marshal.ReadInt64(address)).ToString("X16");
+    }
 }

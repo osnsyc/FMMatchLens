@@ -10,7 +10,8 @@ import type {
   RealtimeTeamMetadata,
 } from "@/api/realtimeMatch"
 import type { ParsedLocalArchive } from "@/api/localArchive"
-import type { PlayerAttributes, PlayerPositionFamiliarities, PlayerProfile, PlayerSeasonDetailedStats, PlayerSeasonStats, PlayerSeasonStatsSlot, PlayerTacticalAssignment, TeamSide } from "@/types/match"
+import { parseTacticalSnapshot, readTacticalDelta } from "@/components/formation/tacticalWire"
+import type { PlayerAttributes, PlayerPositionFamiliarities, PlayerProfile, PlayerSeasonDetailedStats, PlayerSeasonStats, PlayerSeasonStatsSlot, PlayerTacticalAssignment, TeamSide, TacticalConfiguration, TacticalPersonalOverride, TacticalPlayerSlot, TacticalPosition, TacticalSnapshot, TacticalTeamData } from "@/types/match"
 import { playerPositionLabels } from "@/types/match"
 import {
   deriveRatingClassification,
@@ -21,7 +22,7 @@ import {
 const magic = "FMLENS2\0"
 const archiveStructureMajor = 2
 const firstSupportedStructureMinor = 1
-const archiveStructureMinor = 9
+const archiveStructureMinor = 10
 const legacy21FramePayloadMarker = 1
 const legacy21BlockStructure = 1
 const metadataRecord = 1
@@ -274,6 +275,7 @@ function readFrames(
   }
   const frames: RealtimeFrame[] = []
   let previous: RealtimeFrame | undefined
+  const tacticsReader = new TacticalArchiveReader((bytes) => new ArchiveBufferReader(bytes))
   const previousRatingPlayers = new Map<number, RatingWirePlayerState>()
   let previousRatingMatch: RatingWireMatchState | undefined
   for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
@@ -368,6 +370,7 @@ function readFrames(
       previousRatingPlayers, previous?.players, previousRatingMatch, ratingClassificationBySlot,
     )
     const frame: RealtimeFrame = {
+      tactics: structureMinor >= 10 ? tacticsReader.read(reader, previous?.tactics, !previous) : undefined,
       sequence, matchId, tick, displayTick, period, capturedUnixMilliseconds, possessionTeam, ballHolderPlayerId,
       ballXCentimeters, ballYCentimeters, ballZCentimeters,
       halfPitchWidth, halfPitchLength, momentumEvents, momentum, rollingMomentum, home, away, players,
@@ -1178,4 +1181,131 @@ class ArchiveBufferReader {
     return value
   }
   private ensure(length: number) { if (!Number.isSafeInteger(length) || length < 0 || this.offset + length > this.bytes.byteLength) throw new ArchiveEndOfFileError("Archive ends with an incomplete record") }
+}
+
+export interface TacticalBinaryReader {
+  readonly atEnd: boolean
+  readByte(): number
+  readVarUint(): number
+  readVarInt(): number
+  readUint64Hex(): string
+  readBytes(length: number): Uint8Array
+  readString(): string
+}
+
+const invalid = (): never => { throw new Error("Invalid tactical binary state") }
+const safe = (value: number) => Number.isSafeInteger(value) ? value : invalid()
+const uint = (r: TacticalBinaryReader) => count(r, 0xffffffff)
+function count(r: TacticalBinaryReader, max: number) {
+  const n = r.readVarUint()
+  return n >= 0 && n <= max ? n : invalid()
+}
+function required<T>(value: T | null): T { return value === null ? invalid() : value }
+function array<T>(r: TacticalBinaryReader, max: number, read: () => T): T[] | null {
+  const n = count(r, max + 1)
+  return n === 0 ? null : Array.from({ length: n - 1 }, read)
+}
+function bytes(r: TacticalBinaryReader, max: number): string | null {
+  const n = count(r, max + 1)
+  return n === 0 ? null : btoa(String.fromCharCode(...r.readBytes(n - 1)))
+}
+function slot(r: TacticalBinaryReader): number | null {
+  const n = count(r, 256)
+  return n === 0 ? null : n - 129
+}
+function key(r: TacticalBinaryReader): number | null {
+  const n = count(r, 0x100000000)
+  return n === 0 ? null : n - 1
+}
+
+/** A fresh instance for each chunk; marker 2 remains readable for original 2.10 files. */
+export class TacticalArchiveReader {
+  private readonly positions: TacticalPosition[] = []
+  private readonly configurations: TacticalConfiguration[] = []
+  private readonly createReader: (bytes: Uint8Array) => TacticalBinaryReader
+  constructor(createReader: (bytes: Uint8Array) => TacticalBinaryReader) { this.createReader = createReader }
+
+  read(source: TacticalBinaryReader, previous: TacticalSnapshot | null | undefined, keyframe: boolean): TacticalSnapshot | null {
+    const marker = source.readByte()
+    if (marker !== 3) return readTacticalDelta(marker, previous, keyframe, () => source.readString())
+    const length = count(source, 1_048_576)
+    const reader = this.createReader(source.readBytes(length))
+    const prior = keyframe ? null : previous
+    const observedTick = safe((prior?.observedTick ?? 0) + reader.readVarInt())
+    const capturedUnixMilliseconds = safe((prior?.capturedUnixMilliseconds ?? 0) + reader.readVarInt())
+    const revision = reader.readVarUint()
+    const value: TacticalSnapshot = { observedTick, capturedUnixMilliseconds, revision,
+      home: this.team(reader, prior?.home), away: this.team(reader, prior?.away) }
+    if (!reader.atEnd) invalid()
+    return parseTacticalSnapshot(value)
+  }
+
+  private definition<T>(r: TacticalBinaryReader, values: T[], read: () => T): T | null {
+    const token = r.readVarUint()
+    if (token === 0) return null
+    if (token === 1) return read()
+    const id = Math.floor((token - 2) / 2)
+    if (token % 2 === 0) return id < values.length ? values[id] : invalid()
+    if (id !== values.length || values.length >= 4096) invalid()
+    const value = read()
+    values.push(value)
+    return value
+  }
+
+  private config(r: TacticalBinaryReader): TacticalConfiguration | null {
+    return this.definition(r, this.configurations, () => ({
+      teamInstructions: required(bytes(r, 16)), styleKey: uint(r), nameUtf8: bytes(r, 1024),
+      additionalState: r.readByte(), mentality: r.readByte(), phaseSlotMapping: required(bytes(r, 11)),
+      inPossession: required(array(r, 11, () => this.position(r))), outOfPossession: required(array(r, 11, () => this.position(r))),
+      inPossessionOverrides: this.overrides(r), outOfPossessionOverrides: this.overrides(r),
+    }))
+  }
+
+  private position(r: TacticalBinaryReader): TacticalPosition {
+    return required(this.definition(r, this.positions, () => ({
+      positionMask: uint(r), auxiliary: r.readByte(), flags: r.readByte(), roleDuty: r.readUint64Hex(),
+      instructions: array(r, 64, () => ({ roleKey: r.readUint64Hex(), bits: r.readUint64Hex(), markPosition: uint(r), markPlayer: r.readVarInt() })),
+      applicability: array(r, 64, () => ({ instructionId: r.readVarInt(), roleMask: r.readUint64Hex() })),
+    })))
+  }
+
+  private overrides(r: TacticalBinaryReader): TacticalPersonalOverride[] | null {
+    return array(r, 26, () => ({ personKey: uint(r), positions: required(array(r, 11, () => this.position(r))) }))
+  }
+
+  private team(r: TacticalBinaryReader, prior: TacticalTeamData | null | undefined): TacticalTeamData {
+    const mask = r.readByte()
+    if (mask > 63 || !prior && mask !== 63) invalid()
+    const status = (mask & 1) === 0 ? prior!.status : ["complete", "partial", "unavailable"][countByte(r, 2)] as TacticalTeamData["status"]
+    return {
+      status,
+      processing: (mask & 2) !== 0 ? this.config(r) : prior!.processing,
+      command: (mask & 4) !== 0 ? this.config(r) : prior!.command,
+      personalOpposition: (mask & 8) !== 0 ? bytes(r, 78) : prior!.personalOpposition,
+      positionOpposition: (mask & 16) !== 0 ? array(r, 25, () => ({ positionKey: uint(r), packedInstructions: uint(r) })) : prior!.positionOpposition,
+      players: (mask & 32) !== 0 ? this.players(r, prior?.players) : prior!.players,
+    }
+  }
+
+  private players(r: TacticalBinaryReader, prior: TacticalPlayerSlot[] | undefined): TacticalPlayerSlot[] {
+    const reset = countByte(r, 1) === 1
+    if (!reset && !prior) invalid()
+    const length = reset ? count(r, 64) : prior!.length
+    return Array.from({ length }, (_, i) => {
+      const old = reset ? undefined : prior![i]
+      const playerSlot = reset ? count(r, 63) : old!.slot
+      const playerId = reset ? r.readVarInt() : old!.playerId
+      const mask = r.readByte()
+      if (mask > 7 || reset && mask !== 7) invalid()
+      return { slot: playerSlot, playerId,
+        rosterSlot: (mask & 1) !== 0 ? slot(r) : old!.rosterSlot,
+        tacticSlot: (mask & 2) !== 0 ? slot(r) : old!.tacticSlot,
+        oppositionPositionKey: (mask & 4) !== 0 ? key(r) : old!.oppositionPositionKey }
+    })
+  }
+}
+
+function countByte(r: TacticalBinaryReader, max: number): number {
+  const value = r.readByte()
+  return value <= max ? value : invalid()
 }

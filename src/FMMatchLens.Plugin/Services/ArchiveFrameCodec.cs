@@ -1,6 +1,7 @@
 using FMMatchLens.Plugin.Domain;
 using FMMatchLens.Plugin.Memory;
 using System.Text;
+using System.Text.Json;
 
 namespace FMMatchLens.Plugin.Services;
 
@@ -39,6 +40,7 @@ internal static class ArchiveFrameCodec
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
         RealtimeTickFrame? previous = null;
+        var tacticsCodec = new ArchiveTacticsBinaryCodec();
         foreach (var frame in frames)
         {
             var rosterReset = previous is null || !RosterMatches(previous.Players, frame.Players);
@@ -121,6 +123,7 @@ internal static class ArchiveFrameCodec
             WriteTail(writer, previous?.Momentum, frame.Momentum, WriteMomentum);
             WriteTail(writer, previous?.RollingMomentum, frame.RollingMomentum, WriteMomentum);
             WriteRatingResearch(writer, previous, frame);
+            WriteTactics(writer, previous?.Tactics, frame.Tactics, previous is null, tacticsCodec);
             previous = frame;
         }
         return stream.ToArray();
@@ -147,6 +150,7 @@ internal static class ArchiveFrameCodec
         var supportedPlayerFields = structureMinor >= 8 ? CompactPlayerFields : structureMinor >= 7 ? Version27CompactPlayerFields :
             structureMinor >= 6 ? Version27PlayerFields : LegacyPlayerFields;
         RealtimeTickFrame? previous = null;
+        var tacticsCodec = new ArchiveTacticsBinaryCodec();
         for (var frameIndex = 0; frameIndex < frames.Length; frameIndex++)
         {
             var flags = reader.ReadByte();
@@ -269,6 +273,7 @@ internal static class ArchiveFrameCodec
                 halfWidth, halfLength, events, momentum, rolling, home, away, players)
             {
                 RatingResearch = ratingResearch,
+                Tactics = structureMinor >= 10 ? ReadTactics(reader, previous?.Tactics, previous is null, tacticsCodec) : null,
             };
             frames[frameIndex] = frame;
             previous = frame;
@@ -877,4 +882,74 @@ internal static class ArchiveFrameCodec
         var previousBits = unchecked((uint)BitConverter.SingleToInt32Bits(previous));
         return BitConverter.Int32BitsToSingle(unchecked((int)(previousBits ^ delta)));
     }
+
+    // 2.10 tactical tails: 0=inherited, 1=unavailable, 2=legacy JSON, 3=binary delta.
+    private static readonly JsonSerializerOptions TacticsJsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, MaxDepth = 16 };
+
+    internal static void WriteTactics(BinaryWriter writer, TacticalSnapshot? previous, TacticalSnapshot? current, bool keyframe,
+        ArchiveTacticsBinaryCodec? context = null)
+    {
+        if (!keyframe && ReferenceEquals(previous, current)) { writer.Write((byte)0); return; }
+        if (current is null) { writer.Write((byte)1); return; }
+        if (!ValidTactics(current)) throw new ArchiveFormatException("invalid_tactics", "Invalid tactical fields.");
+        using var stream = new MemoryStream();
+        using (var payload = new BinaryWriter(stream, System.Text.Encoding.UTF8, true))
+            (context ?? new ArchiveTacticsBinaryCodec()).Write(payload, keyframe ? null : previous, current);
+        if (stream.Length > 1_048_576) throw new ArchiveFormatException("invalid_tactics", "Tactical snapshot exceeds its size limit.");
+        writer.Write((byte)3);
+        ArchiveBinary.WriteVarUInt64(writer, (ulong)stream.Length);
+        writer.Write(stream.GetBuffer(), 0, (int)stream.Length);
+    }
+
+    internal static TacticalSnapshot? ReadTactics(BinaryReader reader, TacticalSnapshot? previous, bool keyframe,
+        ArchiveTacticsBinaryCodec? context = null)
+    {
+        switch (reader.ReadByte())
+        {
+            case 0 when !keyframe: return previous;
+            case 1: return null;
+            case 2:
+                try
+                {
+                    var value = JsonSerializer.Deserialize<TacticalSnapshot>(ArchiveBinary.ReadString(reader), TacticsJsonOptions);
+                    if (!ValidTactics(value)) throw new JsonException("Invalid tactical fields.");
+                    return value;
+                }
+                catch (JsonException ex) { throw new ArchiveFormatException("invalid_tactics", ex.Message); }
+            case 3:
+                try
+                {
+                    var length = ArchiveBinary.ReadVarUInt64(reader, 5);
+                    if (length > 1_048_576) throw new ArchiveFormatException("invalid_tactics", "Tactical snapshot exceeds its size limit.");
+                    var bytes = reader.ReadBytes((int)length);
+                    if (bytes.Length != (int)length) throw new EndOfStreamException();
+                    using var stream = new MemoryStream(bytes, false);
+                    using var payload = new BinaryReader(stream);
+                    var value = (context ?? new ArchiveTacticsBinaryCodec()).Read(payload, keyframe ? null : previous);
+                    if (stream.Position != stream.Length || !ValidTactics(value)) throw new ArchiveFormatException("invalid_tactics", "Invalid tactical fields or trailing bytes.");
+                    return value;
+                }
+                catch (OverflowException ex) { throw new ArchiveFormatException("invalid_tactics", ex.Message); }
+            default: throw new ArchiveFormatException("invalid_tactics", "Invalid tactical state marker.");
+        }
+    }
+
+    private static bool ValidTactics(TacticalSnapshot? value) => value is not null && value.Revision > 0 && value.ObservedTick >= 0 &&
+        value.CapturedUnixMilliseconds >= 0 && ValidTacticalTeam(value.Home) && ValidTacticalTeam(value.Away);
+    private static bool ValidTacticalTeam(TacticalTeamData? team) => team is not null && team.Status is "complete" or "partial" or "unavailable" &&
+        ValidTacticalConfiguration(team.Processing) && ValidTacticalConfiguration(team.Command) && (team.PersonalOpposition is null || team.PersonalOpposition.Length == 78) &&
+        (team.PositionOpposition is null || team.PositionOpposition.Length <= 25 && team.PositionOpposition.All(p => p is not null && p.PackedInstructions <= 0xFFFFFF)) &&
+        team.Players is { Length: <= 64 } && team.Players.Select(p => p?.Slot).Distinct().Count() == team.Players.Length && team.Players.All(p => p is not null && p.Slot is >= 0 and < 64 &&
+            p.RosterSlot is null or >= -128 and <= 127 && p.TacticSlot is null or >= -128 and <= 127);
+    private static bool ValidTacticalConfiguration(TacticalConfiguration? config) => config is null ||
+        config.TeamInstructions is { Length: 16 } && (config.NameUtf8 is null || config.NameUtf8.Length <= 1024) && config.PhaseSlotMapping is { Length: 11 } &&
+        config.InPossession is { Length: 11 } && ValidTacticalPositions(config.InPossession) &&
+        config.OutOfPossession is { Length: 11 } && ValidTacticalPositions(config.OutOfPossession) &&
+        ValidTacticalOverrides(config.InPossessionOverrides) && ValidTacticalOverrides(config.OutOfPossessionOverrides);
+    private static bool ValidTacticalOverrides(TacticalPersonalOverride[]? values) => values is null || values.Length <= 26 &&
+        values.All(p => p is not null && p.Positions is { Length: <= 11 } && ValidTacticalPositions(p.Positions));
+    private static bool ValidTacticalPositions(TacticalPosition[] values) => values.All(p => p is not null && ValidTacticalHex(p.RoleDuty) &&
+        (p.Instructions is null || p.Instructions.Length <= 64 && p.Instructions.All(r => r is not null && ValidTacticalHex(r.RoleKey) && ValidTacticalHex(r.Bits) && r.MarkPlayer is >= -128 and <= 127)) &&
+        (p.Applicability is null || p.Applicability.Length <= 64 && p.Applicability.All(r => r is not null && ValidTacticalHex(r.RoleMask))));
+    private static bool ValidTacticalHex(string? value) => value is { Length: 16 } && value.All(Uri.IsHexDigit);
 }

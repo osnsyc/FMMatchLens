@@ -502,3 +502,43 @@ export type MatchSnapshot = {
   rollingMomentum: MatchMomentumPoint[]
   formationSnapshots?: FormationSnapshot[]
 }
+
+/** Raw native inputs: UInt64 values are fixed-width hex strings, byte arrays base64. */
+export type TacticalRoleInstructions = { roleKey: string; bits: string; markPosition: number; markPlayer: number }
+export type TacticalPosition = {
+  positionMask: number
+  auxiliary: number
+  flags: number
+  roleDuty: string
+  instructions: TacticalRoleInstructions[] | null
+  applicability: { instructionId: number; roleMask: string }[] | null
+}
+export type TacticalPersonalOverride = { personKey: number; positions: TacticalPosition[] }
+export type TacticalConfiguration = {
+  teamInstructions: string
+  styleKey: number
+  nameUtf8: string | null
+  additionalState: number
+  mentality: number
+  phaseSlotMapping: string
+  inPossession: TacticalPosition[]
+  outOfPossession: TacticalPosition[]
+  inPossessionOverrides: TacticalPersonalOverride[] | null
+  outOfPossessionOverrides: TacticalPersonalOverride[] | null
+}
+export type TacticalPlayerSlot = { slot: number; playerId: number; rosterSlot: number | null; tacticSlot: number | null; oppositionPositionKey: number | null }
+export type TacticalTeamData = {
+  status: "complete" | "partial" | "unavailable"
+  processing: TacticalConfiguration | null
+  command: TacticalConfiguration | null
+  personalOpposition: string | null
+  positionOpposition: { positionKey: number; packedInstructions: number }[] | null
+  players: TacticalPlayerSlot[]
+}
+export type TacticalSnapshot = {
+  revision: number
+  observedTick: number
+  capturedUnixMilliseconds: number
+  home: TacticalTeamData
+  away: TacticalTeamData
+}

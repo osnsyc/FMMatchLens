@@ -146,6 +146,7 @@ internal sealed class RealtimeMatchTimeline
                 MomentumEventUpdates: momentumEventUpdates)
             {
                 RatingResearch = raw.RatingResearch,
+                Tactics = raw.Tactics,
             };
 
             if (replaceFinalTick)

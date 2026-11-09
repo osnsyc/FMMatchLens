@@ -32,6 +32,11 @@ internal sealed record RealtimeTickFrame(
     [JsonPropertyName("ratingModel")]
     public RatingResearchMatchData? RatingResearch { get; init; }
 
+    public TacticalSnapshot? Tactics { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public long? TacticsUnchangedFrom { get; init; }
+
     public RealtimeTickFrame ToWireFrame(RealtimeTickFrame? previous = null)
     {
         var previousBySlot = previous?.Players.ToDictionary(player => player.Slot);
@@ -47,7 +52,12 @@ internal sealed record RealtimeTickFrame(
                 : RatingResearchPlayerWireData.From(player.RatingResearch, priorResearch);
             return player with { RatingInputs = ratingInputs };
         }).ToArray();
-        return this with { Players = players };
+        // Periodic baselines also recover clients that joined between revisions
+        // while their initial HTTP snapshot raced an incoming WebSocket frame.
+        return previous is not null && previous.MatchId == MatchId && Tactics is not null && ReferenceEquals(previous.Tactics, Tactics) &&
+            CapturedUnixMilliseconds / 5_000 == previous.CapturedUnixMilliseconds / 5_000
+            ? this with { Players = players, Tactics = null, TacticsUnchangedFrom = Tactics.Revision }
+            : this with { Players = players };
     }
 }
 
