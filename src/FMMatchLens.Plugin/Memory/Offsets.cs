@@ -334,6 +334,9 @@ internal static class Offsets
 
     public static class MatchPlayer
     {
+        public const int OppositionPositionKey = 0xCE0;
+        public const int TacticalRosterSlot = 0x1E27;
+        public const int TacticalFormationSlot = 0x1E51;
         public const int Person = 0x28;
         // Pointer to an inline FM UTF-8 string instance. The byte length is at
         // +0x0 and zero-terminated text begins at +0x4.
@@ -745,6 +748,101 @@ internal static class Offsets
         public const int CrossesAttempted = 0x70; // u16
         public const int CrossesCompleted = 0x72; // u16
         public const int HeadersLost = 0x76; // u16
+    }
+
+    public static class Tactics
+    {
+        public const int FormationSlotCount = 11;
+        public const int PersonalOppositionCount = 26;
+        public const int PersonalOppositionRecordSize = 3;
+        public const int PositionOppositionCapacity = 25;
+
+        public static class Context
+        {
+            public const int ProcessingConfiguration = 0x1818;
+            public const int CommandConfiguration = 0x2768;
+            public const int PersonalOpposition = 0x16F8;
+            public const int PositionOppositionCount = 0x1748;
+            public const int PositionOppositionEntries = 0x174C;
+        }
+
+        public static class Configuration
+        {
+            public const int Size = 0x7A8;
+            public const int TeamInstructions = 0xE0;
+            public const int TeamInstructionsSize = 16;
+            public const int Name = 0xF8;
+            public const int StyleKey = 0x100;
+            public const int AdditionalState = 0x104;
+            public const int Mentality = 0x105;
+            public const int InPossession = 0x118;
+            public const int OutOfPossession = 0x438;
+            public const int InPossessionOverrides = 0x758;
+            public const int OutOfPossessionOverrides = 0x768;
+            public const int PhaseSlotMapping = 0x79C;
+        }
+
+        public static class Position
+        {
+            public const int Size = 0x48;
+            public const int PositionMask = 0;
+            public const int Auxiliary = 4;
+            public const int Instructions = 8;
+            public const int Flags = 0x20;
+            public const int Applicability = 0x28;
+            public const int RoleDuty = 0x40;
+        }
+
+        public static class RoleInstructions
+        {
+            public const int Size = 0x18;
+            public const int RoleKey = 0;
+            public const int Bits = 8;
+            public const int MarkPosition = 0x10;
+            public const int MarkPlayer = 0x14;
+        }
+
+        public static class Applicability
+        {
+            public const int Size = 0x10;
+            public const int InstructionId = 0;
+            public const int RoleMask = 8;
+        }
+
+        public static class OverrideTree
+        {
+            public const int Header = 0;
+            public const int Count = 8;
+            public const int HeaderSize = 0x20;
+            public const int Root = 8;
+            public const int NodeSize = 0x40;
+            public const int Left = 0;
+            public const int Right = 0x10;
+            public const int Sentinel = 0x19;
+            public const int PersonKey = 0x20;
+            public const int Positions = 0x28;
+        }
+
+        public static class Vector
+        {
+            public const int Size = 24;
+            public const int Begin = 0;
+            public const int End = 8;
+            public const int Capacity = 16;
+        }
+
+        public static class Text
+        {
+            public const int Length = 0;
+            public const int Utf8 = 4;
+        }
+
+        public static class OppositionPosition
+        {
+            public const int Size = 8;
+            public const int PositionKey = 0;
+            public const int Instructions = 4;
+        }
     }
 
     public static class PlayerStats
