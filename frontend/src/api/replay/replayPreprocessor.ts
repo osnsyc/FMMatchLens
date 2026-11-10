@@ -1,3 +1,5 @@
+import { FormationTimeline } from "@/components/formation/formationProjection"
+import { metadataAtTick } from "@/api/archiveMetadata"
 import type {
   ArchiveRatingInputs,
   RealtimeFrame,
@@ -37,6 +39,17 @@ export async function preprocessReplayArchive(
   input: ReplayPreprocessInput,
   options: ReplayPreprocessOptions = {}
 ): Promise<ReplayArchive> {
+  const formations = new FormationTimeline()
+  const metadataTimeline = [...(input.metadataTimeline ?? [])].sort(
+    (a, b) => a.capturedTick - b.capturedTick
+  )
+  // A legacy archive may use the 2.10 tail with null tactics throughout.
+  // Infer fallback only for the entire archive; never fill an isolated tactical gap.
+  const legacyFormation =
+    input.frames.every((frame) => !frame.tactics) &&
+    [input.metadata, ...metadataTimeline].some((meta) =>
+      meta?.players.some((p) => p.inPossession || p.outOfPossession)
+    )
   const batchSize = Math.max(1, options.batchSize ?? 400)
   const frames: ReplayFrame[] = new Array(input.frames.length)
   const streamRevisions: ReplayStreamRevision[] = new Array(input.frames.length)
@@ -50,12 +63,24 @@ export async function preprocessReplayArchive(
     throwIfAborted(options.signal)
     const end = Math.min(input.frames.length, start + batchSize)
     for (let index = start; index < end; index += 1) {
-      const source = input.frames[index]
+      const raw = input.frames[index]
+      const source = legacyFormation ? { ...raw, tactics: undefined } : raw
+      formations.append(
+        source,
+        metadataAtTick(metadataTimeline, source.tick) ?? input.metadata
+      )
       const previous = input.frames[index - 1]
-      if (previous && (source.matchId !== previous.matchId || source.tick < previous.tick)) {
+      if (
+        previous &&
+        (source.matchId !== previous.matchId || source.tick < previous.tick)
+      ) {
         ratingInputsBySlot.clear()
       }
-      const players = hydrateReplayPlayers(source.players, ratingInputsBySlot, index)
+      const players = hydrateReplayPlayers(
+        source.players,
+        ratingInputsBySlot,
+        index
+      )
       const logicalUpdates =
         source.momentumEventUpdates ??
         eventReconciler.apply(source.momentumEvents)
@@ -88,9 +113,6 @@ export async function preprocessReplayArchive(
   }
 
   throwIfAborted(options.signal)
-  const metadataTimeline = [...(input.metadataTimeline ?? [])].sort(
-    (left, right) => left.capturedTick - right.capturedTick
-  )
   return {
     summary: input.summary,
     frameCount: frames.length,
@@ -98,6 +120,7 @@ export async function preprocessReplayArchive(
     metadata: input.metadata,
     metadataTimeline,
     frames,
+    formationFrames: formations.frames,
     streamRevisions,
     ratingConfiguration: input.ratingConfiguration,
   }

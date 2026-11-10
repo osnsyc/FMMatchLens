@@ -33,7 +33,17 @@ export function focusFormationPositions(
       slot: p.slot,
       position: p.position,
       positionMask: p.raw.positionMask,
-      playerIds: p.players.map((player) => player.playerId),
+      playerIds: p.players
+        .filter((binding) =>
+          match.players.some(
+            (player) =>
+              player.team === side &&
+              player.isOnPitch &&
+              player.id === binding.playerId &&
+              player[phase]?.positionMask === p.raw.positionMask
+          )
+        )
+        .map((player) => player.playerId),
     }))
   // Reuse the normal panel's substitution repair when supplied by FormationPitch.
   if (fallback)

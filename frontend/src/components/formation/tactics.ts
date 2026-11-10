@@ -547,6 +547,7 @@ export class TacticalWireState {
       matchId: string
       tactics?: TacticalSnapshot | null
       tacticsUnchangedFrom?: number
+      legacyFormation?: boolean
     },
   >(frame: T): T {
     if (frame.matchId !== this.matchId) {
@@ -554,6 +555,10 @@ export class TacticalWireState {
       this.previous = null
     }
     const inherited = frame.tacticsUnchangedFrom
+    if (frame.legacyFormation) {
+      this.previous = null
+      return { ...frame, tactics: undefined }
+    }
     let tactics: TacticalSnapshot | null
     if (inherited !== undefined) {
       tactics = this.previous?.revision === inherited ? this.previous : null

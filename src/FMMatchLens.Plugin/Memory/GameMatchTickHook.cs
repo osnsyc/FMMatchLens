@@ -495,6 +495,7 @@ internal sealed class GameMatchTickHook : IDisposable
             frame.RollingMomentumCount = 0;
             frame.RatingResearch = null;
             frame.Tactics = null;
+            frame.LegacyFormation = !_tacticsLayoutSupported;
             frame.PossessionTeam = record.PossessionTeam == record.HomeTeam
                 ? TeamSide.Home
                 : record.PossessionTeam == record.AwayTeam
@@ -1536,8 +1537,8 @@ internal sealed class GameMatchTickHook : IDisposable
                 null,
                 ReadPlayerProfile(person, fullContract),
                 ReadPlayerAttributes(person),
-                ReadTacticalAssignment(matchPlayer, inPossession: true),
-                ReadTacticalAssignment(matchPlayer, inPossession: false),
+                _tacticsLayoutSupported ? null : ReadTacticalAssignment(matchPlayer, inPossession: true),
+                _tacticsLayoutSupported ? null : ReadTacticalAssignment(matchPlayer, inPossession: false),
                 positionFamiliarities,
                 shirtName,
                 squadNumber));
@@ -3360,6 +3361,22 @@ internal sealed class GameMatchTickHook : IDisposable
         private long _nextSampleTick = long.MinValue;
         private long _revision;
         private int _remainingVectorBytes;
+        private readonly (int Slot, long PlayerId, TeamSide Team, bool IsOnPitch)[] _roster =
+            new (int, long, TeamSide, bool)[RawRealtimeTickFrame.MaxPlayers];
+        private int _rosterCount = -1;
+
+        private bool RosterChanged(RawRealtimeTickFrame frame)
+        {
+            if (_rosterCount != frame.PlayerCount) return true;
+            for (var i = 0; i < _rosterCount; i++)
+            {
+                var a = _roster[i];
+                var b = frame.Players[i];
+                if (a.Slot != b.Slot || a.PlayerId != b.PlayerId || a.Team != b.Team || a.IsOnPitch != b.IsOnPitch)
+                    return true;
+            }
+            return false;
+        }
 
         public TacticalSnapshot? Capture(nint home, nint away, RawRealtimeTickFrame frame, ReadOnlySpan<nint> players)
         {
@@ -3375,8 +3392,14 @@ internal sealed class GameMatchTickHook : IDisposable
                     _nextSampleTick = long.MinValue;
                 }
                 _lastTick = frame.Tick;
-                if (frame.Tick < _nextSampleTick && !frame.FinishedByFlags) return _snapshot;
+                if (frame.Tick < _nextSampleTick && !frame.FinishedByFlags && !RosterChanged(frame)) return _snapshot;
                 _nextSampleTick = (long)frame.Tick + SampleIntervalTicks;
+                _rosterCount = frame.PlayerCount;
+                for (var i = 0; i < _rosterCount; i++)
+                {
+                    var player = frame.Players[i];
+                    _roster[i] = (player.Slot, player.PlayerId, player.Team, player.IsOnPitch);
+                }
                 _remainingVectorBytes = 131_072;
                 _reader.TryReadPointer(home + Offsets.Team.Manager, out var homeContext);
                 _reader.TryReadPointer(away + Offsets.Team.Manager, out var awayContext);

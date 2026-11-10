@@ -1,3 +1,4 @@
+import { tacticalPitchPoints } from "@/components/formation/formationDecoder"
 import { useStoredChoice } from "@/hooks/useStoredPreference"
 import {
   memo,
@@ -58,8 +59,6 @@ type FormationPitchProps = {
   isFocusMode: boolean
 }
 type FormationView = "home-ip" | "home-oop" | "away-ip" | "away-oop"
-type FormationLine =
-  "gk" | "defence" | "holding" | "midfield" | "attack" | "striker"
 
 type FormationEntry = {
   player: MatchPlayer
@@ -110,15 +109,6 @@ const emptyFormationHistory = (): FormationHistory => ({
   "away-oop": [],
 })
 
-const lineDepth: Record<FormationLine, number> = {
-  gk: 7,
-  defence: 24,
-  holding: 41,
-  midfield: 58,
-  attack: 75,
-  striker: 92,
-}
-
 const playerMotionVariants = {
   initial: { left: "50%", top: "-8%", opacity: 0 },
   exit: (instant: boolean) => ({
@@ -139,14 +129,11 @@ export const FormationPitch = memo(function FormationPitch({
   const [view, setView] = useStoredChoice<FormationView>(
     "formation.view",
     "home-ip",
-    ["home-ip", "home-oop", "away-ip", "away-oop"],
+    ["home-ip", "home-oop", "away-ip", "away-oop"]
   )
   const liveEntries = useMemo(
     () => formationEntries(match.players),
     [match.players]
-  )
-  const [history, setHistory] = useState<FormationHistory>(
-    emptyFormationHistory
   )
   const [playback, setPlayback] = useState<FormationPlayback | null>(null)
   const [pinnedEntries, setPinnedEntries] = useState<PinnedFormationEntries>({})
@@ -160,7 +147,6 @@ export const FormationPitch = memo(function FormationPitch({
     Partial<Record<FormationView, HTMLDivElement | null>>
   >({})
   const matchKeyRef = useRef("")
-  const formationSeedKeyRef = useRef("")
   const matchKey =
     match.matchId ??
     `${match.home.clubUid ?? match.home.uid ?? match.home.name}:${match.away.clubUid ?? match.away.uid ?? match.away.name}`
@@ -168,45 +154,37 @@ export const FormationPitch = memo(function FormationPitch({
     () => match.formationSnapshots ?? [],
     [match.formationSnapshots]
   )
-  const lastFormationSnapshot = formationSnapshots.at(-1)
-  const formationSeedKey = `${matchKey}:${formationSnapshots.length}:${lastFormationSnapshot?.tick ?? -1}`
-
-  useEffect(() => {
-    const reset = matchKeyRef.current !== matchKey
-    const rehydrate = reset || formationSeedKeyRef.current !== formationSeedKey
-    if (reset) {
-      setPinnedEntries({})
-      setPlayback(null)
-    }
-    matchKeyRef.current = matchKey
-    formationSeedKeyRef.current = formationSeedKey
-    setHistory((current) => {
-      let next = rehydrate ? emptyFormationHistory() : current
-      if (rehydrate) {
-        for (const snapshot of formationSnapshots) {
-          next = updateFormationHistory(
-            next,
-            formationEntries(snapshot.players),
-            snapshot.tick,
-            formatFormationTime(snapshot.minute)
-          )
-        }
-      }
-      return updateFormationHistory(
+  const history = useMemo(() => {
+    let next = emptyFormationHistory()
+    for (const snapshot of formationSnapshots) {
+      next = updateFormationHistory(
         next,
-        liveEntries,
-        match.clock.elapsedTick,
-        formatFormationTime(match.clock.minute)
+        formationEntries(snapshot.players),
+        snapshot.tick,
+        formatFormationTime(snapshot.minute)
       )
-    })
+    }
+    return updateFormationHistory(
+      next,
+      liveEntries,
+      match.clock.elapsedTick,
+      formatFormationTime(match.clock.minute)
+    )
   }, [
-    formationSeedKey,
     formationSnapshots,
     liveEntries,
     match.clock.elapsedTick,
     match.clock.minute,
-    matchKey,
   ])
+
+  useEffect(() => {
+    if (matchKeyRef.current !== matchKey) {
+      setPinnedEntries({})
+      setPlayback(null)
+      setTimelineProgressIndex(null)
+    }
+    matchKeyRef.current = matchKey
+  }, [matchKey])
 
   useEffect(() => {
     if (!playback) return
@@ -308,7 +286,15 @@ export const FormationPitch = memo(function FormationPitch({
   ] satisfies Array<{ id: FormationView; label: string }>
   const visibleViews = isFocusMode ? focusedFormationViews : [view]
 
-  if (isFocusMode) return <FormationFocus key={matchKey} match={match} kits={kits} fallbackEntries={liveEntries} />
+  if (isFocusMode)
+    return (
+      <FormationFocus
+        key={matchKey}
+        match={match}
+        kits={kits}
+        fallbackEntries={liveEntries}
+      />
+    )
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -323,7 +309,10 @@ export const FormationPitch = memo(function FormationPitch({
                 value={view}
                 onValueChange={(value) => {
                   setView(value as FormationView)
-                  emitExploreTourInteraction({ id: "formation-view-change", value })
+                  emitExploreTourInteraction({
+                    id: "formation-view-change",
+                    value,
+                  })
                 }}
                 renderContent={false}
                 className="w-64 max-w-none"
@@ -495,7 +484,9 @@ function FormationViewPane({
                     <TimelineHeader>
                       <TimelineTime
                         data-tour="formation-history-time"
-                        data-tour-latest={index === viewHistory.length - 1 ? "true" : undefined}
+                        data-tour-latest={
+                          index === viewHistory.length - 1 ? "true" : undefined
+                        }
                         onClick={() => onPlayback(animationSourceIndex, index)}
                         aria-label={`${entry.time} ${description}`}
                         className={
@@ -683,7 +674,9 @@ function FormationViewPane({
                                   aria-hidden="true"
                                   className="mx-1 h-2.5 w-px shrink-0 bg-border"
                                 />
-                                <span className="min-w-0 truncate">{player.name}</span>
+                                <span className="min-w-0 truncate">
+                                  {player.name}
+                                </span>
                               </div>
                             </HoverCardTrigger>
                             <HoverCardContent
@@ -881,7 +874,7 @@ function upsertFormationHistory(
   tick: number,
   time: string
 ) {
-  if (entries.length === 0) return history
+  if (entries.length === 0 && history.length === 0) return history
 
   const signature = formationSignature(entries)
   const atTick = history.find((entry) => entry.tick === tick)
@@ -890,8 +883,8 @@ function upsertFormationHistory(
   const previous = history.findLast((entry) => entry.tick < tick)
   if (!atTick && previous?.signature === signature) return history
 
-  const candidateTick = history.length === 0 ? 0 : tick
-  const candidateTime = history.length === 0 ? formatFormationTime(0) : time
+  const candidateTick = tick
+  const candidateTime = time
   const candidate: FormationHistoryEntry = {
     id: `${candidateTick}:${signature}`,
     tick: candidateTick,
@@ -926,6 +919,8 @@ function formationSignature(entries: FormationEntry[]) {
         assignment.positionMask,
         assignment.role,
         assignment.roleAbbreviation,
+        assignment.roleDuty,
+        assignment.duty,
       ].join(":")
     )
     .sort()
@@ -967,7 +962,9 @@ function formationChanges(
     if (
       previousEntry.assignment.role !== currentEntry.assignment.role ||
       previousEntry.assignment.roleAbbreviation !==
-        currentEntry.assignment.roleAbbreviation
+        currentEntry.assignment.roleAbbreviation ||
+      previousEntry.assignment.roleDuty !== currentEntry.assignment.roleDuty ||
+      previousEntry.assignment.duty !== currentEntry.assignment.duty
     ) {
       changes.add("role")
     }
@@ -1024,74 +1021,23 @@ function layoutTeam(
   const onPitch = teamPlayers.filter((player) => player.isOnPitch)
   const assignmentFor = (player: MatchPlayer) =>
     inPossession ? player.inPossession : player.outOfPossession
-  const occupiedPositions = new Set(
-    onPitch.flatMap((player) => {
-      const assignment = assignmentFor(player)
-      return assignment ? [assignment.positionMask] : []
-    })
+  const assigned = onPitch.flatMap((player) => {
+    const assignment = assignmentFor(player)
+    return assignment ? [{ player, assignment }] : []
+  })
+  const points = tacticalPitchPoints(
+    assigned.map((entry) => entry.assignment.positionMask)
   )
-  const vacatedAssignments = teamPlayers
-    .filter(
-      (player) => !player.isOnPitch && player.status?.subbedOffMinute != null
-    )
-    .flatMap((player) => {
-      const assignment = assignmentFor(player)
-      return assignment && !occupiedPositions.has(assignment.positionMask)
-        ? [{ assignment, minute: player.status!.subbedOffMinute! }]
-        : []
-    })
-
-  return onPitch
-    .map((player) => {
-      const current = assignmentFor(player)
-      if (current) return { player, assignment: current }
-
-      const substitutionMinute = player.status?.subbedOnMinute
-      const matchingIndex = vacatedAssignments.findIndex(
-        ({ minute }) =>
-          substitutionMinute != null && minute === substitutionMinute
-      )
-      const fallback = vacatedAssignments.splice(
-        matchingIndex >= 0 ? matchingIndex : 0,
-        1
-      )[0]
-      return fallback ? { player, assignment: fallback.assignment } : null
-    })
-    .filter(
-      (
-        entry
-      ): entry is {
-        player: MatchPlayer
-        assignment: PlayerTacticalAssignment
-      } => entry != null
-    )
-    .map(({ player, assignment }) => {
-      const depth = lineDepth[lineForPosition(assignment.position)]
-      const lane = laneForPosition(assignment.position)
-      return {
-        player,
-        assignment,
-        x: side === "home" ? depth : 100 - depth,
-        y: side === "home" ? 100 - lane : lane,
-      }
-    })
-}
-
-function lineForPosition(position: string): FormationLine {
-  const value = position.toUpperCase()
-  if (value === "GK") return "gk"
-  if (value.startsWith("ST")) return "striker"
-  if (value.startsWith("AM")) return "attack"
-  if (value.startsWith("DM")) return "holding"
-  if (value.startsWith("M")) return "midfield"
-  return "defence"
-}
-
-function laneForPosition(position: string) {
-  const value = position.toUpperCase()
-  if (["DR", "WBR", "MR", "AMR"].includes(value)) return 10
-  if (["DCR", "DMR", "MCR", "AMCR", "STR"].includes(value)) return 36
-  if (["DCL", "DML", "MCL", "AMCL", "STL"].includes(value)) return 64
-  if (["DL", "WBL", "ML", "AML"].includes(value)) return 90
-  return 50
+  return assigned.flatMap((entry, index) => {
+    const point = points[index]
+    if (!point) return []
+    // Normal view is horizontal; focus view uses the same points vertically.
+    return [
+      {
+        ...entry,
+        x: side === "home" ? 100 - point.y : point.y,
+        y: side === "home" ? point.x : 100 - point.x,
+      },
+    ]
+  })
 }

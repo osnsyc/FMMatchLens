@@ -17,7 +17,6 @@ internal sealed class RealtimeMatchTimeline
     private readonly MatchArchiveStore _archives;
     private readonly GraphicsAssetIndex _graphicsAssets;
     private readonly List<RealtimeTickFrame[]> _chunks = new();
-    private readonly List<RealtimeMetadataTimelineEntry> _metadataTimeline = new();
     private readonly MomentumEventReconciler _momentumEventReconciler = new(PluginLogger.Warning);
     private int _lastChunkCount;
     private int _frameCount;
@@ -147,6 +146,7 @@ internal sealed class RealtimeMatchTimeline
             {
                 RatingResearch = raw.RatingResearch,
                 Tactics = raw.Tactics,
+                LegacyFormation = raw.LegacyFormation,
             };
 
             if (replaceFinalTick)
@@ -206,7 +206,6 @@ internal sealed class RealtimeMatchTimeline
                         null)).ToArray(),
                     HalfPitchWidth: ValidPitchHalf(frame.HalfPitchWidth),
                     HalfPitchLength: ValidPitchHalf(frame.HalfPitchLength));
-                AppendMetadataTimelineEntryLocked(_metadata, frame);
                 _archives.WriteMetadata(_metadata);
             }
             else
@@ -217,19 +216,7 @@ internal sealed class RealtimeMatchTimeline
                     _metadata = withPitch;
                     _archives.WriteMetadata(_metadata);
                 }
-                if (_metadataTimeline.Count == 0 ||
-                    !OnPitchRosterEquals(_metadataTimeline[^1].Frame, frame))
-                {
-                    AppendMetadataTimelineEntryLocked(
-                        _metadata with { CapturedTick = frame.Tick },
-                        frame,
-                        forceAppend: true);
-                }
             }
-
-            if (replaceFinalTick && _metadataTimeline.Count > 0 &&
-                _metadataTimeline[^1].Frame?.Tick == frame.Tick)
-                _metadataTimeline[^1] = _metadataTimeline[^1] with { Frame = frame };
 
             _archives.Append(frame);
 
@@ -271,7 +258,6 @@ internal sealed class RealtimeMatchTimeline
 
             _metadata = candidate;
             _hasCompleteMetadata = IsMetadataComplete(candidate);
-            AppendMetadataTimelineEntryLocked(_metadata, _current);
             _archives.WriteMetadata(_metadata);
         }
     }
@@ -376,56 +362,6 @@ internal sealed class RealtimeMatchTimeline
         }
     }
 
-    public RealtimeFormationTimelineSlice GetFormationTimeline(int fromIndex, int limit = 256)
-    {
-        fromIndex = Math.Max(0, fromIndex);
-        limit = Math.Clamp(limit, 1, 1_000);
-
-        lock (_gate)
-        {
-            var entries = fromIndex >= _metadataTimeline.Count
-                ? Array.Empty<RealtimeFormationTimelineEntry>()
-                : _metadataTimeline
-                    .Skip(fromIndex)
-                    .Take(limit)
-                    .Select(ToFormationTimelineEntry)
-                    .ToArray();
-            return new RealtimeFormationTimelineSlice(
-                _matchId,
-                _status,
-                _metadataTimeline.Count,
-                entries);
-        }
-    }
-
-    private static RealtimeFormationTimelineEntry ToFormationTimelineEntry(
-        RealtimeMetadataTimelineEntry entry)
-    {
-        var metadataPlayers = entry.Metadata.Players.ToDictionary(player => player.Slot);
-        var players = entry.Frame?.Players
-            .Where(player => player.IsOnPitch || player.SubbedOffMinute > 0)
-            .Where(player => metadataPlayers.ContainsKey(player.Slot))
-            .Select(framePlayer =>
-        {
-            var player = metadataPlayers[framePlayer.Slot];
-            return new RealtimeFormationPlayerSnapshot(
-                framePlayer.Slot,
-                player.PlayerId,
-                player.Team,
-                framePlayer.IsSubstitute,
-                framePlayer.IsOnPitch,
-                framePlayer.SubbedOnMinute,
-                framePlayer.SubbedOffMinute,
-                player.InPossession,
-                player.OutOfPossession);
-        }).ToArray() ?? Array.Empty<RealtimeFormationPlayerSnapshot>();
-        return new RealtimeFormationTimelineEntry(
-            entry.Index,
-            entry.Frame?.Tick ?? entry.Metadata.CapturedTick,
-            entry.Frame?.DisplayTick ?? entry.Metadata.CapturedTick,
-            players);
-    }
-
     public RealtimeFrameSlice GetFrames(int fromTick, int? toTick, int stride, int limit = DefaultQueryLimit)
     {
         stride = Math.Clamp(stride, 1, 1_000);
@@ -481,64 +417,8 @@ internal sealed class RealtimeMatchTimeline
         _matchId = null;
         _current = null;
         _metadata = null;
-        _metadataTimeline.Clear();
         _hasCompleteMetadata = false;
         _lastMetadataRefreshTimestamp = 0;
-    }
-
-    private void AppendMetadataTimelineEntryLocked(
-        RealtimeMatchMetadata metadata,
-        RealtimeTickFrame? frame,
-        bool forceAppend = false)
-    {
-        if (!forceAppend && _metadataTimeline.Count > 0 &&
-            FormationMetadataContentEquals(_metadataTimeline[^1].Metadata, metadata))
-        {
-            return;
-        }
-
-        _metadataTimeline.Add(new RealtimeMetadataTimelineEntry(
-            _metadataTimeline.Count,
-            metadata,
-            frame));
-    }
-
-    private static bool OnPitchRosterEquals(RealtimeTickFrame? left, RealtimeTickFrame right)
-    {
-        if (left is null) return false;
-        var leftPlayers = left.Players
-            .Where(player => player.IsOnPitch)
-            .Select(player => (player.Team, player.Slot))
-            .OrderBy(player => player.Team)
-            .ThenBy(player => player.Slot);
-        var rightPlayers = right.Players
-            .Where(player => player.IsOnPitch)
-            .Select(player => (player.Team, player.Slot))
-            .OrderBy(player => player.Team)
-            .ThenBy(player => player.Slot);
-        return leftPlayers.SequenceEqual(rightPlayers);
-    }
-
-    private static bool FormationMetadataContentEquals(
-        RealtimeMatchMetadata left,
-        RealtimeMatchMetadata right)
-    {
-        if (left.Players.Count != right.Players.Count) return false;
-        var leftPlayers = left.Players.ToDictionary(player => player.Slot);
-        foreach (var player in right.Players)
-        {
-            if (!leftPlayers.TryGetValue(player.Slot, out var previous) ||
-                previous.Team != player.Team ||
-                previous.ShirtNumber != player.ShirtNumber ||
-                previous.ShirtName != player.ShirtName ||
-                previous.DisplayName != player.DisplayName ||
-                previous.InPossession != player.InPossession ||
-                previous.OutOfPossession != player.OutOfPossession)
-            {
-                return false;
-            }
-        }
-        return true;
     }
 
     private static RealtimeMatchMetadata MergeMetadata(
@@ -846,31 +726,3 @@ internal sealed record RealtimeFrameSlice(
     string Status,
     int TotalFrameCount,
     IReadOnlyList<RealtimeTickFrame> Frames);
-
-internal sealed record RealtimeMetadataTimelineEntry(
-    int Index,
-    RealtimeMatchMetadata Metadata,
-    RealtimeTickFrame? Frame);
-
-internal sealed record RealtimeFormationPlayerSnapshot(
-    int Slot,
-    long PlayerId,
-    TeamSide Team,
-    bool IsSubstitute,
-    bool IsOnPitch,
-    int SubbedOnMinute,
-    int SubbedOffMinute,
-    PlayerTacticalAssignment? InPossession,
-    PlayerTacticalAssignment? OutOfPossession);
-
-internal sealed record RealtimeFormationTimelineEntry(
-    int Index,
-    int Tick,
-    int DisplayTick,
-    IReadOnlyList<RealtimeFormationPlayerSnapshot> Players);
-
-internal sealed record RealtimeFormationTimelineSlice(
-    string? MatchId,
-    string Status,
-    int TotalEntryCount,
-    IReadOnlyList<RealtimeFormationTimelineEntry> Entries);

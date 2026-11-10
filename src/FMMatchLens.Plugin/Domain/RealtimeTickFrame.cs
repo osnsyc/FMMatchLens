@@ -33,6 +33,9 @@ internal sealed record RealtimeTickFrame(
     public RatingResearchMatchData? RatingResearch { get; init; }
 
     public TacticalSnapshot? Tactics { get; init; }
+    // Live-only capability marker; old archive metadata remains the legacy source.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool LegacyFormation { get; init; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public long? TacticsUnchangedFrom { get; init; }

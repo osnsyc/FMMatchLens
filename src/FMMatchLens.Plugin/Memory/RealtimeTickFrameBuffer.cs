@@ -135,6 +135,7 @@ internal sealed class RawRealtimeTickFrame
     public long Sequence;
     public long InstanceGeneration;
     public TacticalSnapshot? Tactics;
+    public bool LegacyFormation;
     public bool FinishedByFlags;
     public long CapturedTimestamp;
     public nint MatchAddress;

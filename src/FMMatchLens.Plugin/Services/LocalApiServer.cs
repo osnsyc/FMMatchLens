@@ -27,8 +27,6 @@ internal sealed class LocalApiServer : IDisposable
     private Timer? _realtimePublishTimer;
     private int _lastPublishedRealtimeTick = -1;
     private RealtimeTickFrame? _lastPublishedRealtimeFrame;
-    private string? _publishedFormationMatchId;
-    private int _nextPublishedFormationIndex;
     private int _isPublishingRealtime;
 
     public LocalApiServer(
@@ -55,8 +53,6 @@ internal sealed class LocalApiServer : IDisposable
         _webSockets.Start();
         _lastPublishedRealtimeTick = -1;
         _lastPublishedRealtimeFrame = null;
-        _publishedFormationMatchId = null;
-        _nextPublishedFormationIndex = 0;
         _realtimePublishTimer = new Timer(
             _ => PublishLatestRealtimeFrame(),
             null,
@@ -180,15 +176,6 @@ internal sealed class LocalApiServer : IDisposable
                     break;
                 case "/api/match/meta":
                     await WriteJsonAsync(context.Response, _timeline.GetMetadata(), cancellationToken).ConfigureAwait(false);
-                    break;
-                case "/api/match/formation/history":
-                    var formationQuery = context.Request.QueryString;
-                    var fromIndex = ParseQueryInt(formationQuery["fromIndex"], 0);
-                    var formationLimit = ParseQueryInt(formationQuery["limit"], 256);
-                    await WriteJsonAsync(
-                        context.Response,
-                        _timeline.GetFormationTimeline(fromIndex, formationLimit),
-                        cancellationToken).ConfigureAwait(false);
                     break;
                 case "/api/match/status":
                     await WriteJsonAsync(context.Response, _timeline.GetStatus(), cancellationToken).ConfigureAwait(false);
@@ -356,29 +343,11 @@ internal sealed class LocalApiServer : IDisposable
                 _lastPublishedRealtimeFrame = frame;
                 await _webSockets.BroadcastAsync("realtime_tick", wireFrame, CancellationToken.None).ConfigureAwait(false);
             }
-
-            await PublishFormationChangesAsync().ConfigureAwait(false);
         }
         finally
         {
             Interlocked.Exchange(ref _isPublishingRealtime, 0);
         }
-    }
-
-    private async Task PublishFormationChangesAsync()
-    {
-        var status = _timeline.GetStatus();
-        if (status.MatchId != _publishedFormationMatchId)
-        {
-            _publishedFormationMatchId = status.MatchId;
-            _nextPublishedFormationIndex = 0;
-        }
-        if (status.MatchId is null) return;
-
-        var slice = _timeline.GetFormationTimeline(_nextPublishedFormationIndex, 256);
-        if (slice.Entries.Count == 0) return;
-        _nextPublishedFormationIndex = slice.Entries[^1].Index + 1;
-        await _webSockets.BroadcastAsync("formation_changed", slice, CancellationToken.None).ConfigureAwait(false);
     }
 
     private static int ParseQueryInt(string? value, int fallback)

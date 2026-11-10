@@ -45,6 +45,7 @@ import { MatchKitSymbols } from "@/components/PlayerShirt"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useTheme } from "@/components/theme-provider"
 import { useRealtimeMatch, type RealtimeFrame } from "@/api/realtimeMatch"
+import { TacticalWireState } from "@/components/formation/tactics"
 import {
   defaultBackendUrl,
   loadBackendUrl,
@@ -391,7 +392,10 @@ export function App() {
       ) {
         return []
       }
-      return slice.frames.filter((frame) => frame.tick <= toTick)
+      const tactics = new TacticalWireState()
+      return slice.frames
+        .map((frame) => tactics.hydrate(frame))
+        .filter((frame) => frame.tick <= toTick)
     },
     [activeMatchId, backendUrl, isReplayMode, tacticalReplayFrames]
   )

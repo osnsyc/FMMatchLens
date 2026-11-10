@@ -1,3 +1,4 @@
+import { formationGoalkeeper } from "@/components/formation/formationProjection"
 import type { RealtimeFrame } from "@/api/realtimeMatch"
 import type {
   ReplayMotionSnapshot,
@@ -99,14 +100,7 @@ export class ArchiveMotionSession {
             playerId: p.playerId,
             team: p.team,
             shirtNumber: detail?.shirtNumber ?? detail?.squadNumber,
-            isGoalkeeper:
-              (
-                detail?.inPossession?.position ??
-                detail?.outOfPossession?.position ??
-                detail?.position
-              )
-                ?.trim()
-                .toUpperCase() === "GK",
+            isGoalkeeper: formationGoalkeeper(raw, p, detail),
             ...project(p.x, p.y),
             positionMeters: projectPositionToPitchMeters(
               p.x,

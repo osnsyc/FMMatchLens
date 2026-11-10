@@ -7,6 +7,7 @@ import type { ReplayArchive } from "@/api/replay/replayTypes"
 import {
   calculateFrameRatingContributions,
   toMatchSnapshot,
+  formationSnapshotsAt,
   type RatingContribution,
 } from "@/api/realtimeMatch"
 import type { MatchSnapshot } from "@/types/match"
@@ -238,7 +239,7 @@ function replaySnapshot(
   derivations: HistoricalDerivations,
   previous?: MatchSnapshot,
   allowLocalAssets = true,
-  ratingContributions?: readonly (RatingContribution | undefined)[],
+  ratingContributions?: readonly (RatingContribution | undefined)[]
 ) {
   const frame = archive.frames[index]
   const historical = derivations.snapshot(frame.tick)
@@ -256,11 +257,17 @@ function replaySnapshot(
     historical.xgShots,
     historical.momentum,
     historical.rollingMomentum,
-    undefined,
+    formationSnapshotsAt(
+      archive.formationFrames,
+      frame.tick,
+      (tick) =>
+        metadataAtTick(archive.metadataTimeline, tick) ?? archive.metadata,
+      allowLocalAssets
+    ),
     previous,
     allowLocalAssets,
     archive.ratingConfiguration,
-    ratingContributions,
+    ratingContributions
   )
 }
 

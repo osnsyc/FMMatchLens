@@ -1,3 +1,4 @@
+import { formationGoalkeeper } from "@/components/formation/formationProjection"
 import {
   projectPositionToTacticalBoard,
   validPitchHalf,
@@ -57,14 +58,7 @@ export function buildPlaybackFrames(
         playerId: player.playerId,
         team: player.team,
         shirtNumber: details?.shirtNumber ?? details?.squadNumber,
-        isGoalkeeper:
-          (
-            details?.inPossession?.position ??
-            details?.outOfPossession?.position ??
-            details?.position
-          )
-            ?.trim()
-            .toUpperCase() === "GK",
+        isGoalkeeper: formationGoalkeeper(frame, player, details),
         x: position.x,
         y: position.y,
         angleDegrees: hasAngle

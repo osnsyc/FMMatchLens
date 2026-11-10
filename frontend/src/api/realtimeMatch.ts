@@ -1,3 +1,9 @@
+import {
+  FormationTimeline,
+  playerFormation,
+  repairLegacyFormation,
+  formationMetadata,
+} from "@/components/formation/formationProjection"
 import type { LiveMotionSource } from "@/api/liveMotionSource"
 import { startTransition, useEffect, useRef, useState } from "react"
 
@@ -176,7 +182,10 @@ export type RatingContribution = {
 export type RatingContributionGroup =
   | "BaseContext" | "Shooting" | "Creativity" | "Passing" | "Defence" | "Goalkeeping"
 
-export type RatingClassificationDuration = { categoryBit: number; duration: number }
+export type RatingClassificationDuration = {
+  categoryBit: number
+  duration: number
+}
 
 export type RatingContributionTerm = {
   index: number
@@ -190,6 +199,7 @@ export type RatingContributionTerm = {
 }
 
 export type RealtimeFrame = {
+  legacyFormation?: boolean
   tactics?: TacticalSnapshot | null
   tacticsUnchangedFrom?: number
   sequence: number
@@ -342,32 +352,6 @@ type RealtimeFrameSlice = {
   status: string
   totalFrameCount: number
   frames: RealtimeFrame[]
-}
-
-type RealtimeFormationPlayerSnapshot = {
-  slot: number
-  playerId: number
-  team: TeamSide
-  isSubstitute: boolean
-  isOnPitch: boolean
-  subbedOnMinute: number
-  subbedOffMinute: number
-  inPossession?: PlayerTacticalAssignment
-  outOfPossession?: PlayerTacticalAssignment
-}
-
-type RealtimeFormationTimelineEntry = {
-  index: number
-  tick: number
-  displayTick: number
-  players: RealtimeFormationPlayerSnapshot[]
-}
-
-type RealtimeFormationTimelineSlice = {
-  matchId?: string
-  status: string
-  totalEntryCount: number
-  entries: RealtimeFormationTimelineEntry[]
 }
 
 /** Incremental historical state. Each accepted frame is visited exactly once. */
@@ -658,16 +642,13 @@ export function useRealtimeMatch(
     const ratingConfiguration = observedRatingWeightConfiguration
     let historyMatchId = ""
     let historyLastTick = -1
-    let formationHistoryIndex = 0
-    let formationHistoryEntries: RealtimeFormationTimelineEntry[] = []
-    let formationSnapshots: FormationSnapshot[] = []
+    let historyLastSequence = -1
+    let formations = new FormationTimeline()
     let publishedSnapshot: MatchSnapshot | undefined
     let derived = new HistoricalDerivations()
     let historical = derived.snapshot(0)
     let syncing = false
     let syncPending = false
-    let formationSyncing = false
-    let formationSyncPending = false
 
     const fetchMetadata = async () => {
       const generation = connectionGeneration
@@ -687,7 +668,7 @@ export function useRealtimeMatch(
           return false
         const changed =
           JSON.stringify(next) !== JSON.stringify(metadata.current)
-        metadata.current = next
+        if (changed) metadata.current = next
         return changed
       } catch {
         // Metadata is retried on future snapshots.
@@ -708,12 +689,16 @@ export function useRealtimeMatch(
           historical.xgShots,
           historical.momentum,
           historical.rollingMomentum,
-          formationSnapshots,
+          formationSnapshotsAt(
+            formations.frames,
+            frame.tick,
+            () => metadata.current
+          ),
           publishedSnapshot,
           true,
           ratingConfiguration,
           undefined,
-          liveRatingContributions,
+          liveRatingContributions
         )
         setMatch(publishedSnapshot)
       }
@@ -728,9 +713,8 @@ export function useRealtimeMatch(
       motionSource?.setStatus("buffering")
       historyMatchId = matchId
       historyLastTick = -1
-      formationHistoryIndex = 0
-      formationHistoryEntries = []
-      formationSnapshots = []
+      historyLastSequence = -1
+      formations = new FormationTimeline()
       liveRatingInputs = new Map()
       historyRatingInputs = new Map()
       liveRatingContributions.clear()
@@ -738,107 +722,6 @@ export function useRealtimeMatch(
       derived = new HistoricalDerivations()
       historical = derived.snapshot(0)
       if (metadata.current?.matchId !== matchId) metadata.current = null
-    }
-
-    const rebuildFormationSnapshots = () => {
-      if (!metadata.current) return
-      formationSnapshots = formationHistoryEntries.map((entry) =>
-        toFormationSnapshot(entry, metadata.current!)
-      )
-    }
-
-    const acceptFormationSlice = (slice: RealtimeFormationTimelineSlice) => {
-      if (
-        slice.matchId &&
-        latestFrame?.matchId &&
-        slice.matchId !== latestFrame.matchId
-      ) {
-        return { changed: false, gap: false }
-      }
-      if (slice.matchId) resetFor(slice.matchId)
-
-      let changed = false
-      let gap = false
-      const additions = slice.entries
-        .filter((entry) => entry.index >= formationHistoryIndex)
-        .sort((left, right) => left.index - right.index)
-      for (const entry of additions) {
-        if (entry.index > formationHistoryIndex) {
-          gap = true
-          break
-        }
-        formationHistoryEntries.push(entry)
-        formationHistoryIndex = entry.index + 1
-        if (metadata.current) {
-          metadata.current = mergeFormationEntryIntoMetadata(
-            metadata.current,
-            entry
-          )
-        }
-        changed = true
-      }
-      if (changed) rebuildFormationSnapshots()
-      return { changed, gap }
-    }
-
-    const fetchFormationHistory = async () => {
-      const generation = connectionGeneration
-      let changed = false
-      let keepLoading = true
-      while (!disposed && enabledRef.current && keepLoading) {
-        const response = await liveFetch(
-          `${apiBase}/api/match/formation/history?fromIndex=${formationHistoryIndex}&limit=256`,
-          { cache: "no-store" }
-        )
-        if (!response.ok) throw new Error("live formation history read failed")
-        const slice = (await response.json()) as RealtimeFormationTimelineSlice
-        if (disposed || generation !== connectionGeneration) return false
-        const accepted = acceptFormationSlice(slice)
-        if (accepted.gap)
-          throw new Error("live formation history has an index gap")
-        changed ||= accepted.changed
-        keepLoading =
-          accepted.changed && formationHistoryIndex < slice.totalEntryCount
-      }
-      return changed
-    }
-
-    const syncFormationState = async () => {
-      if (!enabledRef.current) {
-        formationSyncPending = true
-        return
-      }
-      if (formationSyncing) {
-        formationSyncPending = true
-        return
-      }
-
-      formationSyncing = true
-      formationSyncPending = false
-      try {
-        const metadataChanged = await fetchMetadata()
-        const historyChanged = await fetchFormationHistory()
-        if (metadataChanged || historyChanged) {
-          rebuildFormationSnapshots()
-          publish(latestFrame, true)
-        }
-      } catch {
-        // Reconnect and explicit Live resume retry the missing formation range.
-      } finally {
-        formationSyncing = false
-        if (formationSyncPending && !disposed && enabledRef.current) {
-          formationSyncPending = false
-          void syncFormationState()
-        }
-      }
-    }
-
-    const refreshMetadataAfterFormationChange = async () => {
-      if (!enabledRef.current) return
-      if (await fetchMetadata()) {
-        rebuildFormationSnapshots()
-        publish(latestFrame, true)
-      }
     }
 
     const syncHistory = async () => {
@@ -852,10 +735,12 @@ export function useRealtimeMatch(
       syncing = true
       syncPending = false
       try {
+        const metadataChanged = await fetchMetadata()
         let keepLoading = true
         let changed = false
         while (!disposed && enabledRef.current && keepLoading) {
-          const fromTick = historyLastTick + 1
+          // Re-read the last tick: the plugin can replace it with its final frame.
+          const fromTick = Math.max(0, historyLastTick)
           const response = await liveFetch(
             `${apiBase}/api/match/frames?fromTick=${fromTick}&stride=1&limit=${liveFramePageSize}`
           )
@@ -877,15 +762,24 @@ export function useRealtimeMatch(
           )
             motionSource?.setStatus("ended")
           const hydratedFrames = slice.frames.map((frame) =>
-            hydrateRealtimeRatingFrame(historyTactics.hydrate(frame), historyRatingInputs)
+            hydrateRealtimeRatingFrame(
+              historyTactics.hydrate(frame),
+              historyRatingInputs
+            )
           )
           const additions = hydratedFrames.filter(
-            (frame) => frame.tick > historyLastTick
+            (frame) =>
+              frame.tick > historyLastTick ||
+              (frame.tick === historyLastTick &&
+                frame.sequence > historyLastSequence)
           )
+          for (const frame of additions)
+            formations.append(frame, metadata.current)
           derived.append(additions)
           motionSource?.ingestMovementFrames(additions)
           if (additions.length > 0) {
             historyLastTick = additions.at(-1)!.tick
+            historyLastSequence = additions.at(-1)!.sequence
           }
           changed ||= additions.length > 0
           keepLoading =
@@ -893,7 +787,7 @@ export function useRealtimeMatch(
         }
         if (changed)
           historical = derived.snapshot(latestFrame?.tick ?? historyLastTick)
-        if (changed) publish(latestFrame, true)
+        if (changed || metadataChanged) publish(latestFrame, true)
       } catch {
         // WebSocket still keeps the current score/player state live. The next
         // low-frequency sync retries the missing historical range.
@@ -921,7 +815,10 @@ export function useRealtimeMatch(
           return
         if (rawFrame?.matchId) {
           resetFor(rawFrame.matchId)
-          const frame = hydrateRealtimeRatingFrame(liveTactics.hydrate(rawFrame), liveRatingInputs)
+          const frame = hydrateRealtimeRatingFrame(
+            liveTactics.hydrate(rawFrame),
+            liveRatingInputs
+          )
           latestFrame = frame
           motionSource?.publish(frame, false)
           publish(frame, false)
@@ -945,7 +842,6 @@ export function useRealtimeMatch(
         if (enabledRef.current) {
           void fetchCurrent()
           void syncHistory()
-          void syncFormationState()
         }
       }
       socket.onmessage = (event: MessageEvent<string>) => {
@@ -958,29 +854,18 @@ export function useRealtimeMatch(
             if (
               latestFrame?.matchId === rawFrame.matchId &&
               rawFrame.tick < latestFrame.tick
-            ) return
+            )
+              return
             resetFor(rawFrame.matchId)
             const frame = hydrateRealtimeRatingFrame(
               liveTactics.hydrate(rawFrame),
-              liveRatingInputs,
+              liveRatingInputs
             )
             latestFrame = frame
             motionSource?.publish(frame)
             // The 250ms WebSocket path only builds the current snapshot. No
             // historical scan, HTTP round-trip, or heatmap aggregation occurs.
             publish(frame, false)
-          } else if (envelope.type === "formation_changed") {
-            const slice = envelope.payload as RealtimeFormationTimelineSlice
-            const accepted = acceptFormationSlice(slice)
-            if (accepted.gap) {
-              formationSyncPending = true
-              if (enabledRef.current) void syncFormationState()
-              return
-            }
-            if (accepted.changed) {
-              publish(latestFrame, false)
-              void refreshMetadataAfterFormationChange()
-            }
           }
         } catch {
           // Ignore malformed or unrelated development messages.
@@ -1038,7 +923,7 @@ export function toMatchSnapshot(
   allowLocalAssets = true,
   ratingConfiguration?: RatingWeightConfiguration,
   cachedRatingContributions?: readonly (RatingContribution | undefined)[],
-  ratingResolverCache?: RatingContributionResolverCache,
+  ratingResolverCache?: RatingContributionResolverCache
 ): MatchSnapshot {
   const clockTick = Number.isFinite(frame.displayTick)
     ? frame.displayTick
@@ -1091,22 +976,38 @@ export function toMatchSnapshot(
       stats: toTeamStats(frame.away),
     },
     players: frame.players.map((player, index) => {
-      const ratingContribution = cachedRatingContributions?.[index]
-        ?? (ratingResolverCache
+      const ratingContribution =
+        cachedRatingContributions?.[index] ??
+        (ratingResolverCache
           ? player.ratingContribution
-          : calculatePlayerRatingContribution(player, frame.ratingModel, ratingConfiguration))
+          : calculatePlayerRatingContribution(
+              player,
+              frame.ratingModel,
+              ratingConfiguration
+            ))
       const resolveRatingContribution = ratingResolverCache?.resolverFor(
         player,
         frame.ratingModel,
-        ratingConfiguration,
+        ratingConfiguration
       )
-      return toPlayer(
-        ratingContribution ? { ...player, ratingContribution } : player,
-        playerMetadataBySlot.get(player.slot),
-        metadata?.matchDate,
-        allowLocalAssets,
-        resolveRatingContribution,
+      const projected = playerFormation(
+        frame.tactics,
+        player,
+        metadata && metadata.capturedTick <= frame.tick
+          ? playerMetadataBySlot.get(player.slot)
+          : undefined
       )
+      return {
+        ...toPlayer(
+          ratingContribution ? { ...player, ratingContribution } : player,
+          playerMetadataBySlot.get(player.slot),
+          metadata?.matchDate,
+          allowLocalAssets,
+          resolveRatingContribution
+        ),
+        inPossession: projected.inPossession,
+        outOfPossession: projected.outOfPossession,
+      }
     }),
     events,
     heatmaps,
@@ -1123,6 +1024,8 @@ export function toMatchSnapshot(
           away: frame.away.xg,
         }),
   }
+  if (frame.tactics === undefined)
+    next.players = repairLegacyFormation(next.players)
   return reuseMatchSnapshot(previous, next)
 }
 
@@ -1177,24 +1080,44 @@ type RatingResolverEntry = {
   resolve: () => RatingContribution | undefined
 }
 
-function sameRatingModel(left: RealtimeRatingModel, right: RealtimeRatingModel) {
-  return left.ratingBaseCondition === right.ratingBaseCondition
-    && left.matchPhase === right.matchPhase
-    && left.eventRewardBranch === right.eventRewardBranch
-    && left.activeBaseline === right.activeBaseline
-    && left.homeBackgroundInput === right.homeBackgroundInput
-    && left.awayBackgroundInput === right.awayBackgroundInput
+function sameRatingModel(
+  left: RealtimeRatingModel,
+  right: RealtimeRatingModel
+) {
+  return (
+    left.ratingBaseCondition === right.ratingBaseCondition &&
+    left.matchPhase === right.matchPhase &&
+    left.eventRewardBranch === right.eventRewardBranch &&
+    left.activeBaseline === right.activeBaseline &&
+    left.homeBackgroundInput === right.homeBackgroundInput &&
+    left.awayBackgroundInput === right.awayBackgroundInput
+  )
 }
 
 function sameRatingPlayerSource(left: RealtimePlayer, right: RealtimePlayer) {
-  return left.team === right.team && left.rating === right.rating && left.xg === right.xg
-    && left.goals === right.goals && left.penalties === right.penalties && left.ownGoals === right.ownGoals
-    && left.shots === right.shots && left.shotsOnTarget === right.shotsOnTarget
-    && left.savesHeld === right.savesHeld && left.savesParried === right.savesParried && left.savesTipped === right.savesTipped
-    && left.assists === right.assists && left.dribbles === right.dribbles && left.fouls === right.fouls && left.fouled === right.fouled
-    && left.tacklesAttempted === right.tacklesAttempted && left.tacklesWon === right.tacklesWon
-    && left.aerials === right.aerials && left.aerialsWon === right.aerialsWon
-    && left.interceptions === right.interceptions && left.clearances === right.clearances
+  return (
+    left.team === right.team &&
+    left.rating === right.rating &&
+    left.xg === right.xg &&
+    left.goals === right.goals &&
+    left.penalties === right.penalties &&
+    left.ownGoals === right.ownGoals &&
+    left.shots === right.shots &&
+    left.shotsOnTarget === right.shotsOnTarget &&
+    left.savesHeld === right.savesHeld &&
+    left.savesParried === right.savesParried &&
+    left.savesTipped === right.savesTipped &&
+    left.assists === right.assists &&
+    left.dribbles === right.dribbles &&
+    left.fouls === right.fouls &&
+    left.fouled === right.fouled &&
+    left.tacklesAttempted === right.tacklesAttempted &&
+    left.tacklesWon === right.tacklesWon &&
+    left.aerials === right.aerials &&
+    left.aerialsWon === right.aerialsWon &&
+    left.interceptions === right.interceptions &&
+    left.clearances === right.clearances
+  )
 }
 
 function hydrateRealtimeRatingFrame(
@@ -1711,79 +1634,76 @@ function toTeamStats(team: RealtimeTeam): TeamStats {
   }
 }
 
-function toFormationSnapshot(
-  entry: RealtimeFormationTimelineEntry,
-  metadata: RealtimeMatchMetadata
-): FormationSnapshot {
-  const playerMetadataBySlot = new Map(
-    metadata.players.map((player) => [player.slot, player])
-  )
-  return {
-    tick: Math.max(0, entry.tick),
-    minute: Math.floor(Math.max(0, entry.displayTick) / 240),
-    players: entry.players.map((player) => {
-      const details = playerMetadataBySlot.get(player.slot)
-      const uid = details?.uid
-      return {
-        id: uid ?? player.playerId,
-        uid,
-        name:
-          details?.shirtName ||
-          details?.commonName ||
-          details?.displayName ||
-          `Player ${player.playerId}`,
-        fullName:
-          `${details?.firstName ?? ""} ${details?.secondName ?? ""}`.trim() ||
-          details?.displayName,
-        portraitPath: details?.portraitPath,
-        portraitUrl:
-          uid != null
-            ? graphicsAssetUrl("person", uid, "portrait")
-            : archivedAssetUrl(details?.portraitPath),
-        team: player.team,
-        shirtNumber: details?.shirtNumber,
-        squadNumber: details?.squadNumber,
-        shirtName: details?.shirtName,
-        position: details?.position,
-        positionFamiliarities: details?.positionFamiliarities,
-        inPossession: player.inPossession,
-        outOfPossession: player.outOfPossession,
-        age: calculateAge(details?.profile?.dateOfBirth, metadata.matchDate),
-        isStarter: !player.isSubstitute,
-        isOnPitch: player.isOnPitch,
-        status: {
-          subbedOnMinute: player.subbedOnMinute || undefined,
-          subbedOffMinute: player.subbedOffMinute || undefined,
+const formationArrayCache = new WeakMap<
+  readonly RealtimeFrame[],
+  FormationSnapshot[]
+>()
+const formationSnapshotCache = new WeakMap<
+  RealtimeFrame,
+  {
+    metadata?: RealtimeMatchMetadata | null
+    allowLocalAssets: boolean
+    snapshot: FormationSnapshot
+  }
+>()
+export function formationSnapshotsAt(
+  frames: readonly RealtimeFrame[],
+  tick: number,
+  metadataFor: (tick: number) => RealtimeMatchMetadata | null | undefined,
+  allowLocalAssets = true
+): FormationSnapshot[] {
+  const result: FormationSnapshot[] = []
+  for (const frame of frames) {
+    if (frame.tick > tick) break
+    const metadata = formationMetadata(frame, metadataFor(frame.tick))
+    let cached = formationSnapshotCache.get(frame)
+    if (
+      !cached ||
+      cached.metadata !== metadata ||
+      cached.allowLocalAssets !== allowLocalAssets
+    ) {
+      const details = new Map(metadata?.players.map((p) => [p.slot, p]))
+      cached = {
+        metadata,
+        allowLocalAssets,
+        snapshot: {
+          tick: frame.tick,
+          minute: Math.floor(Math.max(0, frame.displayTick) / 240),
+          players: frame.players.map((p) => {
+            const assignments = playerFormation(
+              frame.tactics,
+              p,
+              metadata && metadata.capturedTick <= frame.tick
+                ? details.get(p.slot)
+                : undefined
+            )
+            return {
+              ...toPlayer(
+                p,
+                details.get(p.slot),
+                metadata?.matchDate,
+                allowLocalAssets
+              ),
+              inPossession: assignments.inPossession,
+              outOfPossession: assignments.outOfPossession,
+            }
+          }),
         },
-        profile: details?.profile,
-        attributes: details?.attributes,
-        stats: { goals: 0, assists: 0 },
       }
-    }),
+      if (frame.tactics === undefined)
+        cached.snapshot.players = repairLegacyFormation(cached.snapshot.players)
+      formationSnapshotCache.set(frame, cached)
+    }
+    result.push(cached.snapshot)
   }
-}
-
-function mergeFormationEntryIntoMetadata(
-  metadata: RealtimeMatchMetadata,
-  entry: RealtimeFormationTimelineEntry
-): RealtimeMatchMetadata {
-  const assignmentsBySlot = new Map(
-    entry.players.map((player) => [player.slot, player])
+  const previous = formationArrayCache.get(frames)
+  if (
+    previous?.length === result.length &&
+    result.every((snapshot, index) => snapshot === previous[index])
   )
-  return {
-    ...metadata,
-    capturedTick: entry.tick,
-    players: metadata.players.map((player) => {
-      const assignment = assignmentsBySlot.get(player.slot)
-      return assignment
-        ? {
-            ...player,
-            inPossession: assignment.inPossession,
-            outOfPossession: assignment.outOfPossession,
-          }
-        : player
-    }),
-  }
+    return previous
+  formationArrayCache.set(frames, result)
+  return result
 }
 
 function toPlayer(
@@ -1791,10 +1711,20 @@ function toPlayer(
   metadata?: RealtimePlayerMetadata,
   matchDate?: string,
   allowLocalAssets = true,
-  resolveRatingContribution?: () => RatingContribution | undefined,
+  resolveRatingContribution?: () => RatingContribution | undefined
 ): MatchPlayer {
-  const packedStats = player.archiveRatingInputs?.statsPacked
-    ?? (player.ratingInputs ? Uint8Array.from(atob(player.ratingInputs.statsPacked), (byte) => byte.charCodeAt(0)) : undefined)
+  if (
+    metadata &&
+    (metadata.team !== player.team || metadata.playerId !== player.playerId)
+  )
+    metadata = undefined
+  const packedStats =
+    player.archiveRatingInputs?.statsPacked ??
+    (player.ratingInputs
+      ? Uint8Array.from(atob(player.ratingInputs.statsPacked), (byte) =>
+          byte.charCodeAt(0)
+        )
+      : undefined)
   const uid = metadata?.uid
   return {
     id: uid ?? player.playerId,
@@ -1841,7 +1771,13 @@ function toPlayer(
     profile: metadata?.profile,
     attributes: metadata?.attributes,
     stats: {
-      openPlayXa: packedStats ? new DataView(packedStats.buffer, packedStats.byteOffset, packedStats.byteLength).getFloat32(0, true) : undefined,
+      openPlayXa: packedStats
+        ? new DataView(
+            packedStats.buffer,
+            packedStats.byteOffset,
+            packedStats.byteLength
+          ).getFloat32(0, true)
+        : undefined,
       penaltyAttempts: packedStats?.[4],
       blocks: packedStats?.[5],
       penaltiesFaced: packedStats?.[6],

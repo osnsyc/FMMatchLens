@@ -2,6 +2,8 @@ using FMMatchLens.Plugin.Domain;
 
 namespace FMMatchLens.Plugin.Memory;
 
+// Legacy metadata fallback for builds without verified TacticalStateSampler layouts.
+// Supported builds project raw Q snapshots in frontend formationProjection.ts.
 internal static class TacticalFormationDecoder
 {
     private const uint BasePositionMask = 0x0001FFFF;

@@ -38,6 +38,7 @@ export type ReplayArchive = {
   ticks: Int32Array
   metadata?: RealtimeMatchMetadata
   metadataTimeline: readonly RealtimeMatchMetadata[]
+  formationFrames: readonly ReplayFrame[]
   frames: readonly ReplayFrame[]
   streamRevisions: readonly ReplayStreamRevision[]
   ratingConfiguration?: RatingWeightConfiguration
