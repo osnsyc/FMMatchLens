@@ -131,6 +131,8 @@ internal sealed class GameMatchTickHook : IDisposable
             return true;
         }
 
+        if (_buildRejected) return false;
+
         if (IntPtr.Size != 8)
         {
             PluginLogger.Warning("GAME_MATCH Advance hook requires a 64-bit process.");
@@ -152,6 +154,7 @@ internal sealed class GameMatchTickHook : IDisposable
         string modulePath;
         string sha256;
         var supportedBuild = false;
+        var resolvingAob = false;
         try
         {
             supportedBuild = GamePluginBuildCatalog.TryResolve(
@@ -163,22 +166,25 @@ internal sealed class GameMatchTickHook : IDisposable
 
             if (!supportedBuild)
             {
-                if (!GamePluginBuildCatalog.IsFunctionEntry(moduleBase, build.MatchTickHookRva))
+                resolvingAob = true;
+                if (!GamePluginBuildCatalog.TryResolveAob(
+                        moduleBase, modulePath, sha256, out build, out var failure))
                 {
                     _buildRejected = true;
                     PluginLogger.Warning(
-                        $"Unrecognized game_plugin.dll build; match capture is disabled because fallback RVA " +
-                        $"0x{build.MatchTickHookRva:X} is not a function entry for sha256={sha256}.");
+                        $"Unrecognized game_plugin.dll build; match capture is disabled because {failure} " +
+                        $"for sha256={sha256}.");
                     return false;
                 }
 
                 PluginLogger.Warning(
-                    $"Unrecognized game_plugin.dll build; trying fallback GAME_MATCH hook RVA " +
+                    $"Unrecognized game_plugin.dll build; trying AOB fallback GAME_MATCH hook RVA " +
                     $"0x{build.MatchTickHookRva:X} for sha256={sha256}.");
             }
         }
         catch (Exception ex)
         {
+            if (resolvingAob) _buildRejected = true;
             if (logModuleNotLoaded)
             {
                 PluginLogger.Warning($"Unable to identify game_plugin.dll build: {ex.Message}");
