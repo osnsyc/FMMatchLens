@@ -9,7 +9,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { AssistIcon } from "@/components/AssistIcon"
 import { PlayerShirt } from "@/components/PlayerShirt"
 import type { MatchKit } from "@/lib/kitRendering"
-import { FootIcon } from "@/components/FootIcon"
+import { FootAbilityIcon, displayAttributeValue, footAbilityTier } from "@/components/FootAbility"
 import { Avatar, AvatarBadge, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -1480,20 +1480,6 @@ function attributeValueClass(value: number) {
   return "text-muted-foreground/65"
 }
 
-function displayAttributeValue(rawValue: number) {
-  if (!Number.isFinite(rawValue) || rawValue <= 0) return 0
-  return Math.min(20, Math.max(1, Math.round(rawValue / 5)))
-}
-
-function footAbilityTier(value: number) {
-  if (value >= 18) return { description: "veryStrong", className: "text-status-positive" }
-  if (value >= 15) return { description: "strong", className: "text-status-positive/75" }
-  if (value >= 12) return { description: "fairlyStrong", className: "text-status-warning" }
-  if (value >= 9) return { description: "reasonable", className: "text-foreground" }
-  if (value >= 5) return { description: "weak", className: "text-status-negative/75" }
-  return { description: "veryWeak", className: "text-status-negative" }
-}
-
 function PlayerFootAbility({
   attributes,
 }: {
@@ -1524,17 +1510,6 @@ function PlayerFootAbility({
         </span>
       </span>
     </div>
-  )
-}
-
-function FootAbilityIcon({ mirrored = false, className }: { mirrored?: boolean; className: string }) {
-  return (
-    <FootIcon
-      aria-hidden="true"
-      focusable="false"
-      className={`h-7 w-7 shrink-0 ${className}`}
-      style={{ transform: mirrored ? "scaleX(-1)" : undefined }}
-    />
   )
 }
 

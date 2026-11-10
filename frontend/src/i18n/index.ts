@@ -1,4 +1,5 @@
 import { playerStatLabelsZh, playerStatLabelsEn } from "./playerStatLabels"
+import { teamTacticsZh, teamTacticsEn } from "@/i18n/teamTactics"
 import i18n from "i18next"
 import { initReactI18next } from "react-i18next"
 
@@ -20,6 +21,7 @@ const getInitialLanguage = (): SupportedLanguage => {
 const resources = {
   "zh-CN": {
     translation: {
+      teamTactics: teamTacticsZh,
       xg: {
         timeline: "时间线",
         map: "xG分布",
@@ -892,6 +894,7 @@ const resources = {
   },
   en: {
     translation: {
+      teamTactics: teamTacticsEn,
       xg: {
         timeline: "Timeline",
         map: "xG Map",

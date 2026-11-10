@@ -10,7 +10,7 @@ import type {
   RealtimeTeamMetadata,
 } from "@/api/realtimeMatch"
 import type { ParsedLocalArchive } from "@/api/localArchive"
-import { parseTacticalSnapshot, readTacticalDelta } from "@/components/formation/tacticalWire"
+import { parseTacticalSnapshot, readTacticalDelta } from "@/components/formation/tactics"
 import type { PlayerAttributes, PlayerPositionFamiliarities, PlayerProfile, PlayerSeasonDetailedStats, PlayerSeasonStats, PlayerSeasonStatsSlot, PlayerTacticalAssignment, TeamSide, TacticalConfiguration, TacticalPersonalOverride, TacticalPlayerSlot, TacticalPosition, TacticalSnapshot, TacticalTeamData } from "@/types/match"
 import { playerPositionLabels } from "@/types/match"
 import {

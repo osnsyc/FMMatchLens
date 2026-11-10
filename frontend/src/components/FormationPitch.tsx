@@ -28,10 +28,14 @@ import {
 } from "@/components/ui/hover-card"
 import { NativeTabs } from "@/components/uitripled/native-tabs-shadcnui"
 import { PitchMarkings } from "@/components/pitch/PitchMarkings"
-import { PitchPlayerBadge } from "@/components/pitch/PitchPlayerBadge"
+import {
+  FormationFocus,
+  FormationPlayerShirt,
+} from "@/components/formation/FormationFocus"
 import { emitExploreTourInteraction } from "@/features/explore-tour/exploreTourEvents"
 import { resolvePitchDimensions } from "@/components/pitch/pitchGeometry"
 import { sameFormationPlayers } from "@/lib/matchRenderEquality"
+import type { MatchKit } from "@/lib/kitRendering"
 import {
   Timeline,
   TimelineContent,
@@ -50,6 +54,7 @@ import type {
 
 type FormationPitchProps = {
   match: MatchSnapshot
+  kits?: readonly (MatchKit | undefined)[]
   isFocusMode: boolean
 }
 type FormationView = "home-ip" | "home-oop" | "away-ip" | "away-oop"
@@ -126,6 +131,7 @@ const playerMotionVariants = {
 
 export const FormationPitch = memo(function FormationPitch({
   match,
+  kits,
   isFocusMode,
 }: FormationPitchProps) {
   const { t } = useTranslation()
@@ -302,6 +308,8 @@ export const FormationPitch = memo(function FormationPitch({
   ] satisfies Array<{ id: FormationView; label: string }>
   const visibleViews = isFocusMode ? focusedFormationViews : [view]
 
+  if (isFocusMode) return <FormationFocus key={matchKey} match={match} kits={kits} fallbackEntries={liveEntries} />
+
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
       <CardHeader className="shrink-0 grid-cols-[1fr_auto] items-center border-b px-4 py-2">
@@ -341,6 +349,8 @@ export const FormationPitch = memo(function FormationPitch({
           return (
             <FormationViewPane
               key={visibleView}
+              outfieldKit={kits?.[visibleSide === "home" ? 0 : 2]}
+              goalkeeperKit={kits?.[visibleSide === "home" ? 1 : 3]}
               view={visibleView}
               label={
                 viewItems.find((item) => item.id === visibleView)?.label ??
@@ -391,6 +401,8 @@ export const FormationPitch = memo(function FormationPitch({
 type FormationViewState = ReturnType<typeof formationViewState>
 
 type FormationViewPaneProps = {
+  outfieldKit?: MatchKit
+  goalkeeperKit?: MatchKit
   view: FormationView
   label: string
   state: FormationViewState
@@ -404,6 +416,8 @@ type FormationViewPaneProps = {
 }
 
 function FormationViewPane({
+  outfieldKit,
+  goalkeeperKit,
   view,
   label,
   state,
@@ -601,7 +615,7 @@ function FormationViewPane({
                     return (
                       <motion.div
                         key={`formation-${view}-${player.id}`}
-                        className="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2"
+                        className="formation-live-marker pointer-events-auto absolute"
                         custom={resetsToPrevious}
                         variants={playerMotionVariants}
                         initial={shouldAnimateEntrance ? "initial" : false}
@@ -626,56 +640,61 @@ function FormationViewPane({
                           },
                         }}
                       >
-                        <HoverCard>
-                          <HoverCardTrigger
-                            render={
-                              <div className="flex max-w-36 flex-col items-center text-center" />
-                            }
+                        <div className="flex max-w-36 flex-col items-center text-center">
+                          <span
+                            className="relative inline-flex"
+                            title={`${player.name} · ${roleName}`}
                           >
-                            <PitchPlayerBadge
-                              number={player.shirtNumber}
-                              numberColor="var(--formation-player-number)"
-                              style={{ backgroundColor: teamColor }}
-                              badge={
-                                player.status?.subbedOnMinute != null ? (
-                                  <HugeiconsIcon
-                                    icon={ArrowDataTransferHorizontalIcon}
-                                    strokeWidth={2}
-                                  />
-                                ) : null
+                            <FormationPlayerShirt
+                              kit={
+                                (assignment.positionMask & 1) !== 0
+                                  ? goalkeeperKit
+                                  : outfieldKit
                               }
-                              badgeClassName="bg-background text-foreground ring-1 ring-background"
+                              number={player.shirtNumber}
+                              shirtName={player.shirtName}
                             />
-                            <div className="pitch-player-name mt-0.5 flex max-w-36 items-center rounded-sm bg-background/90 px-1 py-px text-[9px] leading-3 font-semibold whitespace-nowrap text-foreground shadow-sm">
-                              <AnimatePresence mode="wait" initial={false}>
-                                <motion.span
-                                  key={assignment.roleAbbreviation}
-                                  className="shrink-0"
-                                  initial={{ opacity: 0, y: 2 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  exit={{ opacity: 0, y: -2 }}
-                                  transition={{ duration: 0.18 }}
-                                >
-                                  {assignment.roleAbbreviation}
-                                </motion.span>
-                              </AnimatePresence>
-                              <span
-                                aria-hidden="true"
-                                className="mx-1 h-2.5 w-px shrink-0 bg-border"
-                              />
-                              <span className="min-w-0 truncate">
-                                {player.name}
+                            {player.status?.subbedOnMinute != null && (
+                              <span className="absolute -top-0.5 -right-0.5 rounded-full bg-background text-foreground ring-1 ring-background">
+                                <HugeiconsIcon
+                                  icon={ArrowDataTransferHorizontalIcon}
+                                  size={9}
+                                  strokeWidth={2}
+                                />
                               </span>
-                            </div>
-                          </HoverCardTrigger>
-                          <HoverCardContent
-                            side="top"
-                            sideOffset={6}
-                            className="w-auto max-w-72 px-2.5 py-1.5 font-medium whitespace-nowrap"
-                          >
-                            {roleName}
-                          </HoverCardContent>
-                        </HoverCard>
+                            )}
+                          </span>
+                          <HoverCard>
+                            <HoverCardTrigger render={<div />}>
+                              <div className="pitch-player-name mt-0.5 flex max-w-36 items-center rounded-sm bg-background/90 px-1 py-px text-[9px] leading-3 font-semibold whitespace-nowrap text-foreground shadow-sm">
+                                <AnimatePresence mode="wait" initial={false}>
+                                  <motion.span
+                                    key={assignment.roleAbbreviation}
+                                    className="shrink-0"
+                                    initial={{ opacity: 0, y: 2 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -2 }}
+                                    transition={{ duration: 0.18 }}
+                                  >
+                                    {assignment.roleAbbreviation}
+                                  </motion.span>
+                                </AnimatePresence>
+                                <span
+                                  aria-hidden="true"
+                                  className="mx-1 h-2.5 w-px shrink-0 bg-border"
+                                />
+                                <span className="min-w-0 truncate">{player.name}</span>
+                              </div>
+                            </HoverCardTrigger>
+                            <HoverCardContent
+                              side="top"
+                              sideOffset={6}
+                              className="w-auto max-w-72 px-2.5 py-1.5 font-medium whitespace-nowrap"
+                            >
+                              {roleName}
+                            </HoverCardContent>
+                          </HoverCard>
+                        </div>
                       </motion.div>
                     )
                   })}
@@ -813,6 +832,7 @@ function sameFormationPitchProps(
   const right = next.match
   return (
     previous.isFocusMode === next.isFocusMode &&
+    previous.kits === next.kits &&
     left.matchId === right.matchId &&
     left.pitchDimensions?.length === right.pitchDimensions?.length &&
     left.pitchDimensions?.width === right.pitchDimensions?.width &&
@@ -825,6 +845,7 @@ function sameFormationPitchProps(
     left.away.name === right.away.name &&
     left.away.color === right.away.color &&
     left.formationSnapshots === right.formationSnapshots &&
+    left.tactics === right.tactics &&
     sameFormationPlayers(left.players, right.players)
   )
 }

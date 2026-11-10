@@ -1,0 +1,488 @@
+.formation-focus-rows {
+  display: grid;
+  grid-template-rows: minmax(0, 1.65fr) minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  gap: 8px;
+  padding: 8px;
+}
+.formation-focus-pitches,
+.formation-focus-command-panes {
+  display: grid;
+  min-height: 0;
+  gap: 8px;
+}
+.formation-focus-pitches {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.formation-focus-command-panes {
+  flex: 1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.formation-focus-pitch,
+.formation-focus-instructions {
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--muted) 15%, transparent);
+}
+.formation-focus-pitch {
+  display: flex;
+}
+.formation-focus-pitch-pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  width: 100%;
+}
+.formation-focus-pitch-area {
+  container-type: size;
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  margin: 4px 9px 8px;
+  place-items: center;
+}
+.formation-focus-field {
+  position: relative;
+  width: min(100cqw, calc(100cqh * var(--focus-pitch-aspect)));
+  height: min(100cqh, calc(100cqw / var(--focus-pitch-aspect)));
+  background: var(--formation-pitch-surface);
+}
+.formation-focus-marker {
+  position: absolute;
+  display: flex;
+  width: 96px;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  border-radius: 4px;
+  outline: none;
+}
+.formation-focus-marker:focus-visible {
+  outline: 2px solid var(--ring);
+}
+@container (max-width: 260px) {
+  .formation-focus-marker {
+    transform: translate(-50%, -50%) scale(0.8);
+  }
+}
+@container (max-width: 200px) {
+  .formation-focus-marker {
+    transform: translate(-50%, -50%) scale(0.65);
+  }
+}
+.formation-focus-marker[aria-pressed="true"] .formation-focus-shirt {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.formation-focus-shirt {
+  display: inline-flex;
+  border-radius: 3px;
+  filter: url(#fmlens-shirt-outline);
+}
+.formation-focus-shirt-fallback {
+  position: relative;
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  color: var(--muted-foreground);
+}
+.formation-focus-shirt-fallback > span {
+  position: absolute;
+  top: 9px;
+  inset-inline: 0;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 700;
+}
+.formation-focus-name {
+  display: flex;
+  max-width: 94px;
+  align-items: center;
+  gap: 3px;
+  border-radius: 2px;
+  padding: 1px 3px;
+  background: color-mix(in srgb, var(--background) 94%, transparent);
+  color: var(--foreground);
+  font-size: 8px;
+  line-height: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.formation-focus-marker[aria-pressed="true"] .formation-focus-name {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+.formation-opposition-strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 13px;
+}
+.formation-opposition-source {
+  display: inline-flex;
+  height: 13px;
+  align-items: center;
+  padding: 0 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--background);
+}
+.formation-opposition-source svg {
+  color: var(--muted-foreground);
+  opacity: 0.35;
+}
+.formation-opposition-source svg[data-active="true"] {
+  color: var(--status-positive);
+  background: color-mix(in srgb, var(--status-positive) 15%, transparent);
+  border-radius: 2px;
+  opacity: 1;
+}
+.formation-opposition-strip .tactics-icon {
+  width: 12px;
+  height: 12px;
+}
+.formation-opposition-strip img {
+  width: 12px;
+  height: 12px;
+}
+.formation-opposition-unknown {
+  display: inline-block;
+  width: 12px;
+  color: var(--muted-foreground);
+  font-size: 9px;
+}
+.formation-focus-instructions {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  padding: 7px 9px;
+}
+.formation-focus-note {
+  height: 24px;
+  flex-shrink: 0;
+  overflow: hidden;
+  margin-bottom: 4px;
+  color: var(--muted-foreground);
+  font-size: 9px;
+  line-height: 12px;
+}
+.formation-focus-instruction-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  gap: 4px;
+}
+.formation-focus-instruction {
+  container-type: size;
+  display: grid;
+  grid-template-rows: 12px minmax(0, 1fr) 12px 3px;
+  min-width: 0;
+  min-height: 0;
+  justify-items: center;
+  align-items: center;
+  gap: 1px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px;
+  background: var(--card);
+}
+.formation-focus-instruction-visual {
+  position: relative;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding-inline: 12px;
+  overflow: hidden;
+}
+.formation-focus-instruction-visual > .tactics-icon {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-width: 40px;
+  max-height: 26px;
+}
+.formation-focus-instruction-lock {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted-foreground);
+}
+.formation-focus-instruction img {
+  width: 100%;
+  height: 100%;
+  max-width: 40px;
+  max-height: 26px;
+}
+.formation-focus-instruction-label {
+  grid-row: 3;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  font-size: clamp(7px, 15cqw, 11px);
+  line-height: 12px;
+}
+.tactics-level-bar {
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+  gap: 2px;
+  width: 38px;
+  height: 4px;
+}
+.tactics-level-bar > span {
+  flex: 1;
+  border-radius: 1px;
+  background: var(--border);
+}
+.tactics-level-bar > span[data-selected="true"] {
+  background: var(--primary);
+}
+@media (max-width: 780px) {
+  .formation-focus-instruction-grid {
+    grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+    gap: 3px;
+  }
+  .formation-focus-instructions {
+    padding: 5px;
+  }
+}
+.formation-focus-commands {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  gap: 8px;
+}
+.formation-focus-summary {
+  text-align: center;
+  display: flex;
+  width: clamp(108px, 15%, 148px);
+  flex-shrink: 0;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+}
+.formation-focus-summary-team {
+  color: var(--tactical-team-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 700;
+}
+.formation-focus-summary dl {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+.formation-focus-summary dl > div {
+  display: grid;
+  grid-template-rows: 16px 20px;
+  align-items: center;
+  min-width: 0;
+}
+.formation-focus-summary dt {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--tactical-team-color);
+}
+.formation-focus-summary dd {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+.formation-focus-caption {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 1;
+  display: flex;
+  max-width: calc(100% - 8px);
+  flex-direction: column;
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--background) 85%, transparent);
+  font-size: 9px;
+  line-height: 12px;
+}
+.formation-focus-caption > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.formation-player-marker {
+  position: relative;
+  display: inline-grid;
+  align-items: center;
+  justify-items: center;
+}
+/* Keep the animated position anchored to the center of each shirt/name marker. */
+.formation-live-marker {
+  width: 144px;
+  height: 52px;
+  margin-left: -72px;
+  margin-top: -26px;
+}
+.formation-live-marker .pitch-player-name {
+  position: relative;
+  z-index: 1;
+}
+.formation-opposition-setting {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.formation-opposition-setting .tactics-icon,
+.formation-opposition-setting img {
+  width: 12px;
+  height: 12px;
+}
+.formation-player-marker-focus {
+  display: flex;
+  align-items: flex-end;
+  width: 48px;
+  height: 28px;
+  gap: 4px;
+}
+.formation-player-kit {
+  display: inline-flex;
+  align-items: flex-end;
+  line-height: 0;
+}
+.formation-foot-ability {
+  display: inline-flex;
+  align-items: center;
+  height: 14px;
+  width: 16px;
+}
+.formation-foot-ability > span {
+  display: inline-flex;
+  width: 8px;
+  justify-content: center;
+}
+.formation-foot-ability svg {
+  width: 9px;
+  height: 14px;
+}
+.formation-focus-instruction[data-locked="true"] {
+  border-style: dashed;
+}
+.tactics-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+  vertical-align: middle;
+}
+.tactics-icon img {
+  display: block;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.formation-focus-instruction-group {
+  grid-row: 1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: clamp(7px, 14cqw, 10px);
+  line-height: 12px;
+  color: var(--muted-foreground);
+}
+
+.formation-focus-command {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+.formation-focus-command > .formation-focus-instructions {
+  flex: 1;
+}
+
+.formation-focus-instruction > .tactics-level-bar {
+  grid-row: 4;
+  width: min(60px, 85%);
+  height: 3px;
+}
+/* Alpha contours keep pale native icons legible without a rectangular backing. */
+:root[data-scheme="light"]
+  :is(.formation-focus-instruction, .tactical-instruction-preview)
+  .tactics-icon
+  img {
+  filter: drop-shadow(
+      0.5px 0 0 color-mix(in srgb, var(--foreground) 65%, transparent)
+    )
+    drop-shadow(
+      -0.5px 0 0 color-mix(in srgb, var(--foreground) 65%, transparent)
+    )
+    drop-shadow(
+      0 0.5px 0 color-mix(in srgb, var(--foreground) 65%, transparent)
+    )
+    drop-shadow(
+      0 -0.5px 0 color-mix(in srgb, var(--foreground) 65%, transparent)
+    );
+}
+.tactical-instruction-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: 6px;
+  padding-top: 10px;
+}
+.tactical-instruction-choice {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 7px 4px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+}
+.tactical-instruction-choice .tactics-icon {
+  width: 32px;
+  height: 24px;
+}
+.tactical-instruction-choice img {
+  width: 100%;
+  height: 100%;
+}
+.tactical-instruction-choice[data-selected="true"] {
+  border-color: color-mix(in srgb, var(--primary) 65%, transparent);
+  background: color-mix(in srgb, var(--primary) 12%, var(--popover));
+  color: var(--primary);
+}

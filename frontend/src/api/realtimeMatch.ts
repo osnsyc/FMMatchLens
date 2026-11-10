@@ -10,6 +10,7 @@ import {
 } from "@/api/momentumEventSemantics"
 import { HistoricalDerivations } from "@/api/replay/replayDerivations"
 import { reuseMatchSnapshot } from "@/lib/matchSnapshotReuse"
+import { cachedTacticalSnapshot, TacticalWireState } from "@/components/formation/tactics"
 import {
   calculateRatingContribution,
   decodeArchiveRatingInputs,
@@ -651,6 +652,8 @@ export function useRealtimeMatch(
     let latestFrame: RealtimeFrame | null = null
     let liveRatingInputs = new Map<number, ArchiveRatingInputs>()
     let historyRatingInputs = new Map<number, ArchiveRatingInputs>()
+    const liveTactics = new TacticalWireState()
+    const historyTactics = new TacticalWireState()
     const liveRatingContributions = new RatingContributionResolverCache()
     const ratingConfiguration = observedRatingWeightConfiguration
     let historyMatchId = ""
@@ -874,7 +877,7 @@ export function useRealtimeMatch(
           )
             motionSource?.setStatus("ended")
           const hydratedFrames = slice.frames.map((frame) =>
-            hydrateRealtimeRatingFrame(frame, historyRatingInputs)
+            hydrateRealtimeRatingFrame(historyTactics.hydrate(frame), historyRatingInputs)
           )
           const additions = hydratedFrames.filter(
             (frame) => frame.tick > historyLastTick
@@ -918,7 +921,7 @@ export function useRealtimeMatch(
           return
         if (rawFrame?.matchId) {
           resetFor(rawFrame.matchId)
-          const frame = hydrateRealtimeRatingFrame(rawFrame, liveRatingInputs)
+          const frame = hydrateRealtimeRatingFrame(liveTactics.hydrate(rawFrame), liveRatingInputs)
           latestFrame = frame
           motionSource?.publish(frame, false)
           publish(frame, false)
@@ -958,7 +961,7 @@ export function useRealtimeMatch(
             ) return
             resetFor(rawFrame.matchId)
             const frame = hydrateRealtimeRatingFrame(
-              rawFrame,
+              liveTactics.hydrate(rawFrame),
               liveRatingInputs,
             )
             latestFrame = frame
@@ -1049,6 +1052,7 @@ export function toMatchSnapshot(
   const awayClubUid = metadata?.away.clubUid
 
   const next: MatchSnapshot = {
+    tactics: cachedTacticalSnapshot(frame.tactics),
     matchId: frame.matchId,
     pitchDimensions: toPitchDimensions(metadata),
     clock: {

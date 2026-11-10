@@ -142,8 +142,8 @@ function TeamName({
 }) {
   const label = (
     <span
-      className="font-fm-universe block truncate text-base leading-10"
-      style={{ color }}
+      className="font-fm-universe block w-full truncate text-base leading-10"
+      style={{ color, textAlign: align }}
       title={name}
     >
       {name}
@@ -155,7 +155,7 @@ function TeamName({
 
   return (
     <div
-      className={`hidden w-32 min-w-0 sm:block ${align === "right" ? "text-right" : "text-left"}`}
+      className={`w-20 min-w-0 sm:w-32 ${align === "right" ? "text-right" : "text-left"}`}
     >
       {uid == null && !manager ? (
         label

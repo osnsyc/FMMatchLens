@@ -958,6 +958,7 @@ export function App() {
                     <div data-tour="formation-panel" className="h-full min-h-0">
                       <FormationPitch
                         match={match}
+                        kits={kits}
                         isFocusMode={focusedPanel === "formation"}
                       />
                     </div>
