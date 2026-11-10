@@ -261,6 +261,9 @@ internal sealed class GameMatchTickHook : IDisposable
         FlushPendingDiagnostics();
         _playerUids.Invalidate();
         ClearRatingCaptureState();
+        foreach (var address in _preLockFrames.Keys.ToArray()) ReleasePreLockFrameCache(address);
+        foreach (var observation in _instanceIdentities.Values)
+            lock (observation.Gate) observation.Tactics = null;
         PluginLogger.Debug("GAME_MATCH Advance capture stopped.");
     }
 
@@ -318,7 +321,9 @@ internal sealed class GameMatchTickHook : IDisposable
         {
             if (!record.IsTerminal && record.InstanceGeneration != 0 &&
                 (hasCapture && !capture!.Invalidated && capture.Generation == record.InstanceGeneration ||
-                 (!hasCapture || capture!.Generation != record.InstanceGeneration) && record.Tick is >= 0 and <= PreLockCaptureMaxTick))
+                 (!hasCapture || capture!.Generation != record.InstanceGeneration) &&
+                 !(capture is not null && capture.Simulation == match && capture.SimulationGeneration == record.InstanceGeneration) &&
+                 record.Tick is >= 0 and <= PreLockCaptureMaxTick))
             {
                 var queued = TryCaptureRealtimeFrame(record, homeValues, awayValues);
                 record = record with { FinalFrameQueued = record.FinishedByFlags && queued };
@@ -533,9 +538,9 @@ internal sealed class GameMatchTickHook : IDisposable
                 capturedMatchPlayers);
 
             CaptureRatingFrameData(record.MatchAddress, record.Tick, frame, capturedMatchPlayers);
-            if (_tacticsLayoutSupported && _activeSession is { Invalidated: false } tacticalSession &&
-                tacticalSession.Animated == record.MatchAddress && tacticalSession.Generation == record.InstanceGeneration)
-                frame.Tactics = tacticalSession.Tactics.Capture(record.HomeTeam, record.AwayTeam, frame, capturedMatchPlayers);
+            if (_tacticsLayoutSupported)
+                frame.Tactics = GetTacticalSampler(record.MatchAddress, record.InstanceGeneration)?.Capture(
+                    record.HomeTeam, record.AwayTeam, frame, capturedMatchPlayers);
 
             ResolveDerivedTeamStats(frame);
             ResolveMomentumEventPlayerIds(
@@ -2211,6 +2216,8 @@ internal sealed class GameMatchTickHook : IDisposable
 
     private bool TryCachePreLockFrame(RawRealtimeTickFrame frame)
     {
+        if (_activeSession is { } session && session.Simulation == frame.MatchAddress &&
+            session.SimulationGeneration == frame.InstanceGeneration) return false;
         if (frame.Tick is < 0 or > PreLockCaptureMaxTick ||
             !_candidates.TryGetValue(frame.MatchAddress, out var candidate) ||
             frame.InstanceGeneration != candidate.Generation || !CanCachePreLockFrames(candidate))
@@ -2398,8 +2405,9 @@ internal sealed class GameMatchTickHook : IDisposable
         float.IsFinite(halfWidth) && float.IsFinite(halfLength) &&
         halfWidth is > 0 and <= 1_000 && halfLength is > 0 and <= 1_000;
 
-    private int ReleasePreLockFrameCache(nint address)
+    private int ReleasePreLockFrameCache(nint address, long maximumGeneration = long.MaxValue)
     {
+        ReleaseTacticalSampler(address, maximumGeneration);
         if (!_preLockFrames.Remove(address, out var cache))
         {
             return 0;
@@ -2422,7 +2430,7 @@ internal sealed class GameMatchTickHook : IDisposable
             Volatile.Read(ref observation.Generation) != record.InstanceGeneration) return;
         if (!_candidates.TryGetValue(record.MatchAddress, out var state) || state.Generation != record.InstanceGeneration)
         {
-            ReleasePreLockFrameCache(record.MatchAddress);
+            ReleasePreLockFrameCache(record.MatchAddress, record.InstanceGeneration - 1);
             // New identities invalidate old queued frames. No Tick-based release.
             if (_activeSession is { } oldSession && oldSession.Animated == record.MatchAddress && oldSession.Generation != record.InstanceGeneration)
             {
@@ -2503,7 +2511,7 @@ internal sealed class GameMatchTickHook : IDisposable
         session.Momentum.Dispose();
         _pendingPair = null;
         _candidates.TryGetValue(session.Animated, out var candidate);
-        if (candidate is null || candidate.Generation == session.Generation) ReleasePreLockFrameCache(session.Animated);
+        if (candidate is null || candidate.Generation == session.Generation) ReleasePreLockFrameCache(session.Animated, session.Generation);
         if (candidate is not null && candidate.Generation == session.Generation)
         {
             _candidates.Remove(session.Animated);
@@ -3021,6 +3029,7 @@ internal sealed class GameMatchTickHook : IDisposable
                 {
                     observation.Generation = Interlocked.Increment(ref _instanceGeneration);
                     observation.Identity = current;
+                    observation.Tactics = null;
                 }
                 else observation.Identity = observation.Identity with
                 {
@@ -3082,6 +3091,7 @@ internal sealed class GameMatchTickHook : IDisposable
 
     private void ClearInstanceDerivedState(nint match, long maximumGeneration = long.MaxValue)
     {
+        ReleaseTacticalSampler(match, maximumGeneration);
         lock (_nativeMomentumGate)
             if (_nativeMomentumStates.TryGetValue(match, out var state) && state.Generation <= maximumGeneration)
                 _nativeMomentumStates.Remove(match);
@@ -3090,6 +3100,30 @@ internal sealed class GameMatchTickHook : IDisposable
             if (!_ratingGenerations.TryGetValue(match, out var generation) || generation <= maximumGeneration)
                 ClearRatingInstanceLocked(match);
         }
+    }
+
+    private TacticalStateSampler? GetTacticalSampler(nint match, long generation)
+    {
+        if (_activeSession is { } session)
+        {
+            if (!session.Invalidated && session.Animated == match && session.Generation == generation) return session.Tactics;
+            // A callback already in flight when locking must not recreate excluded state.
+            if (session.Simulation == match && session.SimulationGeneration == generation) return null;
+        }
+        if (!_instanceIdentities.TryGetValue(match, out var observation)) return null;
+        lock (observation.Gate)
+        {
+            // A delayed callback must never overwrite the sampler for a reused address.
+            if (observation.Generation != generation) return null;
+            return observation.Tactics ??= new TacticalStateSampler();
+        }
+    }
+
+    private void ReleaseTacticalSampler(nint match, long maximumGeneration)
+    {
+        if (!_instanceIdentities.TryGetValue(match, out var observation)) return;
+        lock (observation.Gate)
+            if (observation.Generation <= maximumGeneration) observation.Tactics = null;
     }
 
     private void ClearRatingInstanceLocked(nint match)
@@ -3108,6 +3142,7 @@ internal sealed class GameMatchTickHook : IDisposable
         public MatchInstanceIdentity? Identity;
         public long Generation, LastSeen, RefreshAt;
         public bool Finished;
+        public TacticalStateSampler? Tactics;
     }
 
     private void RemoveIdentityObservation(nint address, IdentityObservation expected)
@@ -3228,7 +3263,8 @@ internal sealed class GameMatchTickHook : IDisposable
         if (identity is null || !identity.HasTeams) return;
         var timeline = _timeline;
         var simulationGeneration = _candidates.TryGetValue(pair.Simulation, out var simulationState) ? simulationState.Generation : 0;
-        var session = new CaptureSession(pair.Animated, pair.Simulation, state.Generation, simulationGeneration, identity, timeline);
+        var tactics = _tacticsLayoutSupported ? GetTacticalSampler(pair.Animated, state.Generation) : null;
+        var session = new CaptureSession(pair.Animated, pair.Simulation, state.Generation, simulationGeneration, identity, timeline, tactics);
         timeline.Begin(pair.Animated);
         _activeSession = session;
         _lastSessionIdentityProbe = 0;
@@ -3238,6 +3274,7 @@ internal sealed class GameMatchTickHook : IDisposable
         Interlocked.Exchange(ref _selectedAnimated, (long)pair.Animated);
         TryCapturePlayerMetadata(pair.Animated);
         var committed = CommitPreLockFrames(pair.Animated, timeline, state.Generation);
+        ReleasePreLockFrameCache(pair.Simulation, simulationGeneration);
         QueueDiagnostic(DiagnosticSeverity.Info,
             $"GAME_MATCH animation locked: address={FormatPointer(pair.Animated)}, simulation={FormatPointer(pair.Simulation)}, " +
             $"fingerprint={pair.Fingerprint}, generation={state.Generation}, delta={pair.TickDelta}, " +
@@ -3245,11 +3282,11 @@ internal sealed class GameMatchTickHook : IDisposable
     }
 
     private sealed class CaptureSession(nint animated, nint simulation, long generation, long simulationGeneration,
-        MatchInstanceIdentity identity, RealtimeMatchTimeline timeline)
+        MatchInstanceIdentity identity, RealtimeMatchTimeline timeline, TacticalStateSampler? tactics)
     {
         public readonly object CaptureGate = new();
         public readonly MomentumCalculator Momentum = new();
-        public readonly TacticalStateSampler Tactics = new();
+        public readonly TacticalStateSampler Tactics = tactics ?? new();
         public readonly nint Animated = animated, Simulation = simulation;
         public readonly long Generation = generation;
         public readonly long SimulationGeneration = simulationGeneration;
@@ -3307,16 +3344,20 @@ internal sealed class GameMatchTickHook : IDisposable
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern nint GetModuleHandle(string moduleName);
 
-    // Owned by one confirmed animated-match session. Called only inside the hook's
-    // existing post-Original read scope; never retains native pointers in snapshots.
+    // Owned by one candidate identity generation, then shared with its confirmed
+    // animated-match session. Called only inside the hook's existing post-Original
+    // read scope; never retains native pointers in snapshots.
     internal sealed class TacticalStateSampler
     {
+        // Four ticks per game second: one tactical read per game minute,
+        // independent of simulation speed or time spent paused.
+        private const int SampleIntervalTicks = 240;
         private readonly object _gate = new();
         private readonly MemoryReader _reader = new();
         private TacticalSnapshot? _snapshot;
         private nint _home, _away, _homeContext, _awayContext;
         private int _lastTick = -1;
-        private long _nextSample;
+        private long _nextSampleTick = long.MinValue;
         private long _revision;
         private int _remainingVectorBytes;
 
@@ -3326,17 +3367,16 @@ internal sealed class GameMatchTickHook : IDisposable
             if (!Monitor.TryEnter(_gate)) return null;
             try
             {
-                var now = Stopwatch.GetTimestamp();
                 if (home != _home || away != _away || frame.Tick < _lastTick)
                 {
                     _home = home;
                     _away = away;
                     _snapshot = null;
-                    _nextSample = 0;
+                    _nextSampleTick = long.MinValue;
                 }
                 _lastTick = frame.Tick;
-                if (now < _nextSample && !frame.FinishedByFlags) return _snapshot;
-                _nextSample = now + Stopwatch.Frequency;
+                if (frame.Tick < _nextSampleTick && !frame.FinishedByFlags) return _snapshot;
+                _nextSampleTick = (long)frame.Tick + SampleIntervalTicks;
                 _remainingVectorBytes = 131_072;
                 _reader.TryReadPointer(home + Offsets.Team.Manager, out var homeContext);
                 _reader.TryReadPointer(away + Offsets.Team.Manager, out var awayContext);
