@@ -1,0 +1,5 @@
+# Reproduction tools only; Python 3.11+ (verified with 3.12.16).
+UnityPy==1.25.4
+Pillow==12.3.0
+pefile==2024.8.26
+unicorn==2.1.4
