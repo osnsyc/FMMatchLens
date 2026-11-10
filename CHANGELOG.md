@@ -3,6 +3,30 @@
 
 This file records the project's important changes. Version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [0.7.2] - 2026-11-10
+
+### Added
+
+- Added tactical state capture, including in-possession and out-of-possession formations, roles and duties, mentality, team and player instructions, and opposition instructions.
+- Added a tactical formation focus view with instruction previews, role policies, and separate processing and command configurations for live matches and archive replay.
+- Added 2D outfield and goalkeeper shirts with native kit patterns, colors, and shirt-number styling across squad and pitch views.
+- Added discovery and recording of spectated matches. Player metadata may be inaccurate when spectating matches in leagues that are not followed, where the game uses virtual player objects.
+
+### Changed
+
+- Extended `.fmlens` archive format to 2.10, adding kit metadata and tactical state changes with compact binary deltas and chunk-scoped dictionaries; retained read compatibility with formats 2.1–2.9 and earlier JSON tactical payloads.
+- Unified formation displays, player assignments, formation history, and playback goalkeeper detection around tactical snapshots and active rosters, including role and duty changes.
+- Sampled tactics once per game minute, with immediate reads on initialization, roster changes, match completion, or instance resets. Reused unchanged snapshots and revision references to reduce capture and realtime transport overhead; shorter-lived tactical adjustments may be missed.
+- Replaced the fixed hook RVA fallback for unrecognized game builds with an AOB signature scan that tolerates changing relative references. Hook installation requires a unique match at a function entry confirmed by the unwind table; failed validation disables capture without retrying.
+
+### Fixed
+
+- Moved capture to the outer native Advance hook to retain updates during stoppages and match transitions that the previous active-play hook missed.
+- Finalized archives from the native finished flag after consuming the final snapshot, including same-tick updates, instead of waiting for team cleanup or the terminal-probe delay.
+- Isolated reused native match addresses by instance generation and improved cleanup of interrupted or persistently unreadable sessions.
+- Corrected the distinction between team icon colors and actual shirt colors, preserving legacy archive interpretation while using native kit metadata for new recordings.
+
+
 ## [0.7.1] - 2026-11-03
 
 ### Added
