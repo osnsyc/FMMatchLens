@@ -3,6 +3,13 @@
 
 This file records the project's important changes. Version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [0.7.3] - 2026-11-11
+
+### Fixed
+
+- Updated the native match-hook RVA and AOB signature for Steam build `26385295`.
+- Removed the build-specific tactical capture restriction so tactical data uses the same capture path across game builds.
+
 ## [0.7.2] - 2026-11-10
 
 ### Added
