@@ -112,7 +112,6 @@ internal sealed class GameMatchTickHook : IDisposable
     private int _instructionOffset;
     private bool _started;
     private bool _buildRejected;
-    private bool _tacticsLayoutSupported;
     private int _activeHookCalls;
 
     public GameMatchTickHook(RealtimeMatchTimeline timeline)
@@ -194,8 +193,6 @@ internal sealed class GameMatchTickHook : IDisposable
         }
 
         _instructionOffset = build.MatchTickHookRva;
-        // Tactical offsets have only been verified against this exact binary.
-        _tacticsLayoutSupported = supportedBuild && build.Distribution == "steam-26340721";
         _targetAddress = moduleBase + _instructionOffset;
 
         try
@@ -501,7 +498,7 @@ internal sealed class GameMatchTickHook : IDisposable
             frame.RollingMomentumCount = 0;
             frame.RatingResearch = null;
             frame.Tactics = null;
-            frame.LegacyFormation = !_tacticsLayoutSupported;
+            frame.LegacyFormation = false;
             frame.PossessionTeam = record.PossessionTeam == record.HomeTeam
                 ? TeamSide.Home
                 : record.PossessionTeam == record.AwayTeam
@@ -545,9 +542,8 @@ internal sealed class GameMatchTickHook : IDisposable
                 capturedMatchPlayers);
 
             CaptureRatingFrameData(record.MatchAddress, record.Tick, frame, capturedMatchPlayers);
-            if (_tacticsLayoutSupported)
-                frame.Tactics = GetTacticalSampler(record.MatchAddress, record.InstanceGeneration)?.Capture(
-                    record.HomeTeam, record.AwayTeam, frame, capturedMatchPlayers);
+            frame.Tactics = GetTacticalSampler(record.MatchAddress, record.InstanceGeneration)?.Capture(
+                record.HomeTeam, record.AwayTeam, frame, capturedMatchPlayers);
 
             ResolveDerivedTeamStats(frame);
             ResolveMomentumEventPlayerIds(
@@ -1543,8 +1539,8 @@ internal sealed class GameMatchTickHook : IDisposable
                 null,
                 ReadPlayerProfile(person, fullContract),
                 ReadPlayerAttributes(person),
-                _tacticsLayoutSupported ? null : ReadTacticalAssignment(matchPlayer, inPossession: true),
-                _tacticsLayoutSupported ? null : ReadTacticalAssignment(matchPlayer, inPossession: false),
+                null,
+                null,
                 positionFamiliarities,
                 shirtName,
                 squadNumber));
@@ -1614,21 +1610,6 @@ internal sealed class GameMatchTickHook : IDisposable
         return new DateTime(year, 1, 1)
             .AddDays(dayOfYear - 1)
             .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-    }
-
-    private PlayerTacticalAssignment? ReadTacticalAssignment(nint matchPlayer, bool inPossession)
-    {
-        var positionOffset = inPossession
-            ? Offsets.MatchPlayer.InPossessionPosition
-            : Offsets.MatchPlayer.OutOfPossessionPosition;
-        var roleOffset = inPossession
-            ? Offsets.MatchPlayer.InPossessionRoleDuty
-            : Offsets.MatchPlayer.OutOfPossessionRoleDuty;
-
-        return _memoryReader.TryReadUInt32(matchPlayer + positionOffset, out var positionMask) &&
-               _memoryReader.TryReadUInt64(matchPlayer + roleOffset, out var roleDuty)
-            ? TacticalFormationDecoder.Decode(positionMask, roleDuty, inPossession)
-            : null;
     }
 
     private RealtimeTeamMetadata ReadTeamMetadata(nint team, string fallbackName)
@@ -3270,7 +3251,7 @@ internal sealed class GameMatchTickHook : IDisposable
         if (identity is null || !identity.HasTeams) return;
         var timeline = _timeline;
         var simulationGeneration = _candidates.TryGetValue(pair.Simulation, out var simulationState) ? simulationState.Generation : 0;
-        var tactics = _tacticsLayoutSupported ? GetTacticalSampler(pair.Animated, state.Generation) : null;
+        var tactics = GetTacticalSampler(pair.Animated, state.Generation);
         var session = new CaptureSession(pair.Animated, pair.Simulation, state.Generation, simulationGeneration, identity, timeline, tactics);
         timeline.Begin(pair.Animated);
         _activeSession = session;

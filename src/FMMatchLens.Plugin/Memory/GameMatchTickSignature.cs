@@ -2,16 +2,17 @@ namespace FMMatchLens.Plugin.Memory;
 
 internal static class GameMatchTickSignature
 {
-    // Ghidra: steam-26340721, image base 0x180000000, entry 0x184520BD0.
-    // Covers the prologue and three GAME_MATCH state checks. Wildcard the
-    // RIP-relative security-cookie reference, relative CALL and branch targets.
-    // Object field offsets stay fixed: changes require a new verified signature.
+    // steam-26385295, image base 0x180000000, entry 0x184764AC0.
+    // Covers inlined floating-point initialization and three GAME_MATCH state checks.
+    // Wildcard the RIP-relative security-cookie reference and branch targets.
     internal const string Pattern =
-        "41 57 41 56 41 55 41 54 56 57 55 53 48 83 EC 78 " +
-        "44 89 C6 89 D3 48 89 CF 48 8B 05 ? ? ? ? " +
-        "48 31 E0 48 89 44 24 70 E8 ? ? ? ? " +
-        "80 BF 70 55 01 00 01 0F 85 ? ? ? ? " +
-        "80 BF 6E 55 01 00 01 0F 85 ? ? ? ? " +
+        "41 57 41 56 41 55 41 54 56 57 55 53 48 83 EC 58 " +
+        "48 8B 05 ? ? ? ? 48 31 E0 48 89 44 24 50 " +
+        "0F AE 5C 24 4C B8 FF 9F FF FF 23 44 24 4C " +
+        "89 44 24 48 0F AE 54 24 48 0F AE 5C 24 44 " +
+        "B8 00 80 00 00 0B 44 24 44 89 44 24 40 0F AE 54 24 40 " +
+        "80 B9 70 55 01 00 01 0F 85 ? ? ? ? 48 89 CF " +
+        "80 B9 6E 55 01 00 01 0F 85 ? ? ? ? " +
         "80 BF 75 55 01 00 00 0F 84 ? ? ? ?";
 
     private static readonly byte?[] Bytes = Pattern.Split(' ')
