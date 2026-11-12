@@ -63,8 +63,8 @@ internal sealed class RealtimeMatchTimeline
         lock (_gate)
         {
             // Native GAME_MATCH storage is commonly reused. The same address is
-            // a new match once the previous timeline has reached full time.
-            if (_sourceMatchAddress == sourceMatchAddress && _status != "ended")
+            // a new match once the previous capture has ended or been interrupted.
+            if (_sourceMatchAddress == sourceMatchAddress && _status == "live")
             {
                 return;
             }
@@ -82,7 +82,7 @@ internal sealed class RealtimeMatchTimeline
     {
         lock (_gate)
         {
-            if (raw.MatchAddress != _sourceMatchAddress || _matchId is null)
+            if (_status != "live" || raw.MatchAddress != _sourceMatchAddress || _matchId is null)
             {
                 return false;
             }
@@ -266,7 +266,7 @@ internal sealed class RealtimeMatchTimeline
     {
         lock (_gate)
         {
-            if (sourceMatchAddress == _sourceMatchAddress)
+            if (_status == "live" && sourceMatchAddress == _sourceMatchAddress)
             {
                 _status = "ended";
                 if (_matchId is not null)
@@ -281,10 +281,10 @@ internal sealed class RealtimeMatchTimeline
     {
         lock (_gate)
         {
-            if (sourceMatchAddress != _sourceMatchAddress) return;
+            if (_status != "live" || sourceMatchAddress != _sourceMatchAddress) return;
             if (_matchId is not null) _archives.CloseIncomplete(_matchId);
             _sourceMatchAddress = default;
-            _status = "waiting";
+            _status = "interrupted";
         }
     }
 

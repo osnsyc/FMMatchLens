@@ -165,7 +165,7 @@ internal sealed class LocalApiServer : IDisposable
                         projectUrl = ProjectMetadata.ProjectUrl,
                         authorBlogUrl = ProjectMetadata.AuthorBlogUrl,
                         koFiUrl = ProjectMetadata.KoFiUrl,
-                        inMatch = health.MatchId is not null && health.Status != "ended",
+                        inMatch = health.MatchId is not null && health.Status == "live",
                         tick = health.LastTick < 0 ? (int?)null : health.LastTick,
                         frameCount = health.FrameCount,
                         webSocketConnections = _webSockets.ConnectionCount
