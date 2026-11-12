@@ -44,6 +44,18 @@ function wireRatingInputs(overrides: Partial<RealtimeRatingInputs> = {}): Realti
 }
 
 describe("ReplaySession", () => {
+  it("marks only the last frame of a completed archive as full time", async () => {
+    const fixture = replayFixture()
+    fixture.summary.ended = true
+    const archive = await preprocessReplayArchive(fixture)
+    const session = new ReplaySession(archive)
+    expect(session.advanceTo(0).isFullTime).toBe(false)
+    expect(session.advanceTo(archive.frameCount - 1).isFullTime).toBe(true)
+    expect(session.seek(archive.frameCount - 2).isFullTime).toBe(false)
+    const incomplete = new ReplaySession({ ...archive, summary: { ...archive.summary, ended: false } })
+    expect(incomplete.advanceTo(archive.frameCount - 1).isFullTime).toBe(false)
+  })
+
   it("keeps server archive ratings and sprints through bootstrap, playback and backward seek", async () => {
     const fixture = replayFixture()
     fixture.frames = fixture.frames.slice(0, 3)

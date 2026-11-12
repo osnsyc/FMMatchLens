@@ -5,6 +5,8 @@ import type {
   TeamSide,
 } from "@/types/match"
 
+export type PassMapPositionMode = "pass" | "receive" | "combined"
+
 export type PassMapNode = {
   playerId: number
   x: number
@@ -42,14 +44,81 @@ const setPieceAnnotations = new Set([
   "defensiveFreeKick",
   "penaltyKick",
 ])
-const SET_PIECE_FLAGS = 0x08 | 0x10 | 0x20 | 0x40
+const THROW_IN_FLAG = 0x08
+const ATTACKING_FREE_KICK_FLAG = 0x10
+const DEFENSIVE_FREE_KICK_FLAG = 0x20
+const CORNER_FLAG = 0x40
+const SET_PIECE_FLAGS =
+  THROW_IN_FLAG |
+  ATTACKING_FREE_KICK_FLAG |
+  DEFENSIVE_FREE_KICK_FLAG |
+  CORNER_FLAG
+
+export function passMapPlayerIds(
+  players: readonly MatchPlayer[],
+  team: TeamSide,
+  currentMinute: number,
+  isFullTime = false
+): Set<number> {
+  const teamPlayers = players.filter((player) => player.team === team)
+  if (!isFullTime)
+    return new Set(
+      teamPlayers
+        .filter((player) => player.isOnPitch)
+        .map((player) => player.id)
+    )
+
+  const minutesPlayed = (player: MatchPlayer) => {
+    const start =
+      player.status?.subbedOnMinute ?? (player.isStarter ? 0 : currentMinute)
+    return Math.max(
+      0,
+      (player.status?.subbedOffMinute ?? currentMinute) - start
+    )
+  }
+  const ranked = teamPlayers
+    .filter(
+      (player) =>
+        player.isStarter ||
+        player.isOnPitch ||
+        player.status?.subbedOnMinute != null
+    )
+    .sort(
+      (left, right) =>
+        minutesPlayed(right) - minutesPlayed(left) ||
+        Number(right.isStarter) - Number(left.isStarter) ||
+        left.id - right.id
+    )
+  const isGoalkeeper = (player: MatchPlayer) =>
+    [player.inPossession, player.outOfPossession].some(
+      (assignment) =>
+        assignment != null &&
+        ((assignment.positionMask & 0x0001ffff) === 1 ||
+          [assignment.position, assignment.roleAbbreviation].some((value) =>
+            ["GK", "SK", "LK", "BPGK", "NNGK"].includes(
+              value.trim().toUpperCase()
+            )
+          ))
+    ) ||
+    player.position?.trim().toUpperCase() === "GK" ||
+    (player.positionFamiliarities?.GK ?? 0) >= 15
+  const goalkeeper = ranked.find(isGoalkeeper)
+  return new Set([
+    ...(goalkeeper ? [goalkeeper.id] : []),
+    ...ranked
+      .filter((player) => !isGoalkeeper(player))
+      .slice(0, 10)
+      .map((player) => player.id),
+  ])
+}
 
 export function buildPassMap(
   events: readonly TacticalEventPoint[],
   players: readonly MatchPlayer[],
   team: TeamSide,
   range: PositionHeatmapRange,
-  currentMinute: number
+  currentMinute: number,
+  positionMode: PassMapPositionMode = "pass"
 ): PassMapData {
   const currentPlayerIds = new Set(
     players
@@ -61,7 +130,8 @@ export function buildPassMap(
     currentPlayerIds,
     team,
     range,
-    currentMinute
+    currentMinute,
+    positionMode
   )
 }
 
@@ -70,7 +140,8 @@ export function buildPassMapForPlayerIds(
   currentPlayerIds: ReadonlySet<number>,
   team: TeamSide,
   range: PositionHeatmapRange,
-  currentMinute: number
+  currentMinute: number,
+  positionMode: PassMapPositionMode = "pass"
 ): PassMapData {
   const rangeStart = passMapRangeStart(range, currentMinute)
   const nodes = new Map<number, NodeAccumulator>()
@@ -95,10 +166,15 @@ export function buildPassMapForPlayerIds(
     }
     accumulator.attempts += 1
     if (isCompletedPass(event)) accumulator.completed += 1
-    if (Number.isFinite(event.x) && Number.isFinite(event.y)) {
+    if (
+      positionMode !== "receive" &&
+      Number.isFinite(event.x) &&
+      Number.isFinite(event.y)
+    ) {
       accumulator.positionSamples += 1
-      accumulator.sumX += clampPercentage(event.y)
-      accumulator.sumY += 100 - clampPercentage(event.x)
+      const position = passMapPosition(event.x, event.y, team)
+      accumulator.sumX += position.x
+      accumulator.sumY += position.y
     }
     nodes.set(event.playerId, accumulator)
 
@@ -109,6 +185,27 @@ export function buildPassMapForPlayerIds(
       !currentPlayerIds.has(receiverId)
     )
       continue
+    if (
+      positionMode !== "pass" &&
+      isCompletedPass(event) &&
+      event.endX != null &&
+      event.endY != null &&
+      Number.isFinite(event.endX) &&
+      Number.isFinite(event.endY)
+    ) {
+      const receiver = nodes.get(receiverId) ?? {
+        attempts: 0,
+        completed: 0,
+        positionSamples: 0,
+        sumX: 0,
+        sumY: 0,
+      }
+      receiver.positionSamples += 1
+      const position = passMapPosition(event.endX, event.endY, team)
+      receiver.sumX += position.x
+      receiver.sumY += position.y
+      nodes.set(receiverId, receiver)
+    }
     const edgeKey = `${event.playerId}:${receiverId}`
     const edge = edges.get(edgeKey)
     if (edge) edge.count += 1
@@ -197,10 +294,7 @@ function isCompletedPass(event: TacticalEventPoint) {
   )
 }
 
-function passMapRangeStart(
-  range: PositionHeatmapRange,
-  currentMinute: number
-) {
+function passMapRangeStart(range: PositionHeatmapRange, currentMinute: number) {
   if (range === "recent15") return Math.max(0, currentMinute - 15)
   if (range === "half") {
     if (currentMinute < 45) return 0
@@ -209,6 +303,18 @@ function passMapRangeStart(
     return 105
   }
   return 0
+}
+
+function passMapPosition(
+  longitudinal: number,
+  lateral: number,
+  team: TeamSide
+) {
+  // Tactical events already normalize half changes: home attacks right, away left.
+  // Rotate away by 180 degrees so both teams attack upwards on the vertical pitch.
+  const x = clampPercentage(lateral)
+  const y = clampPercentage(longitudinal)
+  return team === "home" ? { x, y: 100 - y } : { x: 100 - x, y }
 }
 
 function clampPercentage(value: number) {

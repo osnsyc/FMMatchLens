@@ -247,7 +247,7 @@ function replaySnapshot(
     metadataAtTick(archive.metadataTimeline, frame.tick) ??
     archive.metadataTimeline[0] ??
     archive.metadata
-  return toMatchSnapshot(
+  const snapshot = toMatchSnapshot(
     frame,
     historical.xgTimeline,
     metadata,
@@ -269,6 +269,10 @@ function replaySnapshot(
     archive.ratingConfiguration,
     ratingContributions
   )
+  return {
+    ...snapshot,
+    isFullTime: archive.summary.ended && index === archive.frameCount - 1,
+  }
 }
 
 export function replayFrameIndexAtPercent(ticks: Int32Array, percent: number) {

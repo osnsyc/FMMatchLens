@@ -467,6 +467,10 @@ const resources = {
         switchToPassMap: "切换到传球网络",
       },
       passMap: {
+        positionMode: "平均位置",
+        positionPass: "传球",
+        positionReceive: "接球",
+        positionCombined: "传接",
         networkLabel: "普通传球网络",
         empty: "所选时间范围内暂无普通传球数据",
         edgeTooltip: "{{passer}} → {{receiver}} · {{count}} 次",
@@ -1345,6 +1349,10 @@ const resources = {
         switchToPassMap: "Switch to pass map",
       },
       passMap: {
+        positionMode: "Average position",
+        positionPass: "Pass",
+        positionReceive: "Receive",
+        positionCombined: "Both",
         networkLabel: "Open-play passing network",
         empty: "No open-play passes in the selected time range",
         edgeTooltip: "{{passer}} → {{receiver}} · {{count}} passes",

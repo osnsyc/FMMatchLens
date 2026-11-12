@@ -13,11 +13,13 @@ import {
   passMapEdgesForPlayer,
   passMapFrequencyThresholds,
   passMapFrequencyTier,
+  passMapPlayerIds,
   type PassMapEdge,
   type PassMapData,
   type PassMapFrequencyThresholds,
   type PassMapFrequencyTier,
   type PassMapNode,
+  type PassMapPositionMode,
 } from "@/api/passMap"
 import {
   MapPanelControls,
@@ -26,6 +28,7 @@ import {
 import { PitchMarkings } from "@/components/pitch/PitchMarkings"
 import { resolvePitchDimensions } from "@/components/pitch/pitchGeometry"
 import { PitchPlayerBadge } from "@/components/pitch/PitchPlayerBadge"
+import { MultiStateButton } from "@/components/ui/multi-state-button"
 import {
   CardAction,
   CardContent,
@@ -86,6 +89,7 @@ export const PassMap = memo(function PassMap({
   const pitchDimensions = resolvePitchDimensions(match.pitchDimensions)
   const pitchFrameAspect = pitchDimensions.width / pitchDimensions.length
   const pitchHostRef = useRef<HTMLDivElement | null>(null)
+  const [positionMode, setPositionMode] = useState<PassMapPositionMode>("pass")
   const [pitchSize, setPitchSize] = useState({ width: 0, height: 0 })
   const [hoveredEdgeByTeam, setHoveredEdgeByTeam] = useState<
     Partial<Record<TeamSide, string>>
@@ -100,9 +104,14 @@ export const PassMap = memo(function PassMap({
   const displayedTeams = isFocusMode ? TEAM_SIDES : ([selectedTeam] as const)
   const onPitchPlayerIdsKeyByTeam = TEAM_SIDES.reduce(
     (keys, team) => {
-      keys[team] = match.players
-        .filter((player) => player.team === team && player.isOnPitch)
-        .map((player) => player.id)
+      keys[team] = [
+        ...passMapPlayerIds(
+          match.players,
+          team,
+          match.clock.minute,
+          match.isFullTime
+        ),
+      ]
         .sort((left, right) => left - right)
         .join(",")
       return keys
@@ -121,7 +130,8 @@ export const PassMap = memo(function PassMap({
         new Set(playerIdsKey ? playerIdsKey.split(",").map(Number) : []),
         team,
         selectedRange,
-        match.clock.minute
+        match.clock.minute,
+        positionMode
       )
     }
     return next
@@ -133,6 +143,7 @@ export const PassMap = memo(function PassMap({
     onPitchPlayerIdsKeyByTeam.home,
     selectedRange,
     selectedTeam,
+    positionMode,
   ])
   const presentationByTeam = useMemo(() => {
     const next: Partial<
@@ -165,13 +176,7 @@ export const PassMap = memo(function PassMap({
       }
     }
     return next
-  }, [
-    dataByTeam,
-    isFocusMode,
-    pitchSize,
-    selectedPlayerByTeam,
-    selectedTeam,
-  ])
+  }, [dataByTeam, isFocusMode, pitchSize, selectedPlayerByTeam, selectedTeam])
 
   useEffect(() => {
     const host = pitchHostRef.current
@@ -232,6 +237,20 @@ export const PassMap = memo(function PassMap({
             onRangeChange={onRangeChange}
             onTeamChange={onTeamChange}
             showTeam={!isFocusMode}
+          />
+          <MultiStateButton<PassMapPositionMode>
+            value={positionMode}
+            onValueChange={setPositionMode}
+            variant="outline"
+            size="sm"
+            className="min-w-14 px-2 text-[11px]"
+            aria-label={t("passMap.positionMode")}
+            contextMenuClassName="min-w-28"
+            states={[
+              { value: "pass", label: t("passMap.positionPass") },
+              { value: "receive", label: t("passMap.positionReceive") },
+              { value: "combined", label: t("passMap.positionCombined") },
+            ]}
           />
         </CardAction>
       </CardHeader>
@@ -374,7 +393,7 @@ export const PassMap = memo(function PassMap({
                     {hoveredEdge && (
                       <div
                         role="tooltip"
-                        className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-[calc(100%+8px)] whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-[10px] font-medium text-popover-foreground shadow-lg"
+                        className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-[calc(100%+8px)] rounded-md border border-border bg-popover px-2 py-1 text-[10px] font-medium whitespace-nowrap text-popover-foreground shadow-lg"
                         style={{
                           left: `${hoveredEdge.midpointX}px`,
                           top: `${hoveredEdge.midpointY}px`,
@@ -384,7 +403,8 @@ export const PassMap = memo(function PassMap({
                           passer:
                             playersById.get(hoveredEdge.passerId)?.name ?? "-",
                           receiver:
-                            playersById.get(hoveredEdge.receiverId)?.name ?? "-",
+                            playersById.get(hoveredEdge.receiverId)?.name ??
+                            "-",
                           count: hoveredEdge.count,
                         })}
                       </div>
@@ -409,11 +429,13 @@ function samePassMapProps(previous: PassMapProps, next: PassMapProps) {
     previous.onTeamChange === next.onTeamChange &&
     previous.onRangeChange === next.onRangeChange &&
     previous.match.matchId === next.match.matchId &&
+    previous.match.isFullTime === next.match.isFullTime &&
     previous.match.clock.minute === next.match.clock.minute &&
     previous.match.tacticalEvents === next.match.tacticalEvents &&
     previous.match.pitchDimensions?.length ===
       next.match.pitchDimensions?.length &&
-    previous.match.pitchDimensions?.width === next.match.pitchDimensions?.width &&
+    previous.match.pitchDimensions?.width ===
+      next.match.pitchDimensions?.width &&
     previous.match.home.name === next.match.home.name &&
     previous.match.home.color === next.match.home.color &&
     previous.match.away.name === next.match.away.name &&
@@ -436,6 +458,14 @@ function samePassMapPlayers(
           player.id === candidate.id &&
           player.team === candidate.team &&
           player.isOnPitch === candidate.isOnPitch &&
+          player.isStarter === candidate.isStarter &&
+          player.status?.subbedOnMinute === candidate.status?.subbedOnMinute &&
+          player.status?.subbedOffMinute ===
+            candidate.status?.subbedOffMinute &&
+          player.position === candidate.position &&
+          player.positionFamiliarities === candidate.positionFamiliarities &&
+          player.inPossession === candidate.inPossession &&
+          player.outOfPossession === candidate.outOfPossession &&
           player.name === candidate.name &&
           player.shirtNumber === candidate.shirtNumber
         )
@@ -476,12 +506,12 @@ function PassMapPlayer({
       <PitchPlayerBadge
         number={player.shirtNumber}
         numberColor="var(--heatmap-player-number)"
-        className={`border-2 border-background shadow-md after:hidden transition-transform group-hover/pass-node:scale-110 ${selected ? "ring-2 ring-foreground ring-offset-2 ring-offset-background" : ""}`}
+        className={`border-2 border-background shadow-md transition-transform group-hover/pass-node:scale-110 after:hidden ${selected ? "ring-2 ring-foreground ring-offset-2 ring-offset-background" : ""}`}
         style={{ backgroundColor: teamColor }}
       />
       <span
         role="tooltip"
-        className="pointer-events-none absolute bottom-[calc(100%+6px)] left-1/2 z-30 hidden -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-[10px] font-medium text-popover-foreground shadow-lg group-hover/pass-node:block group-focus-visible/pass-node:block"
+        className="pointer-events-none absolute bottom-[calc(100%+6px)] left-1/2 z-30 hidden -translate-x-1/2 rounded-md border border-border bg-popover px-2 py-1 text-[10px] font-medium whitespace-nowrap text-popover-foreground shadow-lg group-hover/pass-node:block group-focus-visible/pass-node:block"
       >
         {t("passMap.playerStats", {
           attempts: node.attempts,

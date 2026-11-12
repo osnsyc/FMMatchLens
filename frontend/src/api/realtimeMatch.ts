@@ -643,6 +643,7 @@ export function useRealtimeMatch(
     let historyMatchId = ""
     let historyLastTick = -1
     let historyLastSequence = -1
+    let isFullTime = false
     let formations = new FormationTimeline()
     let publishedSnapshot: MatchSnapshot | undefined
     let derived = new HistoricalDerivations()
@@ -700,6 +701,7 @@ export function useRealtimeMatch(
           undefined,
           liveRatingContributions
         )
+        publishedSnapshot = { ...publishedSnapshot, isFullTime }
         setMatch(publishedSnapshot)
       }
       if (lowPriority) startTransition(commit)
@@ -714,6 +716,7 @@ export function useRealtimeMatch(
       historyMatchId = matchId
       historyLastTick = -1
       historyLastSequence = -1
+      isFullTime = false
       formations = new FormationTimeline()
       liveRatingInputs = new Map()
       historyRatingInputs = new Map()
@@ -756,6 +759,14 @@ export function useRealtimeMatch(
           )
             return
           if (slice.matchId) resetFor(slice.matchId)
+          if (
+            slice.status === "ended" &&
+            slice.matchId === latestFrame?.matchId &&
+            !isFullTime
+          ) {
+            isFullTime = true
+            changed = true
+          }
           if (
             slice.status === "ended" &&
             slice.matchId === latestFrame?.matchId
