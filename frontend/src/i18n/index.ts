@@ -21,6 +21,25 @@ const getInitialLanguage = (): SupportedLanguage => {
 const resources = {
   "zh-CN": {
     translation: {
+      settings: {
+        title: "设置",
+        description: "配置界面语言、工具栏和快捷键。更改自动保存。",
+        general: "通用",
+        interfaceLanguage: "语言",
+        toolbarTitle: "比分栏工具栏",
+        toolbarPreview: "工具栏配置预览",
+        resetShortcuts: "恢复快捷键",
+        save: "保存",
+        default: "恢复默认",
+        cancel: "取消",
+        recordShortcut: "按下新的快捷键",
+        recordingHint: "按键录入 · Esc 取消 · Delete 清除",
+        noShortcut: "未设置",
+        nativeShortcut: "浏览器原生快捷键，不支持修改",
+        resetAll: "重置全部设置",
+        reservedShortcut: "该按键由浏览器或系统保留",
+        shortcutConflict: "快捷键已被占用：{{action}}",
+      },
       teamTactics: teamTacticsZh,
       xg: {
         timeline: "时间线",
@@ -898,6 +917,25 @@ const resources = {
   },
   en: {
     translation: {
+      settings: {
+        title: "Settings",
+        description: "Configure language, toolbar and shortcuts. Changes are saved automatically.",
+        general: "General",
+        interfaceLanguage: "Language",
+        toolbarTitle: "Scoreboard toolbar",
+        toolbarPreview: "Toolbar configuration preview",
+        resetShortcuts: "Reset shortcuts",
+        save: "Save",
+        default: "Default",
+        cancel: "Cancel",
+        recordShortcut: "Press a new shortcut",
+        recordingHint: "Press keys · Esc to cancel · Delete to clear",
+        noShortcut: "Not set",
+        nativeShortcut: "Browser shortcut; cannot be reassigned",
+        resetAll: "Reset all settings",
+        reservedShortcut: "This key is reserved by the browser or system",
+        shortcutConflict: "Already assigned to: {{action}}",
+      },
       teamTactics: teamTacticsEn,
       xg: {
         timeline: "Timeline",

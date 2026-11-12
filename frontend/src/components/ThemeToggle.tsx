@@ -68,7 +68,7 @@ export function ThemeToggle() {
         onClick={toggleScheme}
         aria-label={`${t("appearance.scheme.label")}: ${currentSchemeLabel}`}
       >
-        {resolvedScheme === "dark" ? <MoonIcon /> : <SunIcon />}
+        <ThemeSchemeIcon />
       </Button>
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger
@@ -230,6 +230,11 @@ function ChoiceGroup({
       </DropdownMenuRadioGroup>
     </DropdownMenuGroup>
   )
+}
+
+export function ThemeSchemeIcon() {
+  const { resolvedScheme } = useTheme()
+  return resolvedScheme === "dark" ? <MoonIcon /> : <SunIcon />
 }
 
 function SunIcon() {

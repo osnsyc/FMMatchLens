@@ -90,14 +90,82 @@ export const appShortcuts: readonly AppShortcut[] = [
   },
 ]
 
-export function shortcutForKeyboardEvent(event: KeyboardEvent) {
+export type ShortcutBindings = Partial<Record<AppShortcut["id"], string>>
+
+export function keyboardBinding(
+  event: Pick<
+    KeyboardEvent,
+    "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey"
+  >
+) {
+  const key =
+    event.key === " " || event.key === "Spacebar"
+      ? "Space"
+      : event.key.length === 1
+        ? event.key.toUpperCase()
+        : event.key
+  return [
+    event.ctrlKey && "Ctrl",
+    event.metaKey && "Meta",
+    event.altKey && "Alt",
+    event.shiftKey && "Shift",
+    key,
+  ]
+    .filter(Boolean)
+    .join("+")
+}
+
+export function bindingError(
+  binding: string,
+  id: AppShortcut["id"],
+  bindings: ShortcutBindings
+) {
+  if (!binding) return undefined
+  const key = binding.replace(
+    /^(?:Ctrl\+)?(?:Meta\+)?(?:Alt\+)?(?:Shift\+)?/,
+    ""
+  )
+  if (!(
+    (key.length === 1 && key === key.toUpperCase() && key.trim() !== "") ||
+    /^(?:Space|Enter|Arrow(?:Up|Down|Left|Right)|Home|End|PageUp|PageDown|Insert|F(?:[1-9]|1[0-2]))$/.test(
+      key
+    )
+  ))
+    return "reserved"
+  if (
+    /^(?:Ctrl|Meta)\+|^Alt\+(?:F4|Space|ArrowLeft|ArrowRight)$|(?:^|\+)(?:F1|F3|F5|F6|F7|F10|F11|F12|Escape|Tab|Dead|Unidentified)$/.test(
+      binding
+    )
+  )
+    return "reserved"
+  return appShortcuts.find(
+    (item) =>
+      item.id !== id && (bindings[item.id] ?? item.displayKey) === binding
+  )?.id
+}
+
+export function shortcutForKeyboardEvent(
+  event: KeyboardEvent,
+  bindings: ShortcutBindings = {}
+) {
   const key = event.key === "Spacebar" ? " " : event.key.toLowerCase()
   if (
     event.repeat ||
-    event.metaKey ||
-    event.ctrlKey ||
+    event.defaultPrevented ||
+    (typeof document !== "undefined" &&
+      document.querySelector("[data-app-settings-dialog]")) ||
     isEditableShortcutTarget(event.target) ||
-    (key === " " && isInteractiveShortcutTarget(event.target))
+    ([
+      " ",
+      "enter",
+      "arrowup",
+      "arrowdown",
+      "arrowleft",
+      "arrowright",
+      "home",
+      "end",
+    ].includes(key) &&
+      isInteractiveShortcutTarget(event.target))
   ) {
     return undefined
   }
@@ -105,8 +173,14 @@ export function shortcutForKeyboardEvent(event: KeyboardEvent) {
   return appShortcuts.find(
     (shortcut) =>
       shortcut.handled !== false &&
-      shortcut.key === key &&
-      Boolean(shortcut.altKey) === event.altKey
+      (bindings[shortcut.id] !== undefined
+        ? bindings[shortcut.id] !== "" &&
+          bindings[shortcut.id] === keyboardBinding(event)
+        : !event.ctrlKey &&
+          !event.metaKey &&
+          !event.shiftKey &&
+          shortcut.key === key &&
+          Boolean(shortcut.altKey) === event.altKey)
   )
 }
 

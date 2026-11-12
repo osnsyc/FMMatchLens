@@ -26,6 +26,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { changeLanguage, type SupportedLanguage } from "@/i18n"
+import { SettingsDialog } from "@/components/SettingsDialog"
+import { useAppSettings } from "@/lib/appSettings"
 import { appShortcuts } from "@/lib/appShortcuts"
 
 export function ScoreboardToolbar({
@@ -38,6 +40,7 @@ export function ScoreboardToolbar({
   exploreTourActive: boolean
 }) {
   const { t, i18n } = useTranslation()
+  const settings = useAppSettings()
   const currentLanguage: SupportedLanguage =
     i18n.language === "en" ? "en" : "zh-CN"
   const [isFullscreen, setIsFullscreen] = useState(
@@ -74,102 +77,113 @@ export function ScoreboardToolbar({
 
   return (
     <div className="flex min-w-0 items-center justify-end gap-2 justify-self-end">
-      <Button
-        type="button"
-        variant={exploreTourActive ? "default" : "outline"}
-        size="icon"
-        className="relative size-8 active:translate-y-px"
-        aria-label={t("exploreTour.start")}
-        title={t("exploreTour.start")}
-        aria-pressed={exploreTourActive}
-        onClick={onStartExploreTour}
-      >
-        <HugeiconsIcon icon={BinocularsIcon} strokeWidth={1.7} />
-        {showExploreTourHint && !exploreTourActive && (
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute -right-1 -top-1 flex size-3"
-          >
-            <span className="absolute inset-0 animate-ping rounded-full bg-primary/70 motion-reduce:animate-none" />
-            <span className="relative m-auto size-2 rounded-full bg-primary ring-2 ring-background" />
-          </span>
-        )}
-      </Button>
+      {settings.toolbar.tour && (
+        <Button
+          type="button"
+          variant={exploreTourActive ? "default" : "outline"}
+          size="icon"
+          className="relative size-8 active:translate-y-px"
+          aria-label={t("exploreTour.start")}
+          title={t("exploreTour.start")}
+          aria-pressed={exploreTourActive}
+          onClick={onStartExploreTour}
+        >
+          <HugeiconsIcon icon={BinocularsIcon} strokeWidth={1.7} />
+          {showExploreTourHint && !exploreTourActive && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute -right-1 -top-1 flex size-3"
+            >
+              <span className="absolute inset-0 animate-ping rounded-full bg-primary/70 motion-reduce:animate-none" />
+              <span className="relative m-auto size-2 rounded-full bg-primary ring-2 ring-background" />
+            </span>
+          )}
+        </Button>
+      )}
 
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        className="size-8 active:translate-y-px"
-        disabled={!document.fullscreenEnabled}
-        aria-label={
-          isFullscreen
-            ? t("shortcuts.exitFullscreen")
-            : t("shortcuts.enterFullscreen")
-        }
-        title={
-          isFullscreen
-            ? t("shortcuts.exitFullscreen")
-            : t("shortcuts.enterFullscreen")
-        }
-        onClick={() => void toggleFullscreen()}
-      >
-        <HugeiconsIcon
-          icon={isFullscreen ? ArrowShrinkIcon : FullScreenIcon}
-          strokeWidth={1.6}
-        />
-      </Button>
-
-      <Popover>
-        <PopoverTrigger
-          render={
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="size-8 active:translate-y-px"
-              aria-label={t("shortcuts.open")}
-              title={t("shortcuts.open")}
-            />
+      {settings.toolbar.fullscreen && (
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="size-8 active:translate-y-px"
+          disabled={!document.fullscreenEnabled}
+          aria-label={
+            isFullscreen
+              ? t("shortcuts.exitFullscreen")
+              : t("shortcuts.enterFullscreen")
           }
+          title={
+            isFullscreen
+              ? t("shortcuts.exitFullscreen")
+              : t("shortcuts.enterFullscreen")
+          }
+          onClick={() => void toggleFullscreen()}
         >
-          <HugeiconsIcon icon={CommandIcon} strokeWidth={1.5} />
-        </PopoverTrigger>
-        <PopoverContent align="end" sideOffset={8} className="w-52 gap-2 p-3">
-          <PopoverHeader>
-            <PopoverTitle>{t("shortcuts.title")}</PopoverTitle>
-          </PopoverHeader>
-          <ul className="space-y-1">
-            {appShortcuts.map((shortcut) => (
-              <li
-                key={shortcut.id}
-                className="flex items-center justify-between gap-4 py-1"
-              >
-                <span className="text-[11px] text-foreground/85">
-                  {t(shortcut.labelKey)}
-                </span>
-                <Kbd className="shrink-0">{shortcut.displayKey}</Kbd>
-              </li>
-            ))}
-          </ul>
-        </PopoverContent>
-      </Popover>
+          <HugeiconsIcon
+            icon={isFullscreen ? ArrowShrinkIcon : FullScreenIcon}
+            strokeWidth={1.6}
+          />
+        </Button>
+      )}
 
-      <ThemeToggle />
+      {settings.toolbar.shortcuts && (
+        <Popover>
+          <PopoverTrigger
+            render={
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="size-8 active:translate-y-px"
+                aria-label={t("shortcuts.open")}
+                title={t("shortcuts.open")}
+              />
+            }
+          >
+            <HugeiconsIcon icon={CommandIcon} strokeWidth={1.5} />
+          </PopoverTrigger>
+          <PopoverContent align="end" sideOffset={8} className="w-52 gap-2 p-3">
+            <PopoverHeader>
+              <PopoverTitle>{t("shortcuts.title")}</PopoverTitle>
+            </PopoverHeader>
+            <ul className="space-y-1">
+              {appShortcuts.map((shortcut) => (
+                <li
+                  key={shortcut.id}
+                  className="flex items-center justify-between gap-4 py-1"
+                >
+                  <span className="text-[11px] text-foreground/85">
+                    {t(shortcut.labelKey)}
+                  </span>
+                  <Kbd className="shrink-0">
+                    {settings.shortcuts[shortcut.id] === "" ? "—" : settings.shortcuts[shortcut.id] ?? shortcut.displayKey}
+                  </Kbd>
+                </li>
+              ))}
+            </ul>
+          </PopoverContent>
+        </Popover>
+      )}
 
-      <Select value={currentLanguage} onValueChange={handleLanguageChange}>
-        <SelectTrigger
-          size="sm"
-          className="h-8 w-20 transition-transform active:translate-y-px"
-          aria-label={t("common.language")}
-        >
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="zh-CN">{t("common.chinese")}</SelectItem>
-          <SelectItem value="en">{t("common.english")}</SelectItem>
-        </SelectContent>
-      </Select>
+      {settings.toolbar.appearance && <ThemeToggle />}
+
+      {settings.toolbar.language && (
+        <Select value={currentLanguage} onValueChange={handleLanguageChange}>
+          <SelectTrigger
+            size="sm"
+            className="h-8 w-20 transition-transform active:translate-y-px"
+            aria-label={t("common.language")}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="zh-CN">{t("common.chinese")}</SelectItem>
+            <SelectItem value="en">{t("common.english")}</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
+      <SettingsDialog />
     </div>
   )
 }

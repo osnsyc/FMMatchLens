@@ -1,3 +1,4 @@
+import { useAppSettings } from "@/lib/appSettings"
 import { useStoredChoice } from "@/hooks/useStoredPreference"
 import { LiveMotionSource } from "@/api/liveMotionSource"
 import { ReplayMotionSource } from "@/api/replay/replayMotionSource"
@@ -43,6 +44,7 @@ import { PlayerMatchDetailsPopup } from "@/components/PlayerMatchDetailsPopup"
 import { useMatchKits } from "@/hooks/useMatchKits"
 import { MatchKitSymbols } from "@/components/PlayerShirt"
 import { ThemeToggle } from "@/components/ThemeToggle"
+import { SettingsDialog } from "@/components/SettingsDialog"
 import { useTheme } from "@/components/theme-provider"
 import { useRealtimeMatch, type RealtimeFrame } from "@/api/realtimeMatch"
 import { TacticalWireState } from "@/components/formation/tactics"
@@ -161,6 +163,7 @@ function AnimatedDashboardCard({
 }
 
 export function App() {
+  const appSettings = useAppSettings()
   const { t, i18n } = useTranslation()
   const {
     settings,
@@ -511,7 +514,7 @@ export function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      const shortcut = shortcutForKeyboardEvent(event)
+      const shortcut = shortcutForKeyboardEvent(event, appSettings.shortcuts)
       if (!shortcut || (shortcut.requiresMatch && !hasMatch)) return
 
       event.preventDefault()
@@ -545,7 +548,7 @@ export function App() {
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [hasMatch, resolvedScheme, schemeLocked, setSchemePreference, setSpatialMapView])
+  }, [hasMatch, resolvedScheme, schemeLocked, setSchemePreference, setSpatialMapView, appSettings.shortcuts])
 
   if (!match) {
     return (
@@ -714,6 +717,7 @@ export function App() {
 
               <div className="mt-6 flex items-center gap-2">
                 <ThemeToggle />
+                <SettingsDialog />
                 <Select
                   value={currentLanguage}
                   onValueChange={handleLanguageChange}
