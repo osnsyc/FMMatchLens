@@ -335,7 +335,10 @@ export function combineHeatmapGrids(
 }
 
 /** Orient a vertical heatmap towards the opponent's goal without mutating history. */
-export function orientHeatmapGrid(grid: HeatmapGrid, team: TeamSide): HeatmapGrid {
+export function orientHeatmapGrid(
+  grid: HeatmapGrid,
+  team: TeamSide
+): HeatmapGrid {
   // Stored heatmaps normalize half changes, with home defending the top goal.
   if (team === "away") return grid
   return {
@@ -346,20 +349,28 @@ export function orientHeatmapGrid(grid: HeatmapGrid, team: TeamSide): HeatmapGri
   }
 }
 
-const PIXI_BLUR_KERNEL_STANDARD_DEVIATION = 1.648
+const BLUR_KERNEL_STANDARD_DEVIATION = 1.648
 const COLOR_SCALE_SIGMA_CELLS =
-  HEATMAP_BLUR_STEP_RATIO * GRID_WIDTH * PIXI_BLUR_KERNEL_STANDARD_DEVIATION
+  HEATMAP_BLUR_STEP_RATIO * GRID_WIDTH * BLUR_KERNEL_STANDARD_DEVIATION
 const COLOR_SCALE_KERNEL = gaussianKernel(COLOR_SCALE_SIGMA_CELLS)
 const COLOR_SCALE_PERCENTILE = 0.99
 
 /**
  * Shared post-blur cell-share P99 ceiling for a set of comparable grids.
  *
- * The CPU kernel approximates the renderer's seven-tap blur at its configured
- * screen-space step. P99 keeps an isolated peak from flattening the rest of the
- * map while still giving comparable grids (for example both teams) one scale.
+ * Rendering and scale estimation use the exact same blur in grid space.
+ * P99 keeps isolated peaks from flattening the map and lets comparable grids
+ * (for example both teams) share one scale, independently of display size.
  */
 export function getHeatmapColorScaleBounds(grids: readonly HeatmapGrid[]) {
+  return calculateHeatmapColorScaleBounds(grids)
+}
+
+function calculateHeatmapColorScaleBounds(
+  grids: readonly HeatmapGrid[],
+  blurredByGrid = new Map<HeatmapGrid, Float64Array>(),
+  scratch = new Float64Array(CELL_COUNT)
+) {
   let rawMaxCellShare = 0
   const blurredCellShares: number[] = []
   for (const grid of grids) {
@@ -367,20 +378,8 @@ export function getHeatmapColorScaleBounds(grids: readonly HeatmapGrid[]) {
     for (const density of grid.density) {
       rawMaxCellShare = Math.max(rawMaxCellShare, density / grid.sampleCount)
     }
-    const horizontal = blurDensity(
-      grid.density,
-      GRID_WIDTH,
-      GRID_HEIGHT,
-      COLOR_SCALE_KERNEL,
-      true
-    )
-    const blurred = blurDensity(
-      horizontal,
-      GRID_WIDTH,
-      GRID_HEIGHT,
-      COLOR_SCALE_KERNEL,
-      false
-    )
+    const blurred = getBlurredHeatmapDensity(grid, scratch)
+    blurredByGrid.set(grid, blurred)
     for (let y = 0; y < GRID_HEIGHT; y += 1) {
       for (let x = 0; x < GRID_WIDTH; x += 1) {
         const cellShare = blurred[y * GRID_WIDTH + x] / grid.sampleCount
@@ -395,6 +394,93 @@ export function getHeatmapColorScaleBounds(grids: readonly HeatmapGrid[]) {
   )
   const blurredP99CellShare = blurredCellShares[percentileIndex] ?? 0
   return { rawMaxCellShare, blurredP99CellShare }
+}
+
+export type HeatmapColorScale = {
+  /** P99 of blurred density divided by sample count; shared across comparable grids. */
+  maxCellShare: number
+}
+
+export function getHeatmapColorScale(
+  grids: readonly HeatmapGrid[]
+): HeatmapColorScale {
+  return { maxCellShare: getHeatmapColorScaleBounds(grids).blurredP99CellShare }
+}
+
+export type HeatmapRenderData = {
+  density: Float32Array
+}
+
+/** Prepare one immutable render snapshot, reusing each blur for scale and pixels. */
+export function prepareHeatmapRenderData(
+  grid: HeatmapGrid,
+  comparableGrids: readonly HeatmapGrid[] = [grid],
+  team?: TeamSide
+): HeatmapRenderData {
+  const blurredByGrid = new Map<HeatmapGrid, Float64Array>()
+  const scratch = new Float64Array(grid.width * grid.height)
+  const bounds = calculateHeatmapColorScaleBounds(
+    [...new Set([grid, ...comparableGrids])],
+    blurredByGrid,
+    scratch
+  )
+  const blurred = blurredByGrid.get(grid)
+  return {
+    density: blurred
+      ? normalizeHeatmapDensity(
+          blurred,
+          grid.sampleCount * bounds.blurredP99CellShare,
+          team === "home"
+        )
+      : new Float32Array(grid.width * grid.height),
+  }
+}
+
+/** No canvas dimensions or device pixel ratio enter this calculation. */
+export function getHeatmapDisplayDensity(
+  grid: HeatmapGrid,
+  colorScale?: HeatmapColorScale
+): Float32Array {
+  if (!colorScale) return prepareHeatmapRenderData(grid).density
+  return normalizeHeatmapDensity(
+    getBlurredHeatmapDensity(grid),
+    grid.sampleCount * colorScale.maxCellShare
+  )
+}
+
+function normalizeHeatmapDensity(
+  blurred: Float64Array,
+  divisor: number,
+  rotate = false
+) {
+  const density = new Float32Array(blurred.length)
+  if (divisor > 0) {
+    for (let index = 0; index < blurred.length; index += 1) {
+      density[rotate ? blurred.length - 1 - index : index] = Math.max(
+        0,
+        Math.min(1, blurred[index] / divisor)
+      )
+    }
+  }
+  return density
+}
+
+function getBlurredHeatmapDensity(grid: HeatmapGrid, scratch?: Float64Array) {
+  const horizontal = blurDensity(
+    grid.density,
+    grid.width,
+    grid.height,
+    COLOR_SCALE_KERNEL,
+    true,
+    scratch
+  )
+  return blurDensity(
+    horizontal,
+    grid.width,
+    grid.height,
+    COLOR_SCALE_KERNEL,
+    false
+  )
 }
 
 export function buildHeatmapSnapshot(
@@ -485,9 +571,9 @@ function blurDensity(
   width: number,
   height: number,
   kernel: Float64Array,
-  horizontal: boolean
+  horizontal: boolean,
+  output: Float64Array = new Float64Array(width * height)
 ) {
-  const output = new Float64Array(width * height)
   const radius = (kernel.length - 1) / 2
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {

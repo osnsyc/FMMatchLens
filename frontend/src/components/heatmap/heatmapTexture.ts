@@ -37,7 +37,6 @@ const lutFragment = `
 in vec2 vTextureCoord;
 out vec4 finalColor;
 uniform sampler2D uTexture;
-uniform float uScale;
 uniform float uColorGamma;
 uniform float uAlphaGamma;
 uniform float uThreshold0;
@@ -62,7 +61,7 @@ vec3 heatColor(float value) {
 }
 
 void main(void) {
-  float density = clamp(texture(uTexture, vTextureCoord).r * uScale, 0.0, 1.0);
+  float density = clamp(texture(uTexture, vTextureCoord).r, 0.0, 1.0);
   if (density < 0.003) {
     finalColor = vec4(0.0);
     return;
@@ -107,7 +106,6 @@ export class HeatmapLutFilter extends Filter {
   constructor() {
     const toneMapping = DEFAULT_HEATMAP_TONE_MAPPING
     const heatmapUniforms = new UniformGroup({
-      uScale: { value: 1, type: "f32" },
       uColorGamma: { value: toneMapping.colorGamma, type: "f32" },
       uAlphaGamma: { value: toneMapping.alphaGamma, type: "f32" },
       uThreshold0: { value: toneMapping.thresholds[0], type: "f32" },
@@ -133,10 +131,6 @@ export class HeatmapLutFilter extends Filter {
       antialias: "off",
     })
     this.heatmapUniforms = heatmapUniforms
-  }
-
-  set scale(value: number) {
-    this.heatmapUniforms.uniforms.uScale = value
   }
 
   setStops(stops: readonly number[][]) {

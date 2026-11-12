@@ -5,8 +5,8 @@ import { useTranslation } from "react-i18next"
 import {
   combineHeatmapGrids,
   getHeatmap,
-  getHeatmapColorScaleBounds,
-  orientHeatmapGrid,
+  prepareHeatmapRenderData,
+  type HeatmapRenderData,
 } from "@/api/heatmap"
 import { passMapPlayerIds } from "@/api/passMap"
 import { PixiHeatmap } from "@/components/heatmap/PixiHeatmap"
@@ -63,12 +63,7 @@ type HeatLabel = {
 
 type HeatmapView = {
   phase: HeatmapPhase
-  grid: HeatmapGrid
-  colorScale: {
-    maxCellShare: number
-    sampleDivisor: number
-    lutScale: number
-  }
+  data: HeatmapRenderData
   labels: HeatLabel[]
 }
 
@@ -166,7 +161,6 @@ export function ZonePanel({
         comparableGrids = [outfieldHeatmaps.home, outfieldHeatmaps.away]
       }
 
-      const bounds = getHeatmapColorScaleBounds(comparableGrids)
       const labels = teamPlayers
         .filter((player) =>
           match.isFullTime ? overviewIds.has(player.id) : player.isOnPitch
@@ -196,15 +190,7 @@ export function ZonePanel({
 
       return {
         phase,
-        grid: orientHeatmapGrid(grid, selectedTeam),
-        colorScale: {
-          maxCellShare: bounds.rawMaxCellShare,
-          sampleDivisor: grid.sampleCount,
-          lutScale:
-            bounds.blurredP99CellShare > 0
-              ? bounds.rawMaxCellShare / bounds.blurredP99CellShare
-              : 1,
-        },
+        data: prepareHeatmapRenderData(grid, comparableGrids, selectedTeam),
         labels,
       }
     })
@@ -373,10 +359,9 @@ export function ZonePanel({
                   >
                     {innerPitchSize.width > 1 && innerPitchSize.height > 1 && (
                       <PixiHeatmap
-                        grid={view.grid}
+                        data={view.data}
                         width={innerPitchSize.width}
                         height={innerPitchSize.height}
-                        colorScale={view.colorScale}
                       />
                     )}
                   </div>

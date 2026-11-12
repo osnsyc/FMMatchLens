@@ -1,46 +1,39 @@
 import { useEffect, useRef } from "react"
 
-import {
-  PixiHeatmapRenderer,
-  type HeatmapColorScale,
-} from "@/components/heatmap/PixiHeatmapRenderer"
+import { PixiHeatmapRenderer } from "@/components/heatmap/PixiHeatmapRenderer"
 import {
   DEFAULT_HEATMAP_TONE_MAPPING,
   type HeatmapToneMapping,
 } from "@/components/heatmap/heatmapTexture"
 import { hexColorToNormalizedRgb } from "@/lib/cssColor"
-import type { HeatmapGrid } from "@/types/match"
+import type { HeatmapRenderData } from "@/api/heatmap"
 import { useTheme } from "@/components/theme-provider"
 
 type PixiHeatmapProps = {
-  grid: HeatmapGrid
+  data: HeatmapRenderData
   width: number
   height: number
-  colorScale?: HeatmapColorScale
   toneMapping?: Partial<HeatmapToneMapping>
 }
 
 export function PixiHeatmap({
-  grid,
+  data,
   width,
   height,
-  colorScale,
   toneMapping,
 }: PixiHeatmapProps) {
   const { settings, resolvedScheme } = useTheme()
   const hostRef = useRef<HTMLDivElement | null>(null)
   const rendererRef = useRef<PixiHeatmapRenderer | null>(null)
-  const gridRef = useRef(grid)
-  const colorScaleRef = useRef(colorScale)
+  const dataRef = useRef(data)
   const toneMappingRef = useRef(toneMapping)
   const sizeRef = useRef({ width, height })
 
   useEffect(() => {
-    gridRef.current = grid
-    colorScaleRef.current = colorScale
+    dataRef.current = data
     toneMappingRef.current = toneMapping
     sizeRef.current = { width, height }
-  }, [colorScale, grid, height, toneMapping, width])
+  }, [data, height, toneMapping, width])
 
   useEffect(() => {
     const host = hostRef.current
@@ -68,7 +61,7 @@ export function PixiHeatmap({
         renderer.updateToneMapping(
           toneMappingRef.current ?? DEFAULT_HEATMAP_TONE_MAPPING
         )
-        renderer.update(gridRef.current, colorScaleRef.current)
+        renderer.update(dataRef.current)
       } catch (error) {
         renderer?.destroy()
         if (rendererRef.current === renderer) rendererRef.current = null
@@ -86,8 +79,8 @@ export function PixiHeatmap({
   }, [])
 
   useEffect(() => {
-    rendererRef.current?.update(grid, colorScale)
-  }, [colorScale, grid])
+    rendererRef.current?.update(data)
+  }, [data])
 
   useEffect(() => {
     rendererRef.current?.updateLut(readHeatmapStops())

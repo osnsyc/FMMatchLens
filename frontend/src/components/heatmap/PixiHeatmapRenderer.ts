@@ -1,10 +1,4 @@
-import {
-  autoDetectRenderer,
-  BlurFilter,
-  Container,
-  Sprite,
-  type Renderer,
-} from "pixi.js"
+import { autoDetectRenderer, Container, Sprite, type Renderer } from "pixi.js"
 
 import {
   createDensityTexture,
@@ -13,26 +7,19 @@ import {
   type HeatmapToneMapping,
 } from "@/components/heatmap/heatmapTexture"
 import {
-  HEATMAP_BLUR_STEP_RATIO,
+  type HeatmapRenderData,
   HEATMAP_GRID_HEIGHT,
   HEATMAP_GRID_WIDTH,
 } from "@/api/heatmap"
-import type { HeatmapGrid } from "@/types/match"
 
 const GRID_WIDTH = HEATMAP_GRID_WIDTH
 const GRID_HEIGHT = HEATMAP_GRID_HEIGHT
 const CELL_COUNT = GRID_WIDTH * GRID_HEIGHT
-const FILTER_RESOLUTION = 1
-
-export type HeatmapColorScale = {
-  maxCellShare: number
-  sampleDivisor: number
-  lutScale: number
-}
 
 /**
  * Persistent, demand-rendered GPU heatmap:
- * float density texture -> separable Gaussian blur -> LUT color mapping.
+ * Grid-space Gaussian blur and normalization -> float texture -> LUT mapping.
+ * Resizing changes only interpolation, never smoothing or the color scale.
  *
  * This intentionally owns a bare Renderer instead of a Pixi Application:
  * Application always installs TickerPlugin, even when autoStart is disabled.
@@ -40,7 +27,6 @@ export type HeatmapColorScale = {
 export class PixiHeatmapRenderer {
   private readonly densityTexture: DensityTexture
   private readonly densitySprite: Sprite
-  private readonly blurFilter: BlurFilter
   private readonly lutFilter = createHeatmapLutFilter()
   private width: number
   private height: number
@@ -59,14 +45,7 @@ export class PixiHeatmapRenderer {
     this.height = height
     this.densityTexture = createDensityTexture(GRID_WIDTH, GRID_HEIGHT)
     this.densitySprite = new Sprite(this.densityTexture.texture)
-    this.blurFilter = new BlurFilter({
-      strength: this.blurStrength(),
-      quality: 1,
-      kernelSize: 7,
-      resolution: FILTER_RESOLUTION,
-    })
-    this.blurFilter.repeatEdgePixels = true
-    this.densitySprite.filters = [this.blurFilter, this.lutFilter]
+    this.densitySprite.filters = [this.lutFilter]
     this.resizeSprite()
     this.stage.addChild(this.densitySprite)
   }
@@ -88,21 +67,11 @@ export class PixiHeatmapRenderer {
     return new PixiHeatmapRenderer(renderer, stage, width, height)
   }
 
-  update(grid: HeatmapGrid, colorScale?: HeatmapColorScale) {
-    let localMax = 0
-    if (!colorScale) {
-      for (const density of grid.density) localMax = Math.max(localMax, density)
-    }
-    const max = colorScale?.maxCellShare ?? localMax
-    const divisor = colorScale?.sampleDivisor ?? 1
+  update({ density }: HeatmapRenderData) {
     const data = this.densityTexture.data
 
     for (let index = 0; index < CELL_COUNT; index += 1) {
-      const density = grid.density[index] ?? 0
-      const value =
-        max > 0 && divisor > 0
-          ? Math.max(0, Math.min(1, density / divisor / max))
-          : 0
+      const value = density[index] ?? 0
       const offset = index * 4
       data[offset] = value
       data[offset + 1] = value
@@ -110,7 +79,6 @@ export class PixiHeatmapRenderer {
       data[offset + 3] = 1
     }
 
-    this.lutFilter.scale = colorScale?.lutScale ?? 1
     this.densityTexture.source.update()
     this.renderOnce()
   }
@@ -137,7 +105,6 @@ export class PixiHeatmapRenderer {
     this.width = width
     this.height = height
     this.renderer.resize(nextWidth, nextHeight)
-    this.blurFilter.strength = this.blurStrength()
     this.resizeSprite()
     this.renderOnce()
   }
@@ -152,7 +119,6 @@ export class PixiHeatmapRenderer {
     this.stage.removeChild(this.densitySprite)
     this.densitySprite.filters = null
     this.densitySprite.destroy()
-    this.blurFilter.destroy()
     this.lutFilter.destroy()
     this.densityTexture.texture.destroy(true)
     this.stage.destroy({ children: true })
@@ -163,13 +129,6 @@ export class PixiHeatmapRenderer {
     this.densitySprite.width = Math.max(1, this.width)
     this.densitySprite.height = Math.max(1, this.height)
     this.densitySprite.filterArea = this.renderer.screen
-  }
-
-  private blurStrength() {
-    return Math.max(
-      6,
-      Math.min(this.width, this.height) * HEATMAP_BLUR_STEP_RATIO
-    )
   }
 
   private renderOnce() {

@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest"
 import {
   getHeatmap,
   getHeatmapColorScaleBounds,
+  getHeatmapColorScale,
+  getHeatmapDisplayDensity,
+  prepareHeatmapRenderData,
   HEATMAP_GRID_HEIGHT,
   HEATMAP_GRID_WIDTH,
   HeatmapDerivations,
@@ -40,6 +43,80 @@ function playerGrid(engine: HeatmapDerivations, range: "full" | "recent15") {
 }
 
 describe("heatmap density", () => {
+  it("prepares equivalent shared-scale pixels and refreshes after in-place source updates", () => {
+    const engine = new HeatmapDerivations()
+    engine.appendFrame(frameAt(20, 30))
+    const grid = playerGrid(engine, "full")
+    const peer = { ...grid, density: grid.density.slice().reverse() }
+    const scale = getHeatmapColorScale([grid, peer])
+    const expected = getHeatmapDisplayDensity(grid, scale)
+    const prepared = prepareHeatmapRenderData(grid, [grid, peer])
+    expect(prepared.density).toEqual(expected)
+    expect(
+      prepareHeatmapRenderData(grid, [grid, peer], "home").density
+    ).toEqual(expected.slice().reverse())
+    const retained = prepared.density.slice()
+    grid.density.reverse()
+    expect(prepareHeatmapRenderData(grid, [grid, peer]).density).not.toEqual(
+      retained
+    )
+    expect(prepared.density).toEqual(retained)
+  })
+
+  it("uses one post-blur scale regardless of sample count or display rotation", () => {
+    const engine = new HeatmapDerivations()
+    engine.appendFrame(frameAt(20, 30))
+    engine.appendFrame(frameAt(70, 80))
+    const grid = playerGrid(engine, "full")
+    const original = grid.density.slice()
+    const density = getHeatmapDisplayDensity(grid)
+    const repeated = {
+      ...grid,
+      sampleCount: grid.sampleCount * 10,
+      density: Float32Array.from(grid.density, (value) => value * 10),
+    }
+    const repeatedDensity = getHeatmapDisplayDensity(repeated)
+    const rotated = orientHeatmapGrid(grid, "home")
+    const rotatedDensity = getHeatmapDisplayDensity(rotated)
+    density.forEach((value, index) => {
+      expect(repeatedDensity[index]).toBeCloseTo(value)
+      expect(rotatedDensity[density.length - 1 - index]).toBeCloseTo(value)
+      expect(value).toBeGreaterThanOrEqual(0)
+      expect(value).toBeLessThanOrEqual(1)
+    })
+    expect(Math.max(...density)).toBe(1)
+    expect(getHeatmapColorScale([grid]).maxCellShare).toBe(
+      getHeatmapColorScaleBounds([grid]).blurredP99CellShare
+    )
+    expect(grid.density).toEqual(original)
+  })
+
+  it("keeps a shared team scale and renders empty heatmaps as zero", () => {
+    const engine = new HeatmapDerivations()
+    engine.appendFrame(frameAt(50, 50))
+    const concentrated = playerGrid(engine, "full")
+    const diffuse = {
+      ...concentrated,
+      density: new Float32Array(concentrated.density.length).fill(
+        1 / concentrated.density.length
+      ),
+    }
+    const scale = getHeatmapColorScale([concentrated, diffuse])
+    expect(Math.max(...getHeatmapDisplayDensity(concentrated, scale))).toBe(1)
+    expect(Math.max(...getHeatmapDisplayDensity(diffuse, scale))).toBeLessThan(
+      1
+    )
+    const empty = {
+      ...concentrated,
+      density: new Float32Array(concentrated.density.length),
+      sampleCount: 0,
+    }
+    expect(getHeatmapColorScale([empty]).maxCellShare).toBe(0)
+    expect(getHeatmapDisplayDensity(empty).every((value) => value === 0)).toBe(
+      true
+    )
+  })
+
   it.each(["home", "away"] as const)(
     "places the %s goalkeeper left of the forward after the popup's clockwise rotation",
     (team) => {
@@ -51,12 +128,15 @@ describe("heatmap density", () => {
         averageX: 50,
         averageY,
       })
-      const goalkeeper = orientHeatmapGrid(grid(team === "home" ? 10 : 90), team)
+      const goalkeeper = orientHeatmapGrid(
+        grid(team === "home" ? 10 : 90),
+        team
+      )
       const forward = orientHeatmapGrid(grid(team === "home" ? 90 : 10), team)
       // A clockwise 90-degree CSS rotation maps vertical y to horizontal 100-y.
       expect(100 - goalkeeper.averageY).toBe(10)
       expect(100 - forward.averageY).toBe(90)
-    },
+    }
   )
 
   it.each(["all", "inPossession", "outOfPossession"] as const)(

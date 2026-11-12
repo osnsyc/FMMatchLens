@@ -7,7 +7,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { motion } from "framer-motion"
 import { useTranslation } from "react-i18next"
 
-import { getHeatmap, getHeatmapColorScaleBounds, orientHeatmapGrid } from "@/api/heatmap"
+import { getHeatmap, prepareHeatmapRenderData } from "@/api/heatmap"
 import {
   analyzePlayerMovementAsync,
   EMPTY_PLAYER_MOVEMENT,
@@ -330,16 +330,14 @@ function PlayerHeatmap({
   const { t } = useTranslation()
   const hostRef = useRef<HTMLDivElement | null>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
-  const rawGrid = getHeatmap(heatmaps, {
-    scope: { type: "player", playerId: player.id },
-    phase: "all",
-    range: "full",
-  })
-  const grid = useMemo(
-    () => orientHeatmapGrid(rawGrid, player.team),
-    [rawGrid, player.team]
-  )
-  const bounds = getHeatmapColorScaleBounds([grid])
+  const { grid, renderData } = useMemo(() => {
+    const grid = getHeatmap(heatmaps, {
+      scope: { type: "player", playerId: player.id },
+      phase: "all",
+      range: "full",
+    })
+    return { grid, renderData: prepareHeatmapRenderData(grid, [grid], player.team) }
+  }, [heatmaps, player.id, player.team])
 
   useEffect(() => {
     const host = hostRef.current
@@ -372,16 +370,9 @@ function PlayerHeatmap({
             }}
           >
             <PixiHeatmap
-              grid={grid}
+              data={renderData}
               width={Math.max(1, size.height - 8)}
               height={Math.max(1, size.width - 8)}
-              colorScale={{
-                maxCellShare: bounds.rawMaxCellShare,
-                sampleDivisor: grid.sampleCount,
-                lutScale: bounds.blurredP99CellShare > 0
-                  ? bounds.rawMaxCellShare / bounds.blurredP99CellShare
-                  : 1,
-              }}
             />
           </div>
         )}
