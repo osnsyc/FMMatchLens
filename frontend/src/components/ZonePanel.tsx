@@ -6,7 +6,9 @@ import {
   combineHeatmapGrids,
   getHeatmap,
   getHeatmapColorScaleBounds,
+  orientHeatmapGrid,
 } from "@/api/heatmap"
+import { passMapPlayerIds } from "@/api/passMap"
 import { PixiHeatmap } from "@/components/heatmap/PixiHeatmap"
 import { PitchMarkings } from "@/components/pitch/PitchMarkings"
 import { PitchPlayerBadge } from "@/components/pitch/PitchPlayerBadge"
@@ -87,13 +89,16 @@ export function ZonePanel({
   const [selectedPhase, setSelectedPhase] = useStoredChoice<HeatmapPhase>(
     "heatmap.phase",
     "all",
-    ["all", "inPossession", "outOfPossession"],
+    ["all", "inPossession", "outOfPossession"]
   )
   const pitchHostRef = useRef<HTMLDivElement | null>(null)
   const [pitchSize, setPitchSize] = useState({ width: 0, height: 0 })
   const pitchFrameAspect = pitchDimensions.width / pitchDimensions.length
   const innerPitchSize = {
-    width: Math.max(0, pitchSize.width - PITCH_FRAME_GAP * pitchFrameAspect * 2),
+    width: Math.max(
+      0,
+      pitchSize.width - PITCH_FRAME_GAP * pitchFrameAspect * 2
+    ),
     height: Math.max(0, pitchSize.height - PITCH_FRAME_GAP * 2),
   }
   const teamColor =
@@ -106,12 +111,30 @@ export function ZonePanel({
     () => match.players.filter((player) => player.team === selectedTeam),
     [match.players, selectedTeam]
   )
+  const overviewPlayerIds = match.isFullTime
+    ? {
+        home: passMapPlayerIds(match.players, "home", match.clock.minute, true),
+        away: passMapPlayerIds(match.players, "away", match.clock.minute, true),
+      }
+    : undefined
   const selectedPlayer = teamPlayers.find(
-    (player) => player.id === selectedPlayerByTeam[selectedTeam]
+    (player) =>
+      player.id === selectedPlayerByTeam[selectedTeam] &&
+      (!overviewPlayerIds || overviewPlayerIds[selectedTeam].has(player.id))
   )
-  const outfieldPlayerIdKeys = getOutfieldPlayerIdKeys(match.players)
+  const teamPlayerIdKeys = overviewPlayerIds
+    ? {
+        home: [...overviewPlayerIds.home].join(","),
+        away: [...overviewPlayerIds.away].join(","),
+      }
+    : getOutfieldPlayerIdKeys(match.players)
   const heatmapViews = useMemo<HeatmapView[]>(() => {
     const phases = isFocusMode ? heatmapPhases : [selectedPhase]
+    const overviewIds = new Set(
+      parsePlayerIdKey(
+        selectedTeam === "home" ? teamPlayerIdKeys.home : teamPlayerIdKeys.away
+      )
+    )
     const forPlayerIds = (playerIdKey: string, phase: HeatmapPhase) =>
       combineHeatmapGrids(
         parsePlayerIdKey(playerIdKey).map((playerId) =>
@@ -136,8 +159,8 @@ export function ZonePanel({
         comparableGrids = [grid]
       } else {
         const outfieldHeatmaps = {
-          home: forPlayerIds(outfieldPlayerIdKeys.home, phase),
-          away: forPlayerIds(outfieldPlayerIdKeys.away, phase),
+          home: forPlayerIds(teamPlayerIdKeys.home, phase),
+          away: forPlayerIds(teamPlayerIdKeys.away, phase),
         }
         grid = outfieldHeatmaps[selectedTeam]
         comparableGrids = [outfieldHeatmaps.home, outfieldHeatmaps.away]
@@ -145,7 +168,9 @@ export function ZonePanel({
 
       const bounds = getHeatmapColorScaleBounds(comparableGrids)
       const labels = teamPlayers
-        .filter((player) => player.isOnPitch)
+        .filter((player) =>
+          match.isFullTime ? overviewIds.has(player.id) : player.isOnPitch
+        )
         .map((player) => {
           const playerGrid = getHeatmap(match.heatmaps, {
             scope: { type: "player", playerId: player.id },
@@ -154,8 +179,14 @@ export function ZonePanel({
           })
           return playerGrid.sampleCount > 0
             ? {
-                x: playerGrid.averageX,
-                y: playerGrid.averageY,
+                x:
+                  selectedTeam === "home"
+                    ? 100 - playerGrid.averageX
+                    : playerGrid.averageX,
+                y:
+                  selectedTeam === "home"
+                    ? 100 - playerGrid.averageY
+                    : playerGrid.averageY,
                 sampleCount: playerGrid.sampleCount,
                 player,
               }
@@ -165,7 +196,7 @@ export function ZonePanel({
 
       return {
         phase,
-        grid,
+        grid: orientHeatmapGrid(grid, selectedTeam),
         colorScale: {
           maxCellShare: bounds.rawMaxCellShare,
           sampleDivisor: grid.sampleCount,
@@ -180,8 +211,9 @@ export function ZonePanel({
   }, [
     isFocusMode,
     match.heatmaps,
-    outfieldPlayerIdKeys.away,
-    outfieldPlayerIdKeys.home,
+    match.isFullTime,
+    teamPlayerIdKeys.away,
+    teamPlayerIdKeys.home,
     selectedPlayer,
     selectedPhase,
     selectedRange,
@@ -320,11 +352,13 @@ export function ZonePanel({
               )}
               <div
                 className="pitch-frame relative shrink-0 text-[var(--pitch-line)]"
-                style={{
-                  width: `${pitchSize.width}px`,
-                  height: `${pitchSize.height}px`,
-                  "--pitch-frame-aspect": pitchFrameAspect,
-                } as CSSProperties}
+                style={
+                  {
+                    width: `${pitchSize.width}px`,
+                    height: `${pitchSize.height}px`,
+                    "--pitch-frame-aspect": pitchFrameAspect,
+                  } as CSSProperties
+                }
                 onClick={() => {
                   setSelectedPlayerByTeam((current) => ({
                     ...current,
@@ -380,7 +414,7 @@ export function ZonePanel({
                         <PitchPlayerBadge
                           number={label.player.shirtNumber}
                           numberColor="var(--heatmap-player-number)"
-                          className={`border-2 border-background after:hidden transition-transform hover:scale-110 ${
+                          className={`border-2 border-background transition-transform after:hidden hover:scale-110 ${
                             selectedPlayer?.id === label.player.id
                               ? "ring-2 ring-ring ring-offset-1 ring-offset-background"
                               : ""

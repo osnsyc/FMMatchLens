@@ -334,6 +334,18 @@ export function combineHeatmapGrids(
   }
 }
 
+/** Orient a vertical heatmap towards the opponent's goal without mutating history. */
+export function orientHeatmapGrid(grid: HeatmapGrid, team: TeamSide): HeatmapGrid {
+  // Stored heatmaps normalize half changes, with home defending the top goal.
+  if (team === "away") return grid
+  return {
+    ...grid,
+    density: grid.density.slice().reverse(),
+    averageX: 100 - grid.averageX,
+    averageY: 100 - grid.averageY,
+  }
+}
+
 const PIXI_BLUR_KERNEL_STANDARD_DEVIATION = 1.648
 const COLOR_SCALE_SIGMA_CELLS =
   HEATMAP_BLUR_STEP_RATIO * GRID_WIDTH * PIXI_BLUR_KERNEL_STANDARD_DEVIATION

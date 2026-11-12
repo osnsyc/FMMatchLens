@@ -7,7 +7,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { motion } from "framer-motion"
 import { useTranslation } from "react-i18next"
 
-import { getHeatmap, getHeatmapColorScaleBounds } from "@/api/heatmap"
+import { getHeatmap, getHeatmapColorScaleBounds, orientHeatmapGrid } from "@/api/heatmap"
 import {
   analyzePlayerMovementAsync,
   EMPTY_PLAYER_MOVEMENT,
@@ -330,11 +330,15 @@ function PlayerHeatmap({
   const { t } = useTranslation()
   const hostRef = useRef<HTMLDivElement | null>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
-  const grid = getHeatmap(heatmaps, {
+  const rawGrid = getHeatmap(heatmaps, {
     scope: { type: "player", playerId: player.id },
     phase: "all",
     range: "full",
   })
+  const grid = useMemo(
+    () => orientHeatmapGrid(rawGrid, player.team),
+    [rawGrid, player.team]
+  )
   const bounds = getHeatmapColorScaleBounds([grid])
 
   useEffect(() => {
