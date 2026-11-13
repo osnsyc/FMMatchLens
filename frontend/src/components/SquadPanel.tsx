@@ -3,7 +3,7 @@ import { playerStatPosition } from "@/lib/playerStatPosition"
 import { playerStatGroups, type PlayerMetric, type StatGroupId } from "@/lib/playerStatMetrics"
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowDataTransferHorizontalIcon, FootballIcon, Pin02Icon, SidebarLeft01Icon } from "@hugeicons/core-free-icons"
+import { ArrowDataTransferHorizontalIcon, FootballIcon, Pin02Icon, SidebarLeft01Icon, StarIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { AssistIcon } from "@/components/AssistIcon"
@@ -52,6 +52,7 @@ import { exploreTourCloseOverlaysEventName } from "@/features/explore-tour/explo
 
 type SquadPanelProps = {
   title: string
+  pomUid?: number
   teamUid?: number
   side: TeamSide
   players: MatchPlayer[]
@@ -230,6 +231,7 @@ function ratingClass(
 
 export const SquadPanel = memo(function SquadPanel({
   title,
+  pomUid,
   teamUid,
   side,
   players,
@@ -479,6 +481,7 @@ export const SquadPanel = memo(function SquadPanel({
     const statuses =
       statusesFor(player)
     const displayName = player.name
+    const isPlayerOfMatch = pomUid != null && pomUid > 0 && player.uid === pomUid
     const positionLabel = squadRole(player)
     const showsFamiliarPosition = !player.isStarter
     const positionDescription = showsFamiliarPosition
@@ -584,6 +587,7 @@ export const SquadPanel = memo(function SquadPanel({
           kit={playerIsGoalkeeper(player) ? goalkeeperKit : outfieldKit}
           panelRef={panelRef}
           pinned={pinnedPlayerId === player.id}
+          isPlayerOfMatch={isPlayerOfMatch}
           hoverEnabled={!tacticalSelectionActive && !profilePopupSuppressed && (pinnedPlayerId == null || pinnedPlayerId === player.id)}
           popupSuppressed={profilePopupSuppressed || tacticalSelectionActive}
           interactionDisabled={tacticalSelectionActive}
@@ -627,6 +631,16 @@ export const SquadPanel = memo(function SquadPanel({
             {pinnedPlayerId === player.id && (
               <AvatarBadge aria-hidden="true" className="size-3! [&>svg]:size-2.5!">
                 <HugeiconsIcon icon={Pin02Icon} strokeWidth={2.2} />
+              </AvatarBadge>
+            )}
+            {isPlayerOfMatch && (
+              <AvatarBadge
+                role="img"
+                aria-label={t("squad.playerOfMatch")}
+                title={t("squad.playerOfMatch")}
+                className="pointer-events-none top-0! bottom-auto! size-3! text-background [&>svg]:size-2.5!"
+              >
+                <HugeiconsIcon icon={StarIcon} fill="currentColor" strokeWidth={0} />
               </AvatarBadge>
             )}
           </Avatar>
@@ -833,6 +847,7 @@ export const SquadPanel = memo(function SquadPanel({
 
 function sameSquadPanelProps(previous: SquadPanelProps, next: SquadPanelProps) {
   return previous.title === next.title
+    && previous.pomUid === next.pomUid
     && previous.teamUid === next.teamUid
     && previous.side === next.side
     && previous.teamColor === next.teamColor
@@ -876,6 +891,7 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   kit?: MatchKit
   panelRef: React.RefObject<HTMLElement | null>
   pinned: boolean
+  isPlayerOfMatch: boolean
   hoverEnabled: boolean
   popupSuppressed: boolean
   interactionDisabled: boolean
@@ -1049,6 +1065,8 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   previous.kit === next.kit &&
   previous.panelRef === next.panelRef &&
   previous.pinned === next.pinned &&
+  // Avatar children can change at full time even when player data is unchanged.
+  previous.isPlayerOfMatch === next.isPlayerOfMatch &&
   previous.hoverEnabled === next.hoverEnabled &&
   previous.popupSuppressed === next.popupSuppressed &&
   previous.interactionDisabled === next.interactionDisabled &&

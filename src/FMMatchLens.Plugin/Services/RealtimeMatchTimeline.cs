@@ -33,6 +33,7 @@ internal sealed class RealtimeMatchTimeline
     private RealtimeTickFrame? _current;
     private RealtimeMatchMetadata? _metadata;
     private bool _hasCompleteMetadata;
+    private bool _pomRecorded;
     private long _lastMetadataRefreshTimestamp;
 
     public RealtimeMatchTimeline(MatchArchiveStore archives, GraphicsAssetIndex graphicsAssets)
@@ -216,6 +217,13 @@ internal sealed class RealtimeMatchTimeline
                     _metadata = withPitch;
                     _archives.WriteMetadata(_metadata);
                 }
+            }
+
+            if (raw.FinishedByFlags && !_pomRecorded)
+            {
+                _pomRecorded = true;
+                _metadata = _metadata with { CapturedTick = frame.Tick, PomUid = raw.PomUid };
+                _archives.WriteMetadata(_metadata);
             }
 
             _archives.Append(frame);
@@ -418,6 +426,7 @@ internal sealed class RealtimeMatchTimeline
         _current = null;
         _metadata = null;
         _hasCompleteMetadata = false;
+        _pomRecorded = false;
         _lastMetadataRefreshTimestamp = 0;
     }
 
@@ -468,7 +477,8 @@ internal sealed class RealtimeMatchTimeline
             incoming.MatchDate ?? current.MatchDate,
             incoming.HalfPitchWidth ?? current.HalfPitchWidth,
             incoming.HalfPitchLength ?? current.HalfPitchLength,
-            MergeCompetitionMetadata(current.Competition, incoming.Competition));
+            MergeCompetitionMetadata(current.Competition, incoming.Competition),
+            current.PomUid);
     }
 
     private static RealtimeCompetitionMetadata? MergeCompetitionMetadata(
@@ -631,6 +641,7 @@ internal sealed class RealtimeMatchTimeline
             left.HalfPitchWidth != right.HalfPitchWidth ||
             left.HalfPitchLength != right.HalfPitchLength ||
             left.Competition != right.Competition ||
+            left.PomUid != right.PomUid ||
             left.Home != right.Home || left.Away != right.Away || left.Players.Count != right.Players.Count)
         {
             return false;

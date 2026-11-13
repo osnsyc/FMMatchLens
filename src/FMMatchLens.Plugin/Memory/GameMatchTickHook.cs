@@ -485,6 +485,15 @@ internal sealed class GameMatchTickHook : IDisposable
             frame.Sequence = record.Sequence;
             frame.InstanceGeneration = record.InstanceGeneration;
             frame.FinishedByFlags = record.FinishedByFlags;
+            frame.PomUid = 0;
+            if (record.FinishedByFlags &&
+                _activeSession is { Invalidated: false } pomSession &&
+                pomSession.Animated == record.MatchAddress && pomSession.Generation == record.InstanceGeneration)
+            {
+                // Runs under CaptureGate immediately after native Update, before objects can be reused.
+                pomSession.PomUid ??= PlayerOfMatchReader.ReadUid(_memoryReader, record.MatchAddress);
+                frame.PomUid = pomSession.PomUid.Value;
+            }
             frame.CapturedTimestamp = record.CapturedTimestamp;
             frame.MatchAddress = record.MatchAddress;
             frame.Tick = record.Tick;
@@ -3284,6 +3293,7 @@ internal sealed class GameMatchTickHook : IDisposable
         public bool CanReadMetadata = true;
         public long LastMetadataTimestamp;
         public long FinalFrameSequence;
+        public uint? PomUid; // Null until the first 0x4 terminal snapshot, including a resolved zero.
         public bool EndObserved, FinalFrameQueued, FinalFrameRejected;
         public int ClearedTeamObservations;
         public int UnreadableObservations;

@@ -879,6 +879,7 @@ export function App() {
               >
                 <SquadPanel
                   title={match.home.name}
+                  pomUid={match.isFullTime ? match.pomUid : undefined}
                   teamUid={match.home.uid}
                   side="home"
                   players={homePlayers}
@@ -1059,6 +1060,7 @@ export function App() {
               >
                 <SquadPanel
                   title={match.away.name}
+                  pomUid={match.isFullTime ? match.pomUid : undefined}
                   teamUid={match.away.uid}
                   side="away"
                   players={awayPlayers}

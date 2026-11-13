@@ -22,7 +22,7 @@ import {
 const magic = "FMLENS2\0"
 const archiveStructureMajor = 2
 const firstSupportedStructureMinor = 1
-const archiveStructureMinor = 10
+const archiveStructureMinor = 11
 const legacy21FramePayloadMarker = 1
 const legacy21BlockStructure = 1
 const metadataRecord = 1
@@ -709,9 +709,10 @@ function readMetadata(payload: Uint8Array, header: ArchiveHeader) {
   let halfPitchWidth: number | undefined
   let halfPitchLength: number | undefined
   let competition: RealtimeMatchMetadata["competition"]
+  let pomUid = 0
   if (!reader.atEnd) {
     const extensionFlags = reader.readByte()
-    const allowedExtensionFlags = header.structureMinor >= 6 ? 0x0f : header.structureMinor >= 5 ? 0x07 : 0x03
+    const allowedExtensionFlags = header.structureMinor >= 11 ? 0x1f : header.structureMinor >= 6 ? 0x0f : header.structureMinor >= 5 ? 0x07 : 0x03
     if (extensionFlags === 0 || (extensionFlags & ~allowedExtensionFlags) !== 0) throw new ArchiveError("Metadata contains unknown extension fields")
     if ((extensionFlags & 0x01) !== 0) matchDate = reader.readString()
     if ((extensionFlags & 0x02) !== 0) {
@@ -723,6 +724,7 @@ function readMetadata(payload: Uint8Array, header: ArchiveHeader) {
       halfPitchLength = readPitchHalf(reader)
     }
     if ((extensionFlags & 0x08) !== 0) competition = readCompetitionMetadata(reader, strings)
+    if ((extensionFlags & 0x10) !== 0) pomUid = reader.readUint32()
   }
   if (!reader.atEnd) throw new ArchiveError("Metadata contains trailing bytes")
   const metadata: RealtimeMatchMetadata = {
@@ -733,6 +735,7 @@ function readMetadata(payload: Uint8Array, header: ArchiveHeader) {
     halfPitchWidth,
     halfPitchLength,
     competition,
+    pomUid,
     home,
     away,
     players,
@@ -790,15 +793,17 @@ function readMetadataDelta(payload: Uint8Array, header: ArchiveHeader, previous:
   let halfPitchWidth = previous.halfPitchWidth
   let halfPitchLength = previous.halfPitchLength
   let competition = previous.competition
+  let pomUid = previous.pomUid ?? 0
   if (header.structureMinor >= 5) {
     const extensionFlags = reader.readByte()
-    const allowedExtensionFlags = header.structureMinor >= 6 ? 0x03 : 0x01
+    const allowedExtensionFlags = header.structureMinor >= 11 ? 0x07 : header.structureMinor >= 6 ? 0x03 : 0x01
     if ((extensionFlags & ~allowedExtensionFlags) !== 0) throw new ArchiveError("Metadata delta contains unknown extension fields")
     if ((extensionFlags & 0x01) !== 0) {
       halfPitchWidth = readPitchHalf(reader)
       halfPitchLength = readPitchHalf(reader)
     }
     if ((extensionFlags & 0x02) !== 0) competition = readCompetitionMetadata(reader, strings)
+    if ((extensionFlags & 0x04) !== 0) pomUid = reader.readUint32()
   }
   if (!reader.atEnd) throw new ArchiveError("Metadata delta contains trailing bytes")
   const metadata: RealtimeMatchMetadata = {
@@ -809,6 +814,7 @@ function readMetadataDelta(payload: Uint8Array, header: ArchiveHeader, previous:
     halfPitchWidth,
     halfPitchLength,
     competition,
+    pomUid,
     home,
     away,
     players,

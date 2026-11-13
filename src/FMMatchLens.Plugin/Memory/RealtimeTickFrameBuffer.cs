@@ -137,6 +137,7 @@ internal sealed class RawRealtimeTickFrame
     public TacticalSnapshot? Tactics;
     public bool LegacyFormation;
     public bool FinishedByFlags;
+    public uint PomUid; // Terminal snapshot only; not a per-tick wire field.
     public long CapturedTimestamp;
     public nint MatchAddress;
     public int Tick;

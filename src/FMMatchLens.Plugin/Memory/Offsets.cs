@@ -17,6 +17,7 @@ internal static class Offsets
         public const int AwayTeam = 0x15388;
         public const int PreviousBallHolder = 0x15398;
         public const int CurrentBallHolder = 0x153A0;
+        public const int PlayerOfMatch = 0x153B0; // MATCH_PLAYER*, populated by native award selection
         public const int Referee = 0x153F0;
         public const int StadiumColourObject = 0x153F8;
         public const int PossessionTeam = 0x15440;

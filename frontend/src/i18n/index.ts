@@ -294,6 +294,7 @@ const resources = {
         subbedOff: "换下",
         goal: "进球",
         assist: "助攻",
+        playerOfMatch: "全场最佳球员",
         ratingBreakdown: {
           title: "评分构成",
           explanation: "各项贡献依据比赛事件计算，不含随比赛时间累积的负向修正。",
@@ -1195,6 +1196,7 @@ const resources = {
         subbedOff: "Subbed off",
         goal: "Goal",
         assist: "Assist",
+        playerOfMatch: "Player of the match",
         ratingBreakdown: {
           title: "Rating Breakdown",
           explanation: "Contributions are calculated from match events and exclude negative adjustments that accumulate over time.",

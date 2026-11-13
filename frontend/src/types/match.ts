@@ -452,6 +452,7 @@ export type TeamThemeColors = {
 
 export type MatchSnapshot = {
   isFullTime?: boolean
+  pomUid?: number
   tactics?: import("@/components/formation/tactics").DecodedTacticalSnapshot
   matchId?: string
   /** Actual venue dimensions in metres when available. */

@@ -330,6 +330,8 @@ export type RealtimeCompetitionMetadata = {
 }
 
 export type RealtimeMatchMetadata = {
+  /** Player of the match Person UID; zero when absent or not finalized. */
+  pomUid?: number
   matchId: string
   startedUnixMilliseconds: number
   capturedTick: number
@@ -948,6 +950,7 @@ export function toMatchSnapshot(
   const awayClubUid = metadata?.away.clubUid
 
   const next: MatchSnapshot = {
+    pomUid: metadata?.pomUid ?? 0,
     tactics: cachedTacticalSnapshot(frame.tactics),
     matchId: frame.matchId,
     pitchDimensions: toPitchDimensions(metadata),

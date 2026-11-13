@@ -379,7 +379,8 @@ internal sealed record RealtimeMatchMetadata(
     string? MatchDate = null,
     float? HalfPitchWidth = null,
     float? HalfPitchLength = null,
-    RealtimeCompetitionMetadata? Competition = null);
+    RealtimeCompetitionMetadata? Competition = null,
+    uint PomUid = 0);
 
 internal readonly record struct RealtimeCompetitionMetadata(
     uint? Uid,

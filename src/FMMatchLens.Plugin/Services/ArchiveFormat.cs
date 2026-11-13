@@ -58,7 +58,8 @@ internal static class ArchiveWireFormat
     internal const ushort FirstSupportedStructureMinor = 1;
     // 2.9 adds kit metadata. 2.10 appends tactical state tails: legacy JSON (2)
     // or binary deltas (3) with bounded dictionaries scoped to each chunk.
-    internal const ushort StructureMinor = 10;
+    // 2.11 adds the one-time terminal POM UID metadata extension.
+    internal const ushort StructureMinor = 11;
     internal const byte Legacy21BlockStructure = 1;
     internal const byte Legacy21FramePayloadMarker = 1;
 }
