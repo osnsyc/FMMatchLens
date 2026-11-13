@@ -1,0 +1,730 @@
+{
+  "archiveSha256": "4b63cfdd2ddc843f97f962d5f1e46162c7ec4c2ccb5185172438e44f3247cb77",
+  "description": "Minimal calculator inputs derived from the FM27 2.11 Arsenal 4-0 Coventry archive; no game binary or archive payload.",
+  "model": {
+    "ratingBaseCondition": 16777220,
+    "matchPhase": 5,
+    "eventRewardBranch": 0,
+    "activeBaseline": 6700,
+    "homeBackgroundInput": 2.201580047607422,
+    "awayBackgroundInput": -2.1864969730377197
+  },
+  "cases": [
+    {
+      "name": "David Raya",
+      "tick": 23939,
+      "player": {
+        "team": "home",
+        "rating": 8.109999656677246,
+        "penalties": 0,
+        "ownGoals": 0,
+        "goals": 0,
+        "assists": 0,
+        "savesHeld": 2,
+        "savesParried": 3,
+        "savesTipped": 1,
+        "xg": 0,
+        "shots": 0,
+        "shotsOnTarget": 0,
+        "dribbles": 0,
+        "fouls": 0,
+        "fouled": 0,
+        "tacklesAttempted": 0,
+        "tacklesWon": 0,
+        "aerials": 0,
+        "aerialsWon": 0,
+        "interceptions": 0,
+        "clearances": 0
+      },
+      "rating": {
+        "statsPacked": "0000000000000000000000000004000a000000000000000000000f0000000f0000000000",
+        "internalW25": 0,
+        "internalW24": 4,
+        "specialW2C": 0,
+        "specialW2D": 0,
+        "specialW2E": 0,
+        "specialW2F": 0,
+        "specialW30": 0,
+        "specialW31": 0,
+        "internalScore": 8105,
+        "specialConditionA": -1,
+        "specialConditionB": -1,
+        "teamAEventCounterCandidate": 4,
+        "teamBEventCounterCandidate": 0,
+        "teamAEventAdjustmentCandidate": 0,
+        "teamBEventAdjustmentCandidate": 0,
+        "inPossessionRoleDuty": "4198400",
+        "outOfPossessionRoleDuty": "8388610",
+        "totalEligibleDuration": 23723,
+        "classificationDurations": [
+          {
+            "categoryBit": 12,
+            "duration": 23723
+          }
+        ],
+        "qualityFlags": [],
+        "ratingEvents": []
+      },
+      "model": {
+        "ratingBaseCondition": 16777220,
+        "matchPhase": 5,
+        "eventRewardBranch": 0,
+        "activeBaseline": 6700,
+        "homeBackgroundInput": 2.201580047607422,
+        "awayBackgroundInput": -2.1864969730377197
+      }
+    },
+    {
+      "name": "Noni Madueke",
+      "tick": 23939,
+      "player": {
+        "team": "home",
+        "rating": 8.710000038146973,
+        "penalties": 0,
+        "ownGoals": 0,
+        "goals": 0,
+        "assists": 2,
+        "savesHeld": 0,
+        "savesParried": 0,
+        "savesTipped": 0,
+        "xg": 0,
+        "shots": 0,
+        "shotsOnTarget": 0,
+        "dribbles": 0,
+        "fouls": 1,
+        "fouled": 1,
+        "tacklesAttempted": 0,
+        "tacklesWon": 0,
+        "aerials": 0,
+        "aerialsWon": 0,
+        "interceptions": 1,
+        "clearances": 0
+      },
+      "rating": {
+        "statsPacked": "1855983f000000000300000500040005030202000001000e02003f00060034000200000b",
+        "internalW25": 0,
+        "internalW24": 0,
+        "specialW2C": 0,
+        "specialW2D": 0,
+        "specialW2E": 0,
+        "specialW2F": 0,
+        "specialW30": 0,
+        "specialW31": 0,
+        "internalScore": 8709,
+        "specialConditionA": -1,
+        "specialConditionB": -1,
+        "teamAEventCounterCandidate": 4,
+        "teamBEventCounterCandidate": 0,
+        "teamAEventAdjustmentCandidate": 0,
+        "teamBEventAdjustmentCandidate": 0,
+        "inPossessionRoleDuty": "35184380477440",
+        "outOfPossessionRoleDuty": "274882101248",
+        "totalEligibleDuration": 23723,
+        "classificationDurations": [
+          {
+            "categoryBit": 45,
+            "duration": 23723
+          }
+        ],
+        "qualityFlags": [],
+        "ratingEvents": []
+      },
+      "model": {
+        "ratingBaseCondition": 16777220,
+        "matchPhase": 5,
+        "eventRewardBranch": 0,
+        "activeBaseline": 6700,
+        "homeBackgroundInput": 2.201580047607422,
+        "awayBackgroundInput": -2.1864969730377197
+      }
+    },
+    {
+      "name": "Bukayo Saka",
+      "tick": 23939,
+      "player": {
+        "team": "home",
+        "rating": 9.140000343322754,
+        "penalties": 0,
+        "ownGoals": 0,
+        "goals": 2,
+        "assists": 0,
+        "savesHeld": 0,
+        "savesParried": 0,
+        "savesTipped": 0,
+        "xg": 0.6515610218048096,
+        "shots": 5,
+        "shotsOnTarget": 4,
+        "dribbles": 4,
+        "fouls": 0,
+        "fouled": 3,
+        "tacklesAttempted": 0,
+        "tacklesWon": 0,
+        "aerials": 2,
+        "aerialsWon": 2,
+        "interceptions": 0,
+        "clearances": 0
+      },
+      "rating": {
+        "statsPacked": "7a53163f000000000200000400040004040600030000001002003e00060036000500030f",
+        "internalW25": 0,
+        "internalW24": 0,
+        "specialW2C": 0,
+        "specialW2D": 0,
+        "specialW2E": 0,
+        "specialW2F": 0,
+        "specialW30": 0,
+        "specialW31": 0,
+        "internalScore": 9135,
+        "specialConditionA": -1,
+        "specialConditionB": -1,
+        "teamAEventCounterCandidate": 4,
+        "teamBEventCounterCandidate": 0,
+        "teamAEventAdjustmentCandidate": 0,
+        "teamBEventAdjustmentCandidate": 0,
+        "inPossessionRoleDuty": "4194432",
+        "outOfPossessionRoleDuty": "549757911040",
+        "totalEligibleDuration": 23723,
+        "classificationDurations": [
+          {
+            "categoryBit": 7,
+            "duration": 23723
+          }
+        ],
+        "qualityFlags": [],
+        "ratingEvents": [
+          "8000000000000000a122000000020000",
+          "80000000000000000c5b000000040000"
+        ]
+      },
+      "model": {
+        "ratingBaseCondition": 16777220,
+        "matchPhase": 5,
+        "eventRewardBranch": 0,
+        "activeBaseline": 6700,
+        "homeBackgroundInput": 2.201580047607422,
+        "awayBackgroundInput": -2.1864969730377197
+      }
+    },
+    {
+      "name": "Kai Havertz",
+      "tick": 23939,
+      "player": {
+        "team": "home",
+        "rating": 8.09000015258789,
+        "penalties": 0,
+        "ownGoals": 0,
+        "goals": 2,
+        "assists": 0,
+        "savesHeld": 0,
+        "savesParried": 0,
+        "savesTipped": 0,
+        "xg": 1.8416566848754883,
+        "shots": 7,
+        "shotsOnTarget": 3,
+        "dribbles": 0,
+        "fouls": 4,
+        "fouled": 0,
+        "tacklesAttempted": 0,
+        "tacklesWon": 0,
+        "aerials": 3,
+        "aerialsWon": 0,
+        "interceptions": 0,
+        "clearances": 0
+      },
+      "rating": {
+        "statsPacked": "00000000000000000000000000040000010001000004030403010f0002000e0001000204",
+        "internalW25": 0,
+        "internalW24": 0,
+        "specialW2C": 0,
+        "specialW2D": 0,
+        "specialW2E": 0,
+        "specialW2F": 0,
+        "specialW30": 0,
+        "specialW31": 0,
+        "internalScore": 8090,
+        "specialConditionA": -1,
+        "specialConditionB": -1,
+        "teamAEventCounterCandidate": 4,
+        "teamBEventCounterCandidate": 0,
+        "teamAEventAdjustmentCandidate": 0,
+        "teamBEventAdjustmentCandidate": 0,
+        "inPossessionRoleDuty": "8390656",
+        "outOfPossessionRoleDuty": "4398050705408",
+        "totalEligibleDuration": 23723,
+        "classificationDurations": [
+          {
+            "categoryBit": 11,
+            "duration": 23723
+          }
+        ],
+        "qualityFlags": [],
+        "ratingEvents": [
+          "00080000000000009806000000010000",
+          "00080000000000002741000000030000"
+        ]
+      },
+      "model": {
+        "ratingBaseCondition": 16777220,
+        "matchPhase": 5,
+        "eventRewardBranch": 0,
+        "activeBaseline": 6700,
+        "homeBackgroundInput": 2.201580047607422,
+        "awayBackgroundInput": -2.1864969730377197
+      }
+    },
+    {
+      "name": "Daniel Bentley",
+      "tick": 23939,
+      "player": {
+        "team": "away",
+        "rating": 6.130000114440918,
+        "penalties": 0,
+        "ownGoals": 0,
+        "goals": 0,
+        "assists": 0,
+        "savesHeld": 1,
+        "savesParried": 1,
+        "savesTipped": 1,
+        "xg": 0,
+        "shots": 0,
+        "shotsOnTarget": 0,
+        "dribbles": 0,
+        "fouls": 0,
+        "fouled": 0,
+        "tacklesAttempted": 0,
+        "tacklesWon": 0,
+        "aerials": 0,
+        "aerialsWon": 0,
+        "interceptions": 0,
+        "clearances": 8
+      },
+      "rating": {
+        "statsPacked": "00000000000000000000000000000407000000000400000700000a0004000a0001000000",
+        "internalW25": 0,
+        "internalW24": 1,
+        "specialW2C": 0,
+        "specialW2D": 0,
+        "specialW2E": 0,
+        "specialW2F": 0,
+        "specialW30": 0,
+        "specialW31": 0,
+        "internalScore": 6127,
+        "specialConditionA": -1,
+        "specialConditionB": -1,
+        "teamAEventCounterCandidate": 0,
+        "teamBEventCounterCandidate": 4,
+        "teamAEventAdjustmentCandidate": 0,
+        "teamBEventAdjustmentCandidate": 0,
+        "inPossessionRoleDuty": "2097153",
+        "outOfPossessionRoleDuty": "4194305",
+        "totalEligibleDuration": 23723,
+        "classificationDurations": [
+          {
+            "categoryBit": 0,
+            "duration": 23723
+          }
+        ],
+        "qualityFlags": [],
+        "ratingEvents": []
+      },
+      "model": {
+        "ratingBaseCondition": 16777220,
+        "matchPhase": 5,
+        "eventRewardBranch": 0,
+        "activeBaseline": 6700,
+        "homeBackgroundInput": 2.201580047607422,
+        "awayBackgroundInput": -2.1864969730377197
+      }
+    },
+    {
+      "name": "Bukayo Saka at Tick 144",
+      "tick": 144,
+      "model": {
+        "ratingBaseCondition": 1280,
+        "matchPhase": 6,
+        "eventRewardBranch": 0,
+        "activeBaseline": 6700,
+        "homeBackgroundInput": 2.201580047607422,
+        "awayBackgroundInput": -2.1864969730377197
+      },
+      "player": {
+        "team": "home",
+        "rating": 6.699999809265137,
+        "penalties": 0,
+        "ownGoals": 0,
+        "goals": 0,
+        "assists": 0,
+        "savesHeld": 0,
+        "savesParried": 0,
+        "savesTipped": 0,
+        "xg": 0,
+        "shots": 0,
+        "shotsOnTarget": 0,
+        "dribbles": 0,
+        "fouls": 0,
+        "fouled": 0,
+        "tacklesAttempted": 0,
+        "tacklesWon": 0,
+        "aerials": 0,
+        "aerialsWon": 0,
+        "interceptions": 0,
+        "clearances": 0
+      },
+      "rating": {
+        "statsPacked": "000000000000000000000000000000000000000000000000000000000000000000000000",
+        "internalW25": 0,
+        "internalW24": 0,
+        "specialW2C": 0,
+        "specialW2D": 0,
+        "specialW2E": 0,
+        "specialW2F": 0,
+        "specialW30": 0,
+        "specialW31": 0,
+        "internalScore": 6698,
+        "specialConditionA": -1,
+        "specialConditionB": -1,
+        "teamAEventCounterCandidate": 0,
+        "teamBEventCounterCandidate": 0,
+        "teamAEventAdjustmentCandidate": 0,
+        "teamBEventAdjustmentCandidate": 0,
+        "inPossessionRoleDuty": "4194432",
+        "outOfPossessionRoleDuty": "549757911040",
+        "totalEligibleDuration": 66,
+        "classificationDurations": [
+          {
+            "categoryBit": 7,
+            "duration": 66
+          }
+        ],
+        "qualityFlags": [],
+        "ratingEvents": []
+      }
+    },
+    {
+      "name": "Bukayo Saka at Tick 4119",
+      "tick": 4119,
+      "model": {
+        "ratingBaseCondition": 0,
+        "matchPhase": 6,
+        "eventRewardBranch": 0,
+        "activeBaseline": 6700,
+        "homeBackgroundInput": 2.201580047607422,
+        "awayBackgroundInput": -2.1864969730377197
+      },
+      "player": {
+        "team": "home",
+        "rating": 7.329999923706055,
+        "penalties": 0,
+        "ownGoals": 0,
+        "goals": 0,
+        "assists": 0,
+        "savesHeld": 0,
+        "savesParried": 0,
+        "savesTipped": 0,
+        "xg": 0.042949378490448,
+        "shots": 1,
+        "shotsOnTarget": 0,
+        "dribbles": 0,
+        "fouls": 0,
+        "fouled": 1,
+        "tacklesAttempted": 0,
+        "tacklesWon": 0,
+        "aerials": 0,
+        "aerialsWon": 0,
+        "interceptions": 0,
+        "clearances": 0
+      },
+      "rating": {
+        "statsPacked": "162efc3e000000000100000200010000010300020000000501000d0000000a0000000104",
+        "internalW25": 0,
+        "internalW24": 0,
+        "specialW2C": 0,
+        "specialW2D": 0,
+        "specialW2E": 0,
+        "specialW2F": 0,
+        "specialW30": 0,
+        "specialW31": 0,
+        "internalScore": 7326,
+        "specialConditionA": -1,
+        "specialConditionB": -1,
+        "teamAEventCounterCandidate": 1,
+        "teamBEventCounterCandidate": 0,
+        "teamAEventAdjustmentCandidate": 0,
+        "teamBEventAdjustmentCandidate": 0,
+        "inPossessionRoleDuty": "4194432",
+        "outOfPossessionRoleDuty": "549757911040",
+        "totalEligibleDuration": 4009,
+        "classificationDurations": [
+          {
+            "categoryBit": 7,
+            "duration": 4009
+          }
+        ],
+        "qualityFlags": [],
+        "ratingEvents": []
+      }
+    },
+    {
+      "name": "Bukayo Saka at Tick 8061",
+      "tick": 8061,
+      "model": {
+        "ratingBaseCondition": 16640,
+        "matchPhase": 6,
+        "eventRewardBranch": 0,
+        "activeBaseline": 6700,
+        "homeBackgroundInput": 2.201580047607422,
+        "awayBackgroundInput": -2.1864969730377197
+      },
+      "player": {
+        "team": "home",
+        "rating": 7.300000190734863,
+        "penalties": 0,
+        "ownGoals": 0,
+        "goals": 0,
+        "assists": 0,
+        "savesHeld": 0,
+        "savesParried": 0,
+        "savesTipped": 0,
+        "xg": 0.15120762586593628,
+        "shots": 2,
+        "shotsOnTarget": 1,
+        "dribbles": 1,
+        "fouls": 0,
+        "fouled": 1,
+        "tacklesAttempted": 0,
+        "tacklesWon": 0,
+        "aerials": 0,
+        "aerialsWon": 0,
+        "interceptions": 0,
+        "clearances": 0
+      },
+      "rating": {
+        "statsPacked": "162efc3e0000000001000002000100020103000200000009010019000200150001000206",
+        "internalW25": 0,
+        "internalW24": 0,
+        "specialW2C": 0,
+        "specialW2D": 0,
+        "specialW2E": 0,
+        "specialW2F": 0,
+        "specialW30": 0,
+        "specialW31": 0,
+        "internalScore": 7295,
+        "specialConditionA": -1,
+        "specialConditionB": -1,
+        "teamAEventCounterCandidate": 1,
+        "teamBEventCounterCandidate": 0,
+        "teamAEventAdjustmentCandidate": 0,
+        "teamBEventAdjustmentCandidate": 0,
+        "inPossessionRoleDuty": "4194432",
+        "outOfPossessionRoleDuty": "549757911040",
+        "totalEligibleDuration": 7974,
+        "classificationDurations": [
+          {
+            "categoryBit": 7,
+            "duration": 7974
+          }
+        ],
+        "qualityFlags": [],
+        "ratingEvents": []
+      }
+    },
+    {
+      "name": "Bukayo Saka at Tick 11562",
+      "tick": 11562,
+      "model": {
+        "ratingBaseCondition": 0,
+        "matchPhase": 7,
+        "eventRewardBranch": 0,
+        "activeBaseline": 6700,
+        "homeBackgroundInput": 2.201580047607422,
+        "awayBackgroundInput": -2.1864969730377197
+      },
+      "player": {
+        "team": "home",
+        "rating": 7.889999866485596,
+        "penalties": 0,
+        "ownGoals": 0,
+        "goals": 1,
+        "assists": 0,
+        "savesHeld": 0,
+        "savesParried": 0,
+        "savesTipped": 0,
+        "xg": 0.34229081869125366,
+        "shots": 3,
+        "shotsOnTarget": 2,
+        "dribbles": 1,
+        "fouls": 0,
+        "fouled": 1,
+        "tacklesAttempted": 0,
+        "tacklesWon": 0,
+        "aerials": 1,
+        "aerialsWon": 1,
+        "interceptions": 0,
+        "clearances": 0
+      },
+      "rating": {
+        "statsPacked": "162efc3e000000000100000200020003020300020000000a02001f0002001b0001000208",
+        "internalW25": 0,
+        "internalW24": 0,
+        "specialW2C": 0,
+        "specialW2D": 0,
+        "specialW2E": 0,
+        "specialW2F": 0,
+        "specialW30": 0,
+        "specialW31": 0,
+        "internalScore": 7893,
+        "specialConditionA": -1,
+        "specialConditionB": -1,
+        "teamAEventCounterCandidate": 2,
+        "teamBEventCounterCandidate": 0,
+        "teamAEventAdjustmentCandidate": 0,
+        "teamBEventAdjustmentCandidate": 0,
+        "inPossessionRoleDuty": "4194432",
+        "outOfPossessionRoleDuty": "549757911040",
+        "totalEligibleDuration": 11440,
+        "classificationDurations": [
+          {
+            "categoryBit": 7,
+            "duration": 11440
+          }
+        ],
+        "qualityFlags": [],
+        "ratingEvents": [
+          "8000000000000000a122000000020000"
+        ]
+      }
+    },
+    {
+      "name": "Bukayo Saka at Tick 16411",
+      "tick": 16411,
+      "model": {
+        "ratingBaseCondition": 8448,
+        "matchPhase": 7,
+        "eventRewardBranch": 0,
+        "activeBaseline": 6700,
+        "homeBackgroundInput": 2.201580047607422,
+        "awayBackgroundInput": -2.1864969730377197
+      },
+      "player": {
+        "team": "home",
+        "rating": 7.889999866485596,
+        "penalties": 0,
+        "ownGoals": 0,
+        "goals": 1,
+        "assists": 0,
+        "savesHeld": 0,
+        "savesParried": 0,
+        "savesTipped": 0,
+        "xg": 0.34229081869125366,
+        "shots": 3,
+        "shotsOnTarget": 2,
+        "dribbles": 2,
+        "fouls": 0,
+        "fouled": 2,
+        "tacklesAttempted": 0,
+        "tacklesWon": 0,
+        "aerials": 2,
+        "aerialsWon": 2,
+        "interceptions": 0,
+        "clearances": 0
+      },
+      "rating": {
+        "statsPacked": "162efc3e000000000200000300020004030300020000000c02002a00050024000400020a",
+        "internalW25": 0,
+        "internalW24": 0,
+        "specialW2C": 0,
+        "specialW2D": 0,
+        "specialW2E": 0,
+        "specialW2F": 0,
+        "specialW30": 0,
+        "specialW31": 0,
+        "internalScore": 7891,
+        "specialConditionA": -1,
+        "specialConditionB": -1,
+        "teamAEventCounterCandidate": 2,
+        "teamBEventCounterCandidate": 0,
+        "teamAEventAdjustmentCandidate": 0,
+        "teamBEventAdjustmentCandidate": 0,
+        "inPossessionRoleDuty": "4194432",
+        "outOfPossessionRoleDuty": "549757911040",
+        "totalEligibleDuration": 16326,
+        "classificationDurations": [
+          {
+            "categoryBit": 7,
+            "duration": 16326
+          }
+        ],
+        "qualityFlags": [],
+        "ratingEvents": [
+          "8000000000000000a122000000020000"
+        ]
+      }
+    },
+    {
+      "name": "Bukayo Saka at Tick 21534",
+      "tick": 21534,
+      "model": {
+        "ratingBaseCondition": 0,
+        "matchPhase": 7,
+        "eventRewardBranch": 0,
+        "activeBaseline": 6700,
+        "homeBackgroundInput": 2.201580047607422,
+        "awayBackgroundInput": -2.1864969730377197
+      },
+      "player": {
+        "team": "home",
+        "rating": 8.079999923706055,
+        "penalties": 0,
+        "ownGoals": 0,
+        "goals": 1,
+        "assists": 0,
+        "savesHeld": 0,
+        "savesParried": 0,
+        "savesTipped": 0,
+        "xg": 0.3579227924346924,
+        "shots": 4,
+        "shotsOnTarget": 3,
+        "dribbles": 2,
+        "fouls": 0,
+        "fouled": 3,
+        "tacklesAttempted": 0,
+        "tacklesWon": 0,
+        "aerials": 2,
+        "aerialsWon": 2,
+        "interceptions": 0,
+        "clearances": 0
+      },
+      "rating": {
+        "statsPacked": "7a53163f000000000200000400030004030500030000000f02003900060031000500030e",
+        "internalW25": 0,
+        "internalW24": 0,
+        "specialW2C": 0,
+        "specialW2D": 0,
+        "specialW2E": 0,
+        "specialW2F": 0,
+        "specialW30": 0,
+        "specialW31": 0,
+        "internalScore": 8076,
+        "specialConditionA": -1,
+        "specialConditionB": -1,
+        "teamAEventCounterCandidate": 3,
+        "teamBEventCounterCandidate": 0,
+        "teamAEventAdjustmentCandidate": 0,
+        "teamBEventAdjustmentCandidate": 0,
+        "inPossessionRoleDuty": "4194432",
+        "outOfPossessionRoleDuty": "549757911040",
+        "totalEligibleDuration": 21412,
+        "classificationDurations": [
+          {
+            "categoryBit": 7,
+            "duration": 21412
+          }
+        ],
+        "qualityFlags": [],
+        "ratingEvents": [
+          "8000000000000000a122000000020000"
+        ]
+      }
+    }
+  ]
+}

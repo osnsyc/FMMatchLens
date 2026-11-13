@@ -114,6 +114,10 @@ internal sealed record RatingResearchPlayerWireData(
     string OutOfPossessionRoleDuty,
     sbyte SpecialConditionA,
     sbyte SpecialConditionB,
+    byte TeamAEventCounterCandidate,
+    byte TeamBEventCounterCandidate,
+    byte TeamAEventAdjustmentCandidate,
+    byte TeamBEventAdjustmentCandidate,
     int TotalEligibleDuration,
     int RatingEventsCommonLength,
     IReadOnlyList<byte[]> RatingEventsTail)
@@ -131,6 +135,8 @@ internal sealed record RatingResearchPlayerWireData(
         value.InPossessionRoleDuty.ToString(CultureInfo.InvariantCulture),
         value.OutOfPossessionRoleDuty.ToString(CultureInfo.InvariantCulture),
         value.SpecialConditionA, value.SpecialConditionB,
+        value.TeamAEventCounterCandidate, value.TeamBEventCounterCandidate,
+        value.TeamAEventAdjustmentCandidate, value.TeamBEventAdjustmentCandidate,
         value.TotalEligibleDuration, common, value.RatingEventsRaw.Skip(common).ToArray());
     }
 

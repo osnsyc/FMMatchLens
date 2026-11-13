@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest"
+import fm27Capture from "./fixtures/rating/fm27-211-4-0.json"
+import nativeRatingConfig from "../../docs/rating breakdown/fm27-rating-config-26385295.json"
+import type { ArchiveRatingInputs } from "@/api/realtimeMatch"
 
 import {
   calculateRatingContribution,
@@ -12,6 +15,45 @@ import {
 } from "@/lib/ratingCalculator"
 
 describe("frontend rating classification", () => {
+  it("classifies the four defenders after the verified live tactical changes", () => {
+    for (const [ip, oop, bit] of [
+      [0x40000000800000n, 0x400400n, 54],
+      [0x200002n, 0x200008n, 1],
+      [0x8000000200000n, 0x200008n, 51],
+      [0x100000200000n, 0x200200n, 44],
+    ] as const) {
+      const initial = deriveRatingClassification(undefined, 0, ip, oop)
+      const result = deriveRatingClassification(initial, 2813, ip, oop)
+      expect(result.classificationDurations).toEqual([{ categoryBit: bit, duration: 2813 }])
+      expect(result.qualityFlags).toEqual([])
+    }
+  })
+
+  it("keeps Full-Back participation when switching to Inverted Full-Back", () => {
+    const initial = deriveRatingClassification(undefined, 0, 0x400004n, 0x200200n)
+    const first = deriveRatingClassification(initial, 2534, 0x400004n, 0x200200n)
+    const second = deriveRatingClassification(first, 14318, 0x10000000000000n, 0x200200n)
+    expect(second.classificationDurations).toEqual([
+      { categoryBit: 2, duration: 2534 },
+      { categoryBit: 52, duration: 11784 },
+    ])
+    expect(second.qualityFlags).toEqual([])
+  })
+
+  it("matches every coefficient in the independently captured native configuration", () => {
+    const selected = nativeRatingConfig.records.find(
+      (record) => record.version <= nativeRatingConfig.source.matchSelector,
+    )!
+    expect(selected.version).toBe(436732957)
+    expect(selected.rows).toHaveLength(35)
+    expect(selected.lookup).toHaveLength(40)
+    for (const entry of selected.lookup) {
+      expect(1n << BigInt(entry.categoryBit)).toBe(BigInt(entry.mask))
+      expect(observedRatingWeightConfiguration.weightsByCategoryBit.get(entry.categoryBit))
+        .toEqual(selected.rows[entry.rowIndex])
+    }
+  })
+
   it("accumulates eligible duration by the raw role active at each timeline sample", () => {
     const first = deriveRatingClassification(undefined, 100, 0x80n | 0x200000n, 0n)
     const second = deriveRatingClassification(first, 175, 0x200n, 0x400n)
@@ -61,8 +103,24 @@ function input(weights: number[], overrides: Partial<RatingCalculationInput> = {
 }
 
 describe("rating reconstruction", () => {
+  it.each(fm27Capture.cases)("reconstructs $name from the FM27 2.11 capture", ({ tick, player, rating, model }) => {
+    const fromHex = (value: string) => Uint8Array.from(value.match(/../g)!.map((byte) => Number.parseInt(byte, 16)))
+    const archived: ArchiveRatingInputs = {
+      ...rating,
+      statsPacked: fromHex(rating.statsPacked),
+      ratingEvents: rating.ratingEvents.map(fromHex),
+      inPossessionRoleDuty: BigInt(rating.inPossessionRoleDuty),
+      outOfPossessionRoleDuty: BigInt(rating.outOfPossessionRoleDuty),
+    }
+    const result = calculateRatingContribution(decodeArchiveRatingInputs(
+      archived, { ...player, team: player.team as "home" | "away" }, model, undefined, tick,
+    ))
+    expect(result.predictedInternalScore).toBe(rating.internalScore)
+    expect(result.reconstructionResidual).toBe(0)
+  })
+
   it("loads the frontend-owned merged observed weight table", () => {
-    expect(observedRatingWeightConfiguration.weightsByCategoryBit.size).toBe(38)
+    expect(observedRatingWeightConfiguration.weightsByCategoryBit.size).toBe(40)
     observedRatingWeightConfiguration.weightsByCategoryBit.forEach((weights) => {
       expect(weights).toHaveLength(52)
     })
@@ -91,7 +149,7 @@ describe("rating reconstruction", () => {
     expect(result.reconstructionResidual).toBe(0)
   })
 
-  it("does not apply W06 to the first event of two different CategoryBits", () => {
+  it("applies W06 by original event index even when the role category changes", () => {
     const weights7 = Array<number>(52).fill(0)
     const weights8 = Array<number>(52).fill(0)
     weights7[6] = 300
@@ -103,13 +161,87 @@ describe("rating reconstruction", () => {
 
     const result = calculateRatingContribution(input(weights7, {
       ratingEvents: [category7Event, category8Event],
+      classificationDurations: [{ categoryBit: 7, duration: 5_400 }, { categoryBit: 8, duration: 5_400 }],
       configuration: {
         weightsByCategoryBit: new Map([[7, weights7], [8, weights8]]),
       },
     }))
 
-    expect(result.terms.some((term) => term.index === 6)).toBe(false)
+    expect(result.terms.filter((term) => term.index === 6)).toMatchObject([{ categoryBit: 8, contribution: 400 }])
+    expect(result.preFactorTotal).toBe(400)
+  })
+
+  it("does not award events in categories with no eligible participation", () => {
+    const weights = Array<number>(52).fill(0)
+    weights[1] = 500
+    const event = new Uint8Array(16)
+    new DataView(event.buffer).setBigUint64(0, 1n << 8n, true)
+    const result = calculateRatingContribution(input(weights, {
+      ratingEvents: [event],
+      configuration: { weightsByCategoryBit: new Map([[7, weights], [8, weights]]) },
+    }))
     expect(result.preFactorTotal).toBe(0)
+  })
+
+  it.each([[2400, 5, 400], [2401, 4, 350]])("selects one terminal goal award at age %i ticks", (age, index, reward) => {
+    const weights = Array<number>(52).fill(0)
+    weights[1] = 500; weights[4] = 350; weights[5] = 400
+    const event = new Uint8Array(16)
+    const view = new DataView(event.buffer)
+    view.setBigUint64(0, 1n << 7n, true)
+    view.setInt32(8, 10_000 - age, true)
+    event[13] = 1
+    const source = input(weights, {
+      ratingEvents: [event], ratingBaseCondition: 4, currentTick: 10_000, eventRewardBranch: 0,
+      eventContext: {
+        teamAEventCounterCandidate: 1, teamBEventCounterCandidate: 0,
+        teamAEventAdjustmentCandidate: 0, teamBEventAdjustmentCandidate: 0,
+      },
+    })
+    const result = calculateRatingContribution(source)
+    expect(result.terms.filter((term) => term.index === 4 || term.index === 5)).toMatchObject([{ index, contribution: reward }])
+    expect(result.preFactorTotal).toBe(500 + reward)
+    expect(result.qualityFlags).not.toContain("missing_w04_w05_context")
+    expect(calculateRatingContribution({ ...source, ratingBaseCondition: 0 }).preFactorTotal).toBe(500)
+    expect(calculateRatingContribution({ ...source, eventContext: undefined }).qualityFlags).toContain("missing_w04_w05_context")
+    const penalty = event.slice(); penalty[14] = 1
+    expect(calculateRatingContribution({ ...source, ratingEvents: [penalty] }).terms.some((term) => term.index === 4 || term.index === 5)).toBe(false)
+  })
+
+  it.each([
+    [0, 0, 1, 1, 0, 0, false], // Losing difference wraps to 255.
+    [2, 0, 1, 1, 1, 0, true], // Only mode 2 includes the baseline.
+    [0, 0, 1, 1, 1, 0, false],
+    [2, 1, 0, 1, 255, 0, true], // Preserve the raw 0xFF sentinel and byte wrap.
+    [0, 129, 129, 2, 0, 0, true], // Sum also wraps to a byte.
+    [0, 1, 0, 2, 0, 0, false], // Stale event context.
+    [0, 2, 0, 2, 0, 0, false], // A two-goal lead fails <2.
+  ])("checks terminal context with native byte arithmetic (%i, %i:%i)", (branch, a, b, context, adjustmentA, adjustmentB, enabled) => {
+    const weights = Array<number>(52).fill(0); weights[4] = 350
+    const event = new Uint8Array(16)
+    new DataView(event.buffer).setBigUint64(0, 1n << 7n, true)
+    event[13] = context as number
+    const result = calculateRatingContribution(input(weights, {
+      ratingEvents: [event], ratingBaseCondition: 4, currentTick: 10_000, eventRewardBranch: branch as number,
+      eventContext: {
+        teamAEventCounterCandidate: a as number, teamBEventCounterCandidate: b as number,
+        teamAEventAdjustmentCandidate: adjustmentA as number, teamBEventAdjustmentCandidate: adjustmentB as number,
+      },
+    }))
+    expect(result.preFactorTotal).toBe(enabled ? 350 : 0)
+  })
+
+  it("uses unsigned W32/W33 inputs while retaining the factor helper's signed bytes", () => {
+    const weights = Array<number>(52).fill(0); weights[50] = 1; weights[51] = -1
+    const raw = new Uint8Array(232); raw[0xc9] = 255; raw[0xca] = 128
+    const result = calculateRatingContribution(input(weights, { statsRaw: raw, backgroundInput: -1 }))
+    expect(result.terms.filter((term) => term.index >= 50).map((term) => term.input)).toEqual([255, 128])
+    expect(result.preFactorTotal).toBe(127)
+    expect(result.selectedFactorIndex).toBe(2)
+    raw[0xc9] = 128; raw[0xca] = 0
+    const wrapped = calculateRatingContribution(input(weights, { statsRaw: raw, backgroundInput: -1 }))
+    expect(wrapped.preFactorTotal).toBe(128)
+    expect(wrapped.selectedFactorIndex).toBe(10)
   })
 
   it("splits shootout terms between Goalkeeping and Shooting by category bit", () => {
@@ -217,6 +349,8 @@ describe("rating reconstruction", () => {
       specialW2F: 0, specialW30: 0, specialW31: 0,
       rawInternalRating: 6_700,
       specialConditionA: 0, specialConditionB: 0,
+      teamAEventCounterCandidate: 1, teamBEventCounterCandidate: 0,
+      teamAEventAdjustmentCandidate: 255, teamBEventAdjustmentCandidate: 0,
       inPossessionRoleDuty: "128", outOfPossessionRoleDuty: "0",
       totalEligibleDuration: 0,
       ratingEventsCommonLength: 0, ratingEventsTail: [],
@@ -245,6 +379,7 @@ describe("rating reconstruction", () => {
     expect(decoded.statsRaw[0xed]).toBe(19)
     expect(rawView.getInt16(0xdc, true)).toBe(12)
     expect(decoded.backgroundInput).toBe(-1)
+    expect(decoded.eventContext?.teamAEventAdjustmentCandidate).toBe(255)
   })
 
   it("expands the archive-only 36-byte stat vector only when requested", () => {
@@ -335,5 +470,12 @@ describe("rating reconstruction", () => {
     expect(second.ratingEvents[0]).toBe(first.ratingEvents[0])
     expect(second.ratingEvents[1]).toEqual(eventB)
     expect(unchanged).toBe(second)
+    const changedContext = decodeRealtimeRatingInputs({
+      ...base, ratingEventsCommonLength: 2, ratingEventsTail: [],
+      teamAEventCounterCandidate: 1, teamBEventCounterCandidate: 0,
+      teamAEventAdjustmentCandidate: 0, teamBEventAdjustmentCandidate: 0,
+    }, second)
+    expect(changedContext).not.toBe(second)
+    expect(changedContext.teamAEventCounterCandidate).toBe(1)
   })
 })

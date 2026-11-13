@@ -2,6 +2,7 @@ import type {
   ArchiveRatingInputs,
   RatingContribution,
   RatingContributionGroup,
+  RatingEventContext,
   RealtimeRatingInputs,
   RealtimeRatingModel,
 } from "@/api/realtimeMatch"
@@ -14,49 +15,55 @@ export type RatingWeightConfiguration = {
 // This is a frontend interpretation rule
 const observedWeightsByCategoryBit: Readonly<Record<number, readonly number[]>> = {
   0: [
-    /* W00-W0F */ -720, 600, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 7,
+    /* W00-W0F */ -750, 600, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 7,
     /* W10-W1F */ 0, 20, 30, 40, -8, 0, 7, 40, -20, 50, -40, 50, 0, -300, 0, 20,
     /* W20-W2F */ -20, 500, -300, 100, 200, 400, 450, 0, 125, -50, -100, -300, 200, -200, 300, 100,
     /* W30-W33 */ 300, -100, 50, -100,
   ],
   1: [
-    /* W00-W0F */ -520, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 5,
+    /* W00-W0F */ -530, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 5,
     /* W10-W1F */ -15, 20, 30, 40, -8, 0, 7, 56, -28, 70, -40, 100, 30, -200, 10, 20,
     /* W20-W2F */ -20, 300, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -75,
   ],
+  2: [
+    /* W00-W0F */ -430, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 5,
+    /* W10-W1F */ -15, 20, 30, 40, -8, 0, 7, 56, -28, 50, -40, 100, 30, -200, 10, 20,
+    /* W20-W2F */ -20, 300, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
+    /* W30-W33 */ 0, -100, 50, -75,
+  ],
   3: [
-    /* W00-W0F */ -800, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 5,
+    /* W00-W0F */ -690, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 5,
     /* W10-W1F */ -15, 40, 30, 60, -12, 0, 10, 56, -28, 50, -40, 100, 30, -200, 10, 20,
     /* W20-W2F */ -20, 300, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -75,
   ],
   4: [
-    /* W00-W0F */ -680, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 7,
+    /* W00-W0F */ -640, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 7,
     /* W10-W1F */ -21, 20, 30, 40, -8, 0, 7, 56, -28, 70, -40, 100, 10, -200, 15, 20,
     /* W20-W2F */ -20, 250, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -50,
   ],
   5: [
-    /* W00-W0F */ -440, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 7,
+    /* W00-W0F */ -380, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 7,
     /* W10-W1F */ -21, 20, 30, 40, -8, 0, 7, 40, -20, 50, -40, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 75, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -50,
   ],
   6: [
-    /* W00-W0F */ -750, 500, 100, 200, 350, 400, 300, 4, 350, 200, 30, 20, 350, -200, 40, 7,
+    /* W00-W0F */ -570, 500, 100, 200, 350, 400, 300, 4, 350, 200, 30, 20, 350, -200, 40, 7,
     /* W10-W1F */ -21, 40, 30, 60, -12, 0, 10, 40, -20, 25, -40, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 75, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -50,
   ],
   7: [
-    /* W00-W0F */ -1000, 500, 100, 200, 350, 400, 300, 4, 350, 200, 30, 20, 350, -200, 40, 7,
+    /* W00-W0F */ -760, 500, 100, 200, 350, 400, 300, 4, 350, 200, 30, 20, 350, -200, 40, 7,
     /* W10-W1F */ -21, 40, 30, 60, -12, 0, 10, 40, -20, 25, -40, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 75, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -50,
   ],
   9: [
-    /* W00-W0F */ -810, 550, 100, 200, 350, 400, 300, 4, 350, 200, 42, 28, 350, -200, 40, 7,
+    /* W00-W0F */ -700, 550, 100, 200, 350, 400, 300, 4, 350, 200, 42, 28, 350, -200, 40, 7,
     /* W10-W1F */ -21, 40, 30, 40, -8, 0, 10, 40, -20, 50, -40, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 75, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 75, -50,
@@ -68,49 +75,49 @@ const observedWeightsByCategoryBit: Readonly<Record<number, readonly number[]>> 
     /* W30-W33 */ 0, -100, 75, -50,
   ],
   11: [
-    /* W00-W0F */ -600, 550, 100, 200, 350, 400, 300, 4, 350, 200, 42, 28, 350, -200, 40, 7,
+    /* W00-W0F */ -690, 550, 100, 200, 350, 400, 300, 4, 350, 200, 42, 28, 350, -200, 40, 7,
     /* W10-W1F */ -14, 20, 30, 40, -8, 0, 10, 40, -20, 25, -20, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 25, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 75, -50,
   ],
   12: [
-    /* W00-W0F */ -770, 600, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 7,
+    /* W00-W0F */ -800, 600, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 7,
     /* W10-W1F */ 0, 20, 30, 40, -8, 0, 7, 40, -20, 50, -40, 50, 0, -300, 0, 20,
     /* W20-W2F */ -20, 500, -300, 100, 200, 400, 450, 0, 125, -50, -100, -300, 200, -200, 300, 100,
     /* W30-W33 */ 300, -100, 50, -100,
   ],
   14: [
-    /* W00-W0F */ -700, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 5,
+    /* W00-W0F */ -650, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 5,
     /* W10-W1F */ -15, 28, 30, 40, -8, 0, 7, 56, -28, 70, -40, 100, 30, -200, 10, 20,
     /* W20-W2F */ -20, 300, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -75,
   ],
   15: [
-    /* W00-W0F */ -620, 500, 100, 200, 350, 400, 300, 4, 350, 200, 30, 20, 350, -200, 40, 7,
+    /* W00-W0F */ -570, 500, 100, 200, 350, 400, 300, 4, 350, 200, 30, 20, 350, -200, 40, 7,
     /* W10-W1F */ -21, 20, 30, 40, -8, 0, 10, 40, -20, 40, -40, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 75, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -50,
   ],
   16: [
-    /* W00-W0F */ -600, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 7,
+    /* W00-W0F */ -500, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 7,
     /* W10-W1F */ -21, 20, 30, 40, -8, 0, 7, 40, -20, 50, -40, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 75, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -50,
   ],
   17: [
-    /* W00-W0F */ -700, 500, 100, 200, 350, 400, 300, 4, 350, 200, 30, 20, 350, -200, 40, 7,
+    /* W00-W0F */ -630, 500, 100, 200, 350, 400, 300, 4, 350, 200, 30, 20, 350, -200, 40, 7,
     /* W10-W1F */ -21, 40, 30, 40, -8, 0, 10, 40, -20, 25, -40, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 75, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -50,
   ],
   18: [
-    /* W00-W0F */ -600, 550, 100, 200, 350, 400, 300, 4, 350, 200, 42, 28, 350, -200, 40, 7,
+    /* W00-W0F */ -570, 550, 100, 200, 350, 400, 300, 4, 350, 200, 42, 28, 350, -200, 40, 7,
     /* W10-W1F */ -14, 20, 30, 40, -8, 0, 10, 40, -20, 25, -20, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 25, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 75, -50,
   ],
   19: [
-    /* W00-W0F */ -600, 550, 100, 200, 350, 400, 300, 4, 350, 200, 42, 28, 350, -200, 40, 7,
+    /* W00-W0F */ -630, 550, 100, 200, 350, 400, 300, 4, 350, 200, 42, 28, 350, -200, 40, 7,
     /* W10-W1F */ -14, 20, 30, 40, -8, 0, 10, 40, -20, 25, -20, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 25, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 75, -50,
@@ -122,7 +129,7 @@ const observedWeightsByCategoryBit: Readonly<Record<number, readonly number[]>> 
     /* W30-W33 */ 0, -100, 50, -75,
   ],
   27: [
-    /* W00-W0F */ -865, 550, 100, 200, 350, 400, 300, 4, 350, 200, 42, 28, 350, -200, 40, 7,
+    /* W00-W0F */ -730, 550, 100, 200, 350, 400, 300, 4, 350, 200, 42, 28, 350, -200, 40, 7,
     /* W10-W1F */ -21, 40, 30, 40, -8, 0, 10, 40, -20, 25, -20, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 75, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 75, -50,
@@ -134,25 +141,25 @@ const observedWeightsByCategoryBit: Readonly<Record<number, readonly number[]>> 
     /* W30-W33 */ 0, -100, 50, -75,
   ],
   31: [
-    /* W00-W0F */ -600, 550, 100, 200, 350, 400, 300, 4, 350, 200, 42, 28, 350, -200, 40, 7,
+    /* W00-W0F */ -620, 550, 100, 200, 350, 400, 300, 4, 350, 200, 42, 28, 350, -200, 40, 7,
     /* W10-W1F */ -14, 20, 30, 40, -8, 0, 10, 40, -20, 25, -20, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 25, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 75, -50,
   ],
   32: [
-    /* W00-W0F */ -850, 550, 100, 200, 350, 400, 300, 4, 350, 200, 42, 28, 350, -200, 40, 7,
+    /* W00-W0F */ -580, 550, 100, 200, 350, 400, 300, 4, 350, 200, 42, 28, 350, -200, 40, 7,
     /* W10-W1F */ -21, 40, 30, 40, -8, 0, 10, 40, -20, 50, -40, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 75, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 75, -50,
   ],
   35: [
-    /* W00-W0F */ -680, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 7,
+    /* W00-W0F */ -640, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 7,
     /* W10-W1F */ -21, 20, 30, 40, -8, 0, 7, 56, -28, 70, -40, 100, 10, -200, 15, 20,
     /* W20-W2F */ -20, 250, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -50,
   ],
   38: [
-    /* W00-W0F */ -940, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 5,
+    /* W00-W0F */ -700, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 5,
     /* W10-W1F */ -15, 40, 30, 60, -12, 0, 10, 56, -28, 50, -40, 100, 30, -200, 10, 20,
     /* W20-W2F */ -20, 300, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -75,
@@ -164,79 +171,85 @@ const observedWeightsByCategoryBit: Readonly<Record<number, readonly number[]>> 
     /* W30-W33 */ 0, -100, 75, -50,
   ],
   41: [
-    /* W00-W0F */ -810, 550, 100, 200, 350, 400, 300, 4, 350, 200, 42, 28, 350, -200, 40, 7,
+    /* W00-W0F */ -650, 550, 100, 200, 350, 400, 300, 4, 350, 200, 42, 28, 350, -200, 40, 7,
     /* W10-W1F */ -21, 40, 30, 40, -8, 0, 10, 40, -20, 50, -40, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 75, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 75, -50,
   ],
   43: [
-    /* W00-W0F */ -600, 500, 100, 200, 350, 400, 300, 4, 350, 200, 30, 20, 350, -200, 40, 7,
+    /* W00-W0F */ -470, 500, 100, 200, 350, 400, 300, 4, 350, 200, 30, 20, 350, -200, 40, 7,
     /* W10-W1F */ -21, 40, 30, 60, -12, 0, 10, 40, -20, 25, -40, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 75, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -50,
   ],
   44: [
-    /* W00-W0F */ -610, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 5,
+    /* W00-W0F */ -570, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 5,
     /* W10-W1F */ -15, 20, 30, 40, -8, 0, 7, 56, -28, 50, -40, 100, 30, -200, 10, 20,
     /* W20-W2F */ -20, 300, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -75,
   ],
   45: [
-    /* W00-W0F */ -1090, 550, 100, 200, 350, 400, 300, 4, 350, 200, 42, 28, 350, -200, 40, 7,
+    /* W00-W0F */ -860, 550, 100, 200, 350, 400, 300, 4, 350, 200, 42, 28, 350, -200, 40, 7,
     /* W10-W1F */ -21, 40, 30, 40, -8, 0, 10, 40, -20, 25, -20, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 75, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 75, -50,
   ],
   46: [
-    /* W00-W0F */ -720, 500, 100, 200, 350, 400, 300, 4, 350, 200, 30, 20, 350, -200, 40, 7,
+    /* W00-W0F */ -630, 500, 100, 200, 350, 400, 300, 4, 350, 200, 30, 20, 350, -200, 40, 7,
     /* W10-W1F */ -21, 20, 30, 40, -8, 0, 10, 40, -20, 25, -40, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 75, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -50,
   ],
   48: [
-    /* W00-W0F */ -440, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 7,
+    /* W00-W0F */ -380, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 7,
     /* W10-W1F */ -21, 20, 30, 40, -8, 0, 7, 40, -20, 50, -40, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 75, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -50,
   ],
   49: [
-    /* W00-W0F */ -750, 500, 100, 200, 350, 400, 300, 4, 350, 200, 30, 20, 350, -200, 40, 7,
+    /* W00-W0F */ -570, 500, 100, 200, 350, 400, 300, 4, 350, 200, 30, 20, 350, -200, 40, 7,
     /* W10-W1F */ -21, 40, 30, 60, -12, 0, 10, 40, -20, 25, -40, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 75, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -50,
   ],
   51: [
-    /* W00-W0F */ -520, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 5,
+    /* W00-W0F */ -480, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 5,
     /* W10-W1F */ -15, 24, 30, 40, -8, 0, 7, 56, -28, 70, -40, 100, 30, -200, 10, 20,
     /* W20-W2F */ -20, 300, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -75,
   ],
   52: [
-    /* W00-W0F */ -740, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 5,
+    /* W00-W0F */ -640, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 5,
     /* W10-W1F */ -15, 24, 30, 40, -8, 0, 7, 56, -28, 70, -40, 100, 30, -200, 10, 20,
     /* W20-W2F */ -20, 300, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -75,
   ],
   53: [
-    /* W00-W0F */ -770, 600, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 7,
+    /* W00-W0F */ -720, 600, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 7,
     /* W10-W1F */ 0, 20, 30, 40, -8, 0, 7, 40, -20, 50, -40, 50, 0, -300, 0, 20,
     /* W20-W2F */ -20, 500, -300, 100, 200, 400, 450, 0, 125, -50, -100, -300, 200, -200, 300, 100,
     /* W30-W33 */ 300, -100, 50, -100,
   ],
+  54: [
+    /* W00-W0F */ -620, 500, 100, 200, 350, 400, 300, 4, 300, 200, 30, 20, 350, -200, 30, 5,
+    /* W10-W1F */ -15, 24, 30, 40, -8, 0, 7, 56, -28, 70, -40, 100, 30, -200, 10, 20,
+    /* W20-W2F */ -20, 300, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
+    /* W30-W33 */ 0, -100, 50, -75,
+  ],
   55: [
-    /* W00-W0F */ -790, 500, 100, 200, 350, 400, 300, 4, 350, 200, 30, 20, 350, -200, 40, 5,
+    /* W00-W0F */ -610, 500, 100, 200, 350, 400, 300, 4, 350, 200, 30, 20, 350, -200, 40, 5,
     /* W10-W1F */ -15, 20, 30, 40, -8, 0, 10, 56, -28, 50, -40, 100, 30, -200, 10, 20,
     /* W20-W2F */ -20, 300, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -75,
   ],
   56: [
-    /* W00-W0F */ -810, 550, 100, 200, 350, 400, 300, 4, 350, 200, 42, 28, 350, -200, 40, 7,
+    /* W00-W0F */ -700, 550, 100, 200, 350, 400, 300, 4, 350, 200, 42, 28, 350, -200, 40, 7,
     /* W10-W1F */ -21, 40, 30, 40, -8, 0, 10, 40, -20, 50, -40, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 75, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 75, -50,
   ],
   57: [
-    /* W00-W0F */ -550, 500, 100, 200, 350, 400, 300, 4, 350, 200, 30, 20, 350, -200, 40, 7,
+    /* W00-W0F */ -430, 500, 100, 200, 350, 400, 300, 4, 350, 200, 30, 20, 350, -200, 40, 7,
     /* W10-W1F */ -21, 20, 30, 40, -8, 0, 10, 40, -20, 25, -40, 50, 10, -200, 10, 20,
     /* W20-W2F */ -20, 75, -300, 0, 0, 0, 0, 0, 0, -50, -100, -300, 200, -200, 0, 100,
     /* W30-W33 */ 0, -100, 50, -50,
@@ -271,7 +284,8 @@ export const ratingRoleCategoryBits: ReadonlyMap<bigint, number> = new Map([
   [0x200000000000000n, 57], [0x20000000n, 29], [0x20000000000000n, 53], [0x80000n, 19],
   [0x80000000000000n, 55], [0x20000000000n, 41], [0x100000000n, 32], [0x40000n, 18],
   [0x80n, 7], [0x8n, 3], [0x8000000000000n, 51], [0x1000000000000n, 48],
-  [0x200000000000n, 45], [0x40n, 6], [0x80000000000n, 43],
+  [0x200000000000n, 45], [0x40n, 6], [0x80000000000n, 43], [0x4n, 2],
+  [0x40000000000000n, 54],
 ])
 
 export type RatingClassificationState = {
@@ -280,12 +294,9 @@ export type RatingClassificationState = {
   qualityFlags: string[]
 }
 
-const ratingRolePairCategoryBits: ReadonlyMap<string, number> = new Map()
-
-export function ratingCategoryBitForRoles(inPossessionRoleDuty: bigint, outOfPossessionRoleDuty: bigint) {
+export function ratingCategoryBitForRoles(inPossessionRoleDuty: bigint, _outOfPossessionRoleDuty: bigint) {
   const inRole = inPossessionRoleDuty & ~ratingDutyMask
-  const outRole = outOfPossessionRoleDuty & ~ratingDutyMask
-  return ratingRolePairCategoryBits.get(`${inRole}:${outRole}`) ?? ratingRoleCategoryBits.get(inRole)
+  return ratingRoleCategoryBits.get(inRole)
 }
 
 export function deriveRatingClassification(
@@ -340,6 +351,9 @@ export type RatingCalculationInput = {
   ratingEvents: Uint8Array[]
   ratingBaseCondition: number
   matchPhase: number
+  eventRewardBranch?: number
+  currentTick?: number
+  eventContext?: RatingEventContext
   configuration?: RatingWeightConfiguration
   nativeRating: number
   activeBaseline: number
@@ -350,7 +364,7 @@ const groups: RatingContributionGroup[] = [
   "BaseContext", "Shooting", "Creativity", "Passing", "Defence", "Goalkeeping",
 ]
 
-// Active +0x88 configuration record observed for the supported FM26 build.
+// Matches the active FM27 +0x88 record captured with the native weight table.
 const factorPairs: ReadonlyArray<readonly [number, number]> = [
   [1.2, 1], [1.2, 1], [1.1, 1], [1.1, 1], [1, 1], [1, 1],
   [1, 1], [1, 1], [1, 1], [1, 1], [1, 1],
@@ -418,6 +432,8 @@ export function calculateRatingContribution(source: RatingCalculationInput): Rat
         }
       }
     }
+  // W32/W33 use uint8, but the separate factor helper (RVA 0x38060)
+  // sign-extends these two arguments before comparing the score difference.
   const scored = signedByte(source.statsRaw[0xc9])
   const conceded = signedByte(source.statsRaw[0xca])
   const factorIndex = selectFactorIndex(Math.trunc(source.backgroundInput), scored - conceded, scored, conceded)
@@ -432,7 +448,7 @@ export function calculateRatingContribution(source: RatingCalculationInput): Rat
   const postGroups = Object.fromEntries(groups.map((group) => [group, preGroups[group] * effectiveFactor])) as Record<RatingContributionGroup, number>
   terms.forEach((term) => { term.postFactorContribution = term.contribution * effectiveFactor })
 
-  flags.push("tick_sample_may_follow_native_calculation", "w04_w05_context_formula_unresolved")
+  flags.push("tick_sample_may_follow_native_calculation")
   return {
     nativeRating: source.nativeRating,
     internalScore: source.internalScore,
@@ -448,7 +464,7 @@ export function calculateRatingContribution(source: RatingCalculationInput): Rat
     classificationDurations: source.classificationDurations,
     qualityFlags: [...new Set(flags)],
     terms,
-    limitation: "Near-exact reconstruction with active baseline and global factor. W04/W05 remain unresolved; residual is model reconciliation error, not a football contribution.",
+    limitation: "Reconstruction uses observed weights and inferred role durations. Frame inputs may follow native settlement; missing event context is reported in quality flags. Residual is model reconciliation error, not a football contribution.",
   }
 }
 
@@ -457,8 +473,9 @@ export function decodeLiveRatingInputs(
   player: { team: TeamSide; rating: number },
   model: RealtimeRatingModel,
   configuration: RatingWeightConfiguration = observedRatingWeightConfiguration,
+  currentTick?: number,
 ): RatingCalculationInput {
-  return decodeArchiveRatingInputs(decodeRealtimeRatingInputs(value), player, model, configuration)
+  return decodeArchiveRatingInputs(decodeRealtimeRatingInputs(value), player, model, configuration, currentTick)
 }
 
 export function decodeRealtimeRatingInputs(
@@ -490,6 +507,10 @@ export function decodeRealtimeRatingInputs(
     specialW2F: value.specialW2F, specialW30: value.specialW30, specialW31: value.specialW31,
     internalScore: value.rawInternalRating,
     specialConditionA: value.specialConditionA, specialConditionB: value.specialConditionB,
+    teamAEventCounterCandidate: value.teamAEventCounterCandidate,
+    teamBEventCounterCandidate: value.teamBEventCounterCandidate,
+    teamAEventAdjustmentCandidate: value.teamAEventAdjustmentCandidate,
+    teamBEventAdjustmentCandidate: value.teamBEventAdjustmentCandidate,
     inPossessionRoleDuty, outOfPossessionRoleDuty,
     totalEligibleDuration: value.totalEligibleDuration,
     classificationDurations: classification.classificationDurations,
@@ -506,6 +527,10 @@ function sameArchiveRatingInputs(left: ArchiveRatingInputs, right: ArchiveRating
     && left.specialW2F === right.specialW2F && left.specialW30 === right.specialW30 && left.specialW31 === right.specialW31
     && left.internalScore === right.internalScore
     && left.specialConditionA === right.specialConditionA && left.specialConditionB === right.specialConditionB
+    && left.teamAEventCounterCandidate === right.teamAEventCounterCandidate
+    && left.teamBEventCounterCandidate === right.teamBEventCounterCandidate
+    && left.teamAEventAdjustmentCandidate === right.teamAEventAdjustmentCandidate
+    && left.teamBEventAdjustmentCandidate === right.teamBEventAdjustmentCandidate
     && left.inPossessionRoleDuty === right.inPossessionRoleDuty
     && left.outOfPossessionRoleDuty === right.outOfPossessionRoleDuty
     && left.totalEligibleDuration === right.totalEligibleDuration
@@ -526,6 +551,7 @@ export function decodeArchiveRatingInputs(
   player: RealtimePlayerRatingSource,
   model: RealtimeRatingModel,
   configuration: RatingWeightConfiguration = observedRatingWeightConfiguration,
+  currentTick?: number,
 ): RatingCalculationInput {
   const packed = value.statsPacked
   if (packed.byteLength !== 36) throw new Error("Archive rating stats payload has an invalid size")
@@ -563,10 +589,25 @@ export function decodeArchiveRatingInputs(
     ratingEvents: value.ratingEvents,
     ratingBaseCondition: model.ratingBaseCondition,
     matchPhase: model.matchPhase,
+    eventRewardBranch: model.eventRewardBranch,
+    currentTick,
+    eventContext: ratingEventContext(value),
     configuration,
     nativeRating: player.rating,
     activeBaseline: model.activeBaseline,
     backgroundInput: player.team === "home" ? model.homeBackgroundInput : model.awayBackgroundInput,
+  }
+}
+
+function ratingEventContext(value: Partial<RatingEventContext>): RatingEventContext | undefined {
+  const {
+    teamAEventCounterCandidate: a, teamBEventCounterCandidate: b,
+    teamAEventAdjustmentCandidate: adjustmentA, teamBEventAdjustmentCandidate: adjustmentB,
+  } = value
+  if (a == null || b == null || adjustmentA == null || adjustmentB == null) return undefined
+  return {
+    teamAEventCounterCandidate: a, teamBEventCounterCandidate: b,
+    teamAEventAdjustmentCandidate: adjustmentA, teamBEventAdjustmentCandidate: adjustmentB,
   }
 }
 
@@ -608,16 +649,20 @@ function addRatingEvents(
   terms: RatingContribution["terms"],
   flags: string[],
 ) {
+  if (source.totalEligibleDuration <= 0 || source.ratingEvents.length === 0) return 0
   let sum = 0
-  const eventCountsByCategoryBit = new Map<number, number>()
-  source.ratingEvents.forEach((raw) => {
+  // steam-26385295 RVA 0x47C12C0: event awards use eligible categories and
+  // original array indices, independently of duration weighting.
+  const eligibleBits = new Set(source.classificationDurations.filter((item) => item.duration > 0).map((item) => item.categoryBit))
+  source.ratingEvents.forEach((raw, eventIndex) => {
     if (raw.byteLength !== 16) { flags.push("invalid_rating_event_record"); return }
     const mask = new DataView(raw.buffer, raw.byteOffset, raw.byteLength).getBigUint64(0, true)
     if (mask === 0n || (mask & (mask - 1n)) !== 0n) { flags.push(`unmapped_rating_event_mask_0x${mask.toString(16).toUpperCase()}`); return }
     let bit = 0
     for (let value = mask; value > 1n; value >>= 1n) bit += 1
+    if (!eligibleBits.has(bit)) return
     const weights = configuration.weightsByCategoryBit.get(bit)
-    if (!weights) { flags.push(`missing_weight_bit_${bit}`); return }
+    if (!weights || weights.length !== 52) { flags.push(`missing_weight_bit_${bit}`); return }
     const add = (index: number) => {
       const contribution = weights[index]
       const group = groupFor(index, bit)
@@ -628,13 +673,31 @@ function addRatingEvents(
         contribution, postFactorContribution: 0, confidence: confidenceFor(index),
       })
     }
-    const priorCategoryEvents = eventCountsByCategoryBit.get(bit) ?? 0
-    if (priorCategoryEvents > 0) add(6)
-    eventCountsByCategoryBit.set(bit, priorCategoryEvents + 1)
+    if (eventIndex > 0) add(6)
+    // Native config labels W0C "Penalties Scored"; its flag covers modes 0x44..0x48.
+    // W02/W03 are "Good Goal Adder" / "Great Goal Adder": type 1/2 select
+    // composite Q >6000/>8000, rather than goal sequence counts (RVA 0x4BD79C0).
     if (raw[0x0e] !== 0) { add(12); return }
     add(1)
     if (raw[0x0c] === 1) add(2)
     else if (raw[0x0c] === 2) add(3)
+    if ((source.ratingBaseCondition & 4) !== 0) {
+      const context = source.eventContext
+      if (!context || source.currentTick == null || source.eventRewardBranch == null) {
+        flags.push("missing_w04_w05_context")
+        return
+      }
+      const a = context.teamAEventCounterCandidate
+      const b = context.teamBEventCounterCandidate
+      if (((a + b) & 0xff) !== raw[0x0d]) return
+      const adjustment = source.eventRewardBranch === 2
+        ? context.teamAEventAdjustmentCandidate - context.teamBEventAdjustmentCandidate
+        : 0
+      // The native difference is uint8: a negative difference wraps and fails <2.
+      if (((a - b + adjustment) & 0xff) >= 2) return
+      const eventTick = new DataView(raw.buffer, raw.byteOffset, raw.byteLength).getInt32(8, true)
+      add(source.currentTick - eventTick < 2401 ? 5 : 4)
+    }
   })
   return sum
 }
@@ -659,13 +722,16 @@ function readInputs(source: RatingCalculationInput) {
   values[27] = byte(0x9c); values[28] = byte(0xd1); values[29] = byte(0xc8); values[30] = byte(0xcf)
   values[31] = byte(0xc3); values[32] = byte(0xc2) - byte(0xc3); values[34] = byte(0x8f)
   values[35] = (byte(0x99) + byte(0x9a) + byte(0x9b)) & 0xff
+  // Native config names W24/W25 "Good Saves Adder" / "Great Saves Adder"
+  // (RVA 0x4BD79C0). Composite thresholds vary by path; neither is simply xG
+  // or penalties saved. These awards are additional to the W23 save total.
   values[36] = source.internalW24; values[37] = source.internalW25; values[38] = byte(0x9e); values[39] = byte(0x9d) - byte(0x9e)
   values[41] = byte(0xa6) === 1 ? 1 : 0; values[42] = byte(0xa6) === 2 ? 1 : 0; values[43] = byte(0xa7)
   if (source.matchPhase === 4 || source.specialConditionA > 0 || source.specialConditionB > 0) {
     values[44] = source.specialW2C; values[45] = source.specialW2D; values[46] = source.specialW2E
     values[47] = source.specialW2F; values[48] = source.specialW30; values[49] = source.specialW31
   }
-  values[50] = signedByte(byte(0xc9)); values[51] = signedByte(byte(0xca))
+  values[50] = byte(0xc9); values[51] = byte(0xca)
   return values
 }
 
@@ -703,11 +769,11 @@ function isGoalkeeperCategoryBit(categoryBit: number) {
 }
 
 function confidenceFor(index: number) {
-  if ([0,1,2,3,4,5,6,8,9,10,11,12,23,24,31,32,33,34,40,50,51].includes(index)) return "confirmed"
-  if ([15,16,25,27,30].includes(index)) return "very-high"
-  if ([7,14,17,18,19,20,22,26,28,35,41].includes(index)) return "high"
-  if ([13,38,39].includes(index)) return "medium-high"
-  if ([21,29,36,37,42].includes(index)) return "medium"
+  // Native input expressions and names are confirmed; remaining research concerns
+  // trigger details and live examples, not whether these counters feed the weights.
+  if ([0,1,2,3,4,5,6,8,9,10,11,12,13,21,23,24,27,29,31,32,33,34,36,37,38,39,40,42,43,50,51].includes(index)) return "confirmed"
+  if ([15,16,25,30].includes(index)) return "very-high"
+  if ([7,14,17,18,19,20,22,26,28,35,41,44,45,46,47,48,49].includes(index)) return "high"
   return "unknown"
 }
 

@@ -185,6 +185,31 @@ describe("ReplaySession", () => {
     expect(second.resolveRatingContribution?.()).toBe(contribution)
   })
 
+  it("invalidates terminal goal rewards when the selected tick crosses the late-goal boundary", () => {
+    const current = frame(2400)
+    const weights = Array<number>(52).fill(0)
+    weights[4] = 350; weights[5] = 400
+    const configuration = { weightsByCategoryBit: new Map([[7, weights]]) }
+    const model = {
+      ratingBaseCondition: 4, matchPhase: 5, eventRewardBranch: 0,
+      activeBaseline: 6_700, homeBackgroundInput: 0, awayBackgroundInput: 0,
+    }
+    const event = new Uint8Array(16)
+    new DataView(event.buffer).setBigUint64(0, 1n << 7n, true)
+    event[13] = 1
+    current.players[0].ratingInputs = wireRatingInputs({
+      teamAEventCounterCandidate: 1, teamBEventCounterCandidate: 0,
+      teamAEventAdjustmentCandidate: 0, teamBEventAdjustmentCandidate: 0,
+      ratingEventsTail: [btoa(String.fromCharCode(...event))],
+    })
+    const cache = new RatingContributionResolverCache()
+    const late = cache.resolverFor(current.players[0], model, configuration, 2400)
+    const earlier = cache.resolverFor(current.players[0], model, configuration, 2401)
+    expect(late).not.toBe(earlier)
+    expect(late?.()?.preFactorTotal).toBe(400)
+    expect(earlier?.()?.preFactorTotal).toBe(350)
+  })
+
   it("recalculates compact archive rating inputs at the selected timeline frame", async () => {
     const fixture = replayFixture()
     fixture.frames = fixture.frames.slice(0, 2)

@@ -107,8 +107,16 @@ export type RealtimePlayer = PlayerStats & {
   ratingContribution?: RatingContribution
 }
 
+/** Raw per-player team context used by terminal goal-event awards. */
+export type RatingEventContext = {
+  teamAEventCounterCandidate: number
+  teamBEventCounterCandidate: number
+  teamAEventAdjustmentCandidate: number
+  teamBEventAdjustmentCandidate: number
+}
+
 /** Compact binary-archive input retained until its frame is displayed. */
-export type ArchiveRatingInputs = {
+export type ArchiveRatingInputs = Partial<RatingEventContext> & {
   /** The 36 archive-only bytes not already represented by RealtimePlayer stats. */
   statsPacked: Uint8Array
   internalW25: number
@@ -130,7 +138,7 @@ export type ArchiveRatingInputs = {
   ratingEvents: Uint8Array[]
 }
 
-export type RealtimeRatingInputs = {
+export type RealtimeRatingInputs = Partial<RatingEventContext> & {
   /** Base64-encoded 36-byte rating-only stat vector. */
   statsPacked: string
   internalW25: number
@@ -997,12 +1005,14 @@ export function toMatchSnapshot(
           : calculatePlayerRatingContribution(
               player,
               frame.ratingModel,
-              ratingConfiguration
+              ratingConfiguration,
+              frame.tick
             ))
       const resolveRatingContribution = ratingResolverCache?.resolverFor(
         player,
         frame.ratingModel,
-        ratingConfiguration
+        ratingConfiguration,
+        frame.tick
       )
       const projected = playerFormation(
         frame.tactics,
@@ -1054,6 +1064,7 @@ export class RatingContributionResolverCache {
     player: RealtimePlayer,
     model: RealtimeRatingModel | undefined,
     configuration?: RatingWeightConfiguration,
+    currentTick?: number,
   ) {
     if (player.ratingContribution) return () => player.ratingContribution
     if (!model || !configuration || (!player.archiveRatingInputs && !player.ratingInputs)) return undefined
@@ -1063,6 +1074,7 @@ export class RatingContributionResolverCache {
       && previous.input === (player.archiveRatingInputs ?? player.ratingInputs)
       && previous.configuration === configuration
       && sameRatingModel(previous.model, model)
+      && previous.eventTick === ratingEventTick(model, currentTick)
       && sameRatingPlayerSource(previous.player, player)
     ) return previous.resolve
 
@@ -1070,7 +1082,7 @@ export class RatingContributionResolverCache {
     let hasCalculated = false
     const resolve = () => {
       if (!hasCalculated) {
-        calculated = calculatePlayerRatingContribution(player, model, configuration)
+        calculated = calculatePlayerRatingContribution(player, model, configuration, currentTick)
         hasCalculated = true
       }
       return calculated
@@ -1080,6 +1092,7 @@ export class RatingContributionResolverCache {
       configuration,
       model,
       player,
+      eventTick: ratingEventTick(model, currentTick),
       resolve,
     })
     return resolve
@@ -1087,11 +1100,16 @@ export class RatingContributionResolverCache {
 }
 
 type RatingResolverEntry = {
+  eventTick?: number
   input: ArchiveRatingInputs | RealtimeRatingInputs
   configuration: RatingWeightConfiguration
   model: RealtimeRatingModel
   player: RealtimePlayer
   resolve: () => RatingContribution | undefined
+}
+
+function ratingEventTick(model: RealtimeRatingModel, tick?: number) {
+  return (model.ratingBaseCondition & 4) !== 0 ? tick : undefined
 }
 
 function sameRatingModel(
@@ -1161,7 +1179,7 @@ export function calculateFrameRatingContributions(
   ratingConfiguration?: RatingWeightConfiguration,
 ): readonly (RatingContribution | undefined)[] {
   return frame.players.map((player) =>
-    calculatePlayerRatingContribution(player, frame.ratingModel, ratingConfiguration)
+    calculatePlayerRatingContribution(player, frame.ratingModel, ratingConfiguration, frame.tick)
   )
 }
 
@@ -1169,17 +1187,18 @@ function calculatePlayerRatingContribution(
   player: RealtimePlayer,
   model: RealtimeRatingModel | undefined,
   ratingConfiguration?: RatingWeightConfiguration,
+  currentTick?: number,
 ) {
   if (player.ratingContribution) return player.ratingContribution
   if (!model || !ratingConfiguration) return undefined
   if (player.archiveRatingInputs) {
     return calculateRatingContribution(
-      decodeArchiveRatingInputs(player.archiveRatingInputs, player, model, ratingConfiguration)
+      decodeArchiveRatingInputs(player.archiveRatingInputs, player, model, ratingConfiguration, currentTick)
     )
   }
   if (player.ratingInputs) {
     return calculateRatingContribution(
-      decodeLiveRatingInputs(player.ratingInputs, player, model, ratingConfiguration)
+      decodeLiveRatingInputs(player.ratingInputs, player, model, ratingConfiguration, currentTick)
     )
   }
   return undefined
