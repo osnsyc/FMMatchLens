@@ -2,7 +2,8 @@ namespace FMMatchLens.Plugin.Memory;
 
 internal static class GameMatchTickSignature
 {
-    // steam-26385295, image base 0x180000000, entry 0x184764AC0.
+    // steam-26385295 and steam-26577676: image base 0x180000000, entry 0x184764AC0.
+    // Rechecked against steam-26577676: one executable-section match, also an unwind entry.
     // Covers inlined floating-point initialization and three GAME_MATCH state checks.
     // Wildcard the RIP-relative security-cookie reference and branch targets.
     internal const string Pattern =
