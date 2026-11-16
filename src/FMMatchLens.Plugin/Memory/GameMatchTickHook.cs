@@ -134,6 +134,7 @@ internal sealed class GameMatchTickHook : IDisposable
 
         if (IntPtr.Size != 8)
         {
+            _buildRejected = true;
             PluginLogger.Warning("GAME_MATCH Advance hook requires a 64-bit process.");
             return false;
         }
@@ -141,6 +142,8 @@ internal sealed class GameMatchTickHook : IDisposable
         var moduleBase = GetModuleHandle("game_plugin.dll");
         if (moduleBase == default)
         {
+            // Mod-heavy startup has no fixed deadline. While the module is absent,
+            // retries only query its handle; no hashing, scanning, or detour work runs.
             if (logModuleNotLoaded)
             {
                 PluginLogger.Warning("Unable to install GAME_MATCH Advance hook: game_plugin.dll is not loaded.");
@@ -183,11 +186,8 @@ internal sealed class GameMatchTickHook : IDisposable
         }
         catch (Exception ex)
         {
-            if (resolvingAob) _buildRejected = true;
-            if (logModuleNotLoaded)
-            {
-                PluginLogger.Warning($"Unable to identify game_plugin.dll build: {ex.Message}");
-            }
+            _buildRejected = true;
+            PluginLogger.Warning($"Unable to identify game_plugin.dll build (aob={resolvingAob}, hresult=0x{ex.HResult:X8}); automatic retry stopped: {ex}");
 
             return false;
         }
@@ -195,20 +195,42 @@ internal sealed class GameMatchTickHook : IDisposable
         _instructionOffset = build.MatchTickHookRva;
         _targetAddress = moduleBase + _instructionOffset;
 
+        var stage = "build_resolved";
+        var installTimer = Stopwatch.StartNew();
+        void LogStage(string next)
+        {
+            stage = next;
+            // Preserve the first installation attempt's evidence in release mode.
+            PluginLogger.Info($"Hook diagnostic: stage={stage}, elapsed_ms={installTimer.ElapsedMilliseconds}.");
+        }
         try
         {
+            LogStage("build_resolved");
+            HookInstallDiagnostics.LogRuntime(moduleBase, _targetAddress, supportedBuild);
+            HookInstallDiagnostics.ValidateEntry(_targetAddress);
+            LogStage("address_validated");
             // BepInEx's IL2CPP detour provider creates a permanent native
             // trampoline. Do not use MonoMod NativeDetour.GenerateTrampoline
             // here: in the bundled 22.07.31 version that trampoline performs
             // undo-call-redo on every Original invocation, which races when
             // MatchUpdate is called concurrently by simulation threads.
-            _detour = INativeDetour.CreateAndApply(
-                _targetAddress,
-                _hookDelegate,
-                out MatchUpdateDelegate original);
-            _original = original;
+            stage = "detour_create";
+            _detour = INativeDetour.Create(_targetAddress, _hookDelegate);
+            LogStage("detour_created");
+            HookInstallDiagnostics.ValidateEntry(_detour.OriginalMethodPtr);
+            PluginLogger.Info($"Hook diagnostic: resolved_target={FormatPointer(_detour.OriginalMethodPtr)}, detour={FormatPointer(_detour.DetourMethodPtr)}.");
+            stage = "trampoline_generate";
+            _original = _detour.GenerateTrampoline<MatchUpdateDelegate>();
+            if (_detour.TrampolinePtr == 0)
+                throw new InvalidOperationException("Native detour returned a null trampoline.");
+            LogStage("trampoline_generated");
+            PluginLogger.Info($"Hook diagnostic: trampoline={FormatPointer(_detour.TrampolinePtr)}.");
+            stage = "detour_apply";
+            _detour.Apply();
+            LogStage("detour_applied");
             _started = true;
             StartCaptureWorkers();
+            LogStage("capture_started");
             PluginLogger.Debug(
                 $"GAME_MATCH Advance post hook installed with permanent native trampoline at " +
                 $"game_plugin.dll+0x{_instructionOffset:X} ({FormatPointer(_targetAddress)}), " +
@@ -220,10 +242,15 @@ internal sealed class GameMatchTickHook : IDisposable
         }
         catch (Exception ex)
         {
-            PluginLogger.Warning($"Unable to install GAME_MATCH Advance hook: {ex.Message}");
-            _detour?.Dispose();
-            _detour = null;
-            _original = null;
+            _buildRejected = true;
+            PluginLogger.Warning($"hook_failed_detour: stage={stage}, elapsed_ms={installTimer.ElapsedMilliseconds}, " +
+                $"hresult=0x{ex.HResult:X8}, trampoline={FormatPointer(_detour?.TrampolinePtr ?? 0)}. " +
+                $"Automatic retry stopped; restart the game and collect this log. {ex}");
+            // A failed Prepare/Commit can leave native state whose ownership is
+            // unknown. Keep delegates rooted and never prepare this target again
+            // in this process. Do not blindly destroy another hook's native state.
+            // If capture-worker startup fails after Apply, keep the live hook and
+            // original delegate intact so callbacks can still call the original.
             return false;
         }
     }
