@@ -362,6 +362,10 @@ internal static class Offsets
         public const int OutOfPossessionPosition = 0xE00;
         public const int OutOfPossessionRoleDuty = 0xE40;
         public const int Stats = 0x1880;
+        // Match UI inputs, distinct from ActualPlayer profile fields.
+        public const int Condition = 0x1C74; // int32; UI integer percentage = raw / 10000
+        public const int Sharpness = 0xC90; // int16; UI integer percentage = raw / 100 (truncate)
+        public const int Morale = 0xCA3; // int8; UI clamps signed value to 1..20
         public const int RatingEventsBegin = 0x1AA8;
         public const int RatingEventsEnd = 0x1AB0;
         public const int CategoryHistoryBegin = 0x1AC0;
@@ -862,6 +866,9 @@ internal static class Offsets
         // public const int TeamSideUnconfirmed = 0x87;
         // 255 health, 13 slight injury, 10 knee injury, 8 5w-6w injury, 11 foot injury
         // public const int InjuryStateOrSeverityCandidate = 0x88;
+        // Legacy stats bytes, no longer sampled since archive 2.12. Condition can
+        // include an upper-limit correction; sharpness rounds rather than truncates.
+        // Retained for research/old archive interpretation; use MatchPlayer inputs.
         public const int OverallPhysicalCondition = 0x89;
         public const int MatchSharpness = 0x8A;
         public const int Goals = 0x8B;

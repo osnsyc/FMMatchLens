@@ -7,6 +7,7 @@ import { ArrowDataTransferHorizontalIcon, FootballIcon, Pin02Icon, SidebarLeft01
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { AssistIcon } from "@/components/AssistIcon"
+import { PlayerProfileStatusIcon } from "@/components/PlayerProfileStatusIcon"
 import { PlayerShirt } from "@/components/PlayerShirt"
 import type { MatchKit } from "@/lib/kitRendering"
 import { FootAbilityIcon, displayAttributeValue, footAbilityTier } from "@/components/FootAbility"
@@ -1005,13 +1006,13 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-6 content-center gap-x-3 border-t border-border/60 px-3 py-1.5 text-[10px]">
+              <div className="grid grid-cols-6 content-center gap-x-3 border-t border-border/60 px-3 py-1.5 text-[10px] [&_svg]:size-[calc((2.5em+0.125rem)*2/3)]">
                 <ProfileFact label={t("playerProfile.age")} value={formatAgeAndBirthDate(player.age, player.profile?.dateOfBirth)} />
                 <ProfileFact label={t("playerProfile.bodyType")} value={formatBodyType(player.profile?.bodyType, t)} />
                 <ProfileFact label={t("playerProfile.height")} value={player.profile?.heightCm ? `${player.profile.heightCm} cm` : "-"} />
-                <ProfileFact label={t("playerProfile.overallPhysicalCondition")} value={formatProfileLevel(player.profile?.condition)} />
-                <ProfileFact label={t("playerProfile.matchSharpness")} value={formatProfileLevel(player.profile?.matchSharpness)} />
-                <ProfileFact label={t("playerProfile.morale")} value={formatMorale(player.profile?.morale)} />
+                <div className="flex min-w-0 items-center"><PlayerProfileStatusIcon status="condition" value={player.stats.overallPhysicalCondition} /></div>
+                <div className="flex min-w-0 items-center"><PlayerProfileStatusIcon status="sharpness" value={player.stats.matchSharpness} /></div>
+                <div className="flex min-w-0 items-center"><PlayerProfileStatusIcon status="morale" value={player.stats.morale} /></div>
               </div>
             </div>
           </CardHeader>
@@ -1081,6 +1082,9 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   previous.player.inPossession === next.player.inPossession &&
   previous.player.outOfPossession === next.player.outOfPossession &&
   previous.player.portraitUrl === next.player.portraitUrl &&
+  previous.player.stats.overallPhysicalCondition === next.player.stats.overallPhysicalCondition &&
+  previous.player.stats.matchSharpness === next.player.stats.matchSharpness &&
+  previous.player.stats.morale === next.player.stats.morale &&
   previous.player.profile === next.player.profile &&
   previous.player.attributes === next.player.attributes
 )
@@ -1288,7 +1292,7 @@ function ComparisonPlayerHeader({
     </Avatar>
   )
   const details = (
-    <div className={`grid min-w-0 pb-9 ${side === "right" ? "order-1 border-r text-right" : "order-2 border-l"} border-border/70`}>
+    <div className={`grid min-w-0 pb-12 ${side === "right" ? "order-1 border-r text-right" : "order-2 border-l"} border-border/70`}>
       <div className={`grid min-w-0 items-center gap-2 px-3 pb-2 pt-3 ${side === "right" ? "grid-cols-[7rem_minmax(0,1fr)]" : "grid-cols-[minmax(0,1fr)_7rem]"}`}>
         <div
           className={`min-w-0 ${
@@ -1357,29 +1361,32 @@ function ComparisonProfileFacts({
     },
     {
       label: t("playerProfile.overallPhysicalCondition"),
-      left: formatProfileLevel(leftPlayer.profile?.condition),
-      right: formatProfileLevel(rightPlayer.profile?.condition),
+      iconOnly: true,
+      left: <PlayerProfileStatusIcon status="condition" value={leftPlayer.stats.overallPhysicalCondition} />,
+      right: <PlayerProfileStatusIcon status="condition" value={rightPlayer.stats.overallPhysicalCondition} />,
     },
     {
       label: t("playerProfile.matchSharpness"),
-      left: formatProfileLevel(leftPlayer.profile?.matchSharpness),
-      right: formatProfileLevel(rightPlayer.profile?.matchSharpness),
+      iconOnly: true,
+      left: <PlayerProfileStatusIcon status="sharpness" value={leftPlayer.stats.matchSharpness} />,
+      right: <PlayerProfileStatusIcon status="sharpness" value={rightPlayer.stats.matchSharpness} />,
     },
     {
       label: t("playerProfile.morale"),
-      left: formatMorale(leftPlayer.profile?.morale),
-      right: formatMorale(rightPlayer.profile?.morale),
+      iconOnly: true,
+      left: <PlayerProfileStatusIcon status="morale" value={leftPlayer.stats.morale} />,
+      right: <PlayerProfileStatusIcon status="morale" value={rightPlayer.stats.morale} />,
     },
   ]
 
   return (
-    <div className="absolute inset-x-28 bottom-0 grid grid-cols-6 gap-x-2 border-t border-border/60 bg-muted/35 px-3 py-1.5 text-[10px]">
+    <div className="absolute inset-x-28 bottom-0 grid grid-cols-6 gap-x-2 border-t border-border/60 bg-muted/35 px-3 py-1.5 text-[10px] [&_svg]:size-[calc((2.5em+0.125rem)*2/3)]">
       {facts.map((fact) => (
         <div key={fact.label} className="min-w-0 text-center leading-tight">
-          <div className="truncate text-muted-foreground">{fact.label}</div>
-          <div className="mt-0.5 grid grid-cols-2 gap-1 font-semibold tabular-nums">
-            <span className="truncate text-right" style={{ color: leftColor }}>{fact.left}</span>
-            <span className="truncate text-left" style={{ color: rightColor }}>{fact.right}</span>
+          {!fact.iconOnly && <div className="truncate text-muted-foreground">{fact.label}</div>}
+          <div className={`grid grid-cols-2 gap-1 font-semibold tabular-nums ${fact.iconOnly ? "h-full items-center" : "mt-0.5"}`}>
+            <span className={fact.iconOnly ? "flex min-w-0 items-center justify-end" : "truncate text-right"} style={{ color: leftColor }}>{fact.left}</span>
+            <span className={fact.iconOnly ? "flex min-w-0 items-center justify-start" : "truncate text-left"} style={{ color: rightColor }}>{fact.right}</span>
           </div>
         </div>
       ))}
@@ -1479,16 +1486,6 @@ function formatGuideValue(value?: number) {
 
 function formatWage(value?: number) {
   return value && value > 0 ? `£${Math.round(value).toLocaleString()}` : "-"
-}
-
-function formatProfileLevel(value?: number) {
-  if (!value || value <= 0) return "-"
-  const percentage = value > 100 ? value / 100 : value <= 20 ? value * 5 : value
-  return `${Math.round(Math.min(100, percentage))}%`
-}
-
-function formatMorale(value?: number) {
-  return value != null ? String(value) : "-"
 }
 
 function attributeValueClass(value: number) {

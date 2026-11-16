@@ -22,7 +22,7 @@ import {
 const magic = "FMLENS2\0"
 const archiveStructureMajor = 2
 const firstSupportedStructureMinor = 1
-const archiveStructureMinor = 11
+const archiveStructureMinor = 12
 const legacy21FramePayloadMarker = 1
 const legacy21BlockStructure = 1
 const metadataRecord = 1
@@ -38,8 +38,10 @@ const legacyTeamFields = (1n << 23n) - 1n
 const allTeamFields = (1n << 25n) - 1n
 const legacyPlayerFields = (1n << 39n) - 1n
 const version27PlayerFields = (1n << 42n) - 1n
-const allPlayerFields = (1n << 43n) - 1n
+const version28PlayerFields = (1n << 43n) - 1n
+const allPlayerFields = (1n << 44n) - 1n
 const compactPlayerFields = allPlayerFields & ~(1n << 36n)
+const version28CompactPlayerFields = version28PlayerFields & ~(1n << 36n)
 const version27CompactPlayerFields = version27PlayerFields & ~(1n << 36n)
 
 type ArchiveHeader = {
@@ -263,13 +265,15 @@ function readFrames(
 ) {
   const reader = new ArchiveBufferReader(payload)
   const supportedTeamFields = structureMinor >= 6 ? allTeamFields : legacyTeamFields
-  const supportedPlayerFields = structureMinor >= 8
+  const supportedPlayerFields = structureMinor >= 12
     ? compactPlayerFields
-    : structureMinor >= 7
-      ? version27CompactPlayerFields
-      : structureMinor >= 6
-        ? version27PlayerFields
-        : legacyPlayerFields
+    : structureMinor >= 8
+      ? version28CompactPlayerFields
+      : structureMinor >= 7
+        ? version27CompactPlayerFields
+        : structureMinor >= 6
+          ? version27PlayerFields
+          : legacyPlayerFields
   if (structureMinor === 1 && reader.readByte() !== legacy21FramePayloadMarker) {
     throw new ArchiveError("Invalid 2.1 frame payload marker")
   }
@@ -629,6 +633,11 @@ function readPlayerFields(reader: ArchiveBufferReader, prior: RealtimePlayer, ma
     // Legacy bit 36 precedes condition/sharpness and keeper fields on the wire.
     if (bit === 37 && has(36)) result.distanceM = reader.readFloatXor(result.distanceM ?? 0)
     if (has(bit)) Object.assign(result, { [field]: reader.readVarInt() })
+  }
+  if (has(43)) {
+    const morale = reader.readVarInt()
+    if (morale !== -1 && (morale < 1 || morale > 20)) throw new ArchiveError("Match morale must be 1..20 or unavailable (-1)")
+    result.morale = morale === -1 ? undefined : morale
   }
   return result
 }

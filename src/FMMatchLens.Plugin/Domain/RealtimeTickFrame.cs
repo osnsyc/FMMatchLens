@@ -368,6 +368,9 @@ internal readonly record struct PlayerTickData(
     int SavesTipped,
     float DistanceM)
 {
+    // Null for archives before 2.12; never infer live morale from profile metadata.
+    public int? Morale { get; init; }
+
     [JsonIgnore]
     public RatingResearchPlayerData? RatingResearch { get; init; }
 

@@ -960,6 +960,15 @@ internal sealed class GameMatchTickHook : IDisposable
         var subbedOff = ReadByteDirect(stats + Offsets.PlayerStats.SubbedOffMinute);
         ReadPlayerMovement(matchPlayer, out var speedCentimetersPerSecond, out var angleDegrees);
 
+        // Read the same signed inputs and integer conversions as the match UI.
+        // PlayerStats +0x89/+0x8A can differ at icon boundaries and are not sampled.
+        if (!_memoryReader.TryReadInt32(matchPlayer + Offsets.MatchPlayer.Condition, out var rawCondition) ||
+            !_memoryReader.TryReadInt16(matchPlayer + Offsets.MatchPlayer.Sharpness, out var rawSharpness) ||
+            !_memoryReader.TryReadByte(matchPlayer + Offsets.MatchPlayer.Morale, out var rawMorale))
+        {
+            return false;
+        }
+
         player = new PlayerTickData(
             Slot: slot,
             PlayerId: playerId,
@@ -976,8 +985,8 @@ internal sealed class GameMatchTickHook : IDisposable
             SubbedOffMinute: subbedOff,
             Penalties: ReadByteDirect(stats + Offsets.PlayerStats.Penalties),
             OwnGoals: ReadByteDirect(stats + Offsets.PlayerStats.OwnGoals),
-            OverallPhysicalCondition: ReadByteDirect(stats + Offsets.PlayerStats.OverallPhysicalCondition),
-            MatchSharpness: ReadByteDirect(stats + Offsets.PlayerStats.MatchSharpness),
+            OverallPhysicalCondition: rawCondition / 10000,
+            MatchSharpness: rawSharpness / 100,
             Goals: ReadByteDirect(stats + Offsets.PlayerStats.Goals),
             Assists: ReadByteDirect(stats + Offsets.PlayerStats.Assists),
             Xg: ReadFloatDirect(stats + Offsets.PlayerStats.Xg),
@@ -1011,7 +1020,10 @@ internal sealed class GameMatchTickHook : IDisposable
             SavesHeld: ReadByteDirect(stats + Offsets.PlayerStats.SavesHeld),
             SavesParried: ReadByteDirect(stats + Offsets.PlayerStats.SavesParried),
             SavesTipped: ReadByteDirect(stats + Offsets.PlayerStats.SavesTipped),
-            DistanceM: ReadFloatDirect(stats + Offsets.PlayerStats.DistanceM));
+            DistanceM: ReadFloatDirect(stats + Offsets.PlayerStats.DistanceM))
+        {
+            Morale = Math.Clamp((int)unchecked((sbyte)rawMorale), 1, 20)
+        };
         return true;
     }
 

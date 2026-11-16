@@ -1866,6 +1866,7 @@ function toPlayer(
       distanceM: player.distanceM,
       overallPhysicalCondition: player.overallPhysicalCondition,
       matchSharpness: player.matchSharpness,
+      morale: player.morale ?? undefined,
     },
   }
 }

@@ -59,7 +59,9 @@ internal static class ArchiveWireFormat
     // 2.9 adds kit metadata. 2.10 appends tactical state tails: legacy JSON (2)
     // or binary deltas (3) with bounded dictionaries scoped to each chunk.
     // 2.11 adds the one-time terminal POM UID metadata extension.
-    internal const ushort StructureMinor = 11;
+    // 2.12 sources condition/sharpness from match UI inputs and adds per-frame
+    // morale (player field bit 43). Earlier 2.x payload layouts remain readable.
+    internal const ushort StructureMinor = 12;
     internal const byte Legacy21BlockStructure = 1;
     internal const byte Legacy21FramePayloadMarker = 1;
 }

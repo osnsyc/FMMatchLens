@@ -241,6 +241,8 @@ export type PlayerStats = {
   distanceM?: number
   overallPhysicalCondition?: number
   matchSharpness?: number
+  /** Match UI morale, 1–20; absent in archives before 2.12. */
+  morale?: number
 }
 
 export type PlayerProfile = {

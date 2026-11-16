@@ -16,9 +16,11 @@ internal static class ArchiveFrameCodec
     private const ulong AllTeamFields = (1UL << 25) - 1;
     private const ulong LegacyPlayerFields = (1UL << 39) - 1;
     private const ulong Version27PlayerFields = (1UL << 42) - 1;
-    private const ulong AllPlayerFields = (1UL << 43) - 1;
+    private const ulong Version28PlayerFields = (1UL << 43) - 1;
+    private const ulong AllPlayerFields = (1UL << 44) - 1;
     private const ulong DistanceField = 1UL << 36;
     private const ulong CompactPlayerFields = AllPlayerFields & ~DistanceField;
+    private const ulong Version28CompactPlayerFields = Version28PlayerFields & ~DistanceField;
     private const ulong Version27CompactPlayerFields = Version27PlayerFields & ~DistanceField;
     private const byte StatsChangedFlag = 1;
     private const byte DistanceChangedFlag = 2;
@@ -147,7 +149,7 @@ internal static class ArchiveFrameCodec
         if (structureMinor == 1 && reader.ReadByte() != ArchiveWireFormat.Legacy21FramePayloadMarker)
             throw new ArchiveFormatException("unsupported_payload_structure", "The legacy 2.1 frame payload marker is invalid.");
         var frames = new RealtimeTickFrame[expectedFrameCount];
-        var supportedPlayerFields = structureMinor >= 8 ? CompactPlayerFields : structureMinor >= 7 ? Version27CompactPlayerFields :
+        var supportedPlayerFields = structureMinor >= 12 ? CompactPlayerFields : structureMinor >= 8 ? Version28CompactPlayerFields : structureMinor >= 7 ? Version27CompactPlayerFields :
             structureMinor >= 6 ? Version27PlayerFields : LegacyPlayerFields;
         RealtimeTickFrame? previous = null;
         var tacticsCodec = new ArchiveTacticsBinaryCodec();
@@ -708,6 +710,7 @@ internal static class ArchiveFrameCodec
         Mark(37, left.OverallPhysicalCondition != right.OverallPhysicalCondition); Mark(38, left.MatchSharpness != right.MatchSharpness);
         Mark(39, left.SavesHeld != right.SavesHeld); Mark(40, left.SavesParried != right.SavesParried); Mark(41, left.SavesTipped != right.SavesTipped);
         Mark(42, left.ProgressivePasses != right.ProgressivePasses);
+        Mark(43, left.Morale != right.Morale);
         return mask;
         void Mark(int bit, bool changed) { if (changed) mask |= 1UL << bit; }
     }
@@ -725,6 +728,7 @@ internal static class ArchiveFrameCodec
         Int(37, value.OverallPhysicalCondition); Int(38, value.MatchSharpness);
         Int(39, value.SavesHeld); Int(40, value.SavesParried); Int(41, value.SavesTipped);
         Int(42, value.ProgressivePasses);
+        Int(43, value.Morale ?? -1);
         void Int(int bit, int item) { if ((mask & (1UL << bit)) != 0) ArchiveBinary.WriteVarInt64(writer, item); }
         void Float(int bit, float item)
         {
@@ -756,8 +760,18 @@ internal static class ArchiveFrameCodec
             DistanceM = Float(36, prior.DistanceM), OverallPhysicalCondition = Int(37, prior.OverallPhysicalCondition),
             MatchSharpness = Int(38, prior.MatchSharpness), SavesHeld = Int(39, prior.SavesHeld),
             SavesParried = Int(40, prior.SavesParried), SavesTipped = Int(41, prior.SavesTipped),
-            ProgressivePasses = Int(42, prior.ProgressivePasses)
+            ProgressivePasses = Int(42, prior.ProgressivePasses),
+            Morale = ReadMorale()
         };
+
+        int? ReadMorale()
+        {
+            if ((mask & (1UL << 43)) == 0) return prior.Morale;
+            var value = ArchiveBinary.ReadVarInt64(reader);
+            if (value == -1) return null;
+            if (value is < 1 or > 20) throw new ArchiveFormatException("invalid_morale", "Match morale must be 1..20 or unavailable (-1).");
+            return (int)value;
+        }
     }
 
     private static void WriteTail<T>(BinaryWriter writer, IReadOnlyList<T>? previous, IReadOnlyList<T> current,
