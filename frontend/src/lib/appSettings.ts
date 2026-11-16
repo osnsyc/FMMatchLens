@@ -15,10 +15,12 @@ export const toolbarItems = [
 ] as const
 export type ToolbarItem = (typeof toolbarItems)[number]
 export type AppSettings = {
+  dataCompleteness: "all" | "game"
   toolbar: Record<ToolbarItem, boolean>
   shortcuts: ShortcutBindings
 }
 export const defaultAppSettings: AppSettings = {
+  dataCompleteness: "game",
   toolbar: {
     tour: true,
     fullscreen: true,
@@ -33,6 +35,7 @@ const listeners = new Set<() => void>()
 export function parseAppSettings(value: unknown): AppSettings {
   const saved = value as Partial<AppSettings> | null
   return {
+    dataCompleteness: saved?.dataCompleteness === "all" ? "all" : "game",
     toolbar: Object.fromEntries(
       toolbarItems.map((id) => [
         id,

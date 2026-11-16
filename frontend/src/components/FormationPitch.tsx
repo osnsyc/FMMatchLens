@@ -631,63 +631,63 @@ function FormationViewPane({
                           },
                         }}
                       >
-                        <div className="flex max-w-36 flex-col items-center text-center">
-                          <span
-                            className="relative inline-flex"
-                            title={`${player.name} · ${roleName}`}
+                        <HoverCard>
+                          <HoverCardTrigger
+                            render={
+                              <div className="flex max-w-36 flex-col items-center text-center" />
+                            }
                           >
-                            <FormationPlayerShirt
-                              kit={
-                                (assignment.positionMask & 1) !== 0
-                                  ? goalkeeperKit
-                                  : outfieldKit
-                              }
-                              number={player.shirtNumber}
-                              shirtName={player.shirtName}
-                            />
-                            {player.status?.subbedOnMinute != null && (
-                              <span className="absolute -top-0.5 -right-0.5 rounded-full bg-background text-foreground ring-1 ring-background">
-                                <HugeiconsIcon
-                                  icon={ArrowDataTransferHorizontalIcon}
-                                  size={9}
-                                  strokeWidth={2}
-                                />
-                              </span>
-                            )}
-                          </span>
-                          <HoverCard>
-                            <HoverCardTrigger render={<div />}>
-                              <div className="pitch-player-name mt-0.5 flex max-w-36 items-center rounded-sm bg-background/90 px-1 py-px text-[9px] leading-3 font-semibold whitespace-nowrap text-foreground shadow-sm">
-                                <AnimatePresence mode="wait" initial={false}>
-                                  <motion.span
-                                    key={assignment.roleAbbreviation}
-                                    className="shrink-0"
-                                    initial={{ opacity: 0, y: 2 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, y: -2 }}
-                                    transition={{ duration: 0.18 }}
-                                  >
-                                    {assignment.roleAbbreviation}
-                                  </motion.span>
-                                </AnimatePresence>
-                                <span
-                                  aria-hidden="true"
-                                  className="mx-1 h-2.5 w-px shrink-0 bg-border"
-                                />
-                                <span className="min-w-0 truncate">
-                                  {player.name}
+                            <span className="relative inline-flex">
+                              <FormationPlayerShirt
+                                kit={
+                                  (assignment.positionMask & 1) !== 0
+                                    ? goalkeeperKit
+                                    : outfieldKit
+                                }
+                                number={player.shirtNumber}
+                                shirtName={player.shirtName}
+                              />
+                              {player.status?.subbedOnMinute != null && (
+                                <span className="absolute -top-0.5 -right-0.5 rounded-full bg-background text-foreground ring-1 ring-background">
+                                  <HugeiconsIcon
+                                    icon={ArrowDataTransferHorizontalIcon}
+                                    size={9}
+                                    strokeWidth={2}
+                                  />
                                 </span>
-                              </div>
-                            </HoverCardTrigger>
-                            <HoverCardContent
-                              side="top"
-                              sideOffset={6}
-                              className="w-auto max-w-72 px-2.5 py-1.5 font-medium whitespace-nowrap"
-                            >
-                              {roleName}
-                            </HoverCardContent>
-                          </HoverCard>
-                        </div>
+                              )}
+                            </span>
+
+                            <div className="pitch-player-name mt-0.5 flex max-w-36 items-center rounded-sm bg-background/90 px-1 py-px text-[9px] leading-3 font-semibold whitespace-nowrap text-foreground shadow-sm">
+                              <AnimatePresence mode="wait" initial={false}>
+                                <motion.span
+                                  key={assignment.roleAbbreviation}
+                                  className="shrink-0"
+                                  initial={{ opacity: 0, y: 2 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  exit={{ opacity: 0, y: -2 }}
+                                  transition={{ duration: 0.18 }}
+                                >
+                                  {assignment.roleAbbreviation}
+                                </motion.span>
+                              </AnimatePresence>
+                              <span
+                                aria-hidden="true"
+                                className="mx-1 h-2.5 w-px shrink-0 bg-border"
+                              />
+                              <span className="min-w-0 truncate">
+                                {player.name}
+                              </span>
+                            </div>
+                          </HoverCardTrigger>
+                          <HoverCardContent
+                            side="top"
+                            sideOffset={6}
+                            className="w-auto max-w-72 px-2.5 py-1.5 font-medium whitespace-nowrap"
+                          >
+                            {roleName}
+                          </HoverCardContent>
+                        </HoverCard>
                       </motion.div>
                     )
                   })}

@@ -15,6 +15,7 @@ import {
 } from "@hugeicons/core-free-icons"
 import { Button } from "@/components/ui/button"
 import { ThemeSchemeIcon } from "@/components/ThemeToggle"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
 import { Kbd, KbdGroup } from "@/components/ui/kbd"
 import {
@@ -217,6 +218,30 @@ export function SettingsDialog() {
                       <SelectItem value="en">{t("common.english")}</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span id="data-completeness-label">
+                    {t("settings.dataCompleteness")}
+                  </span>
+                  <Tabs
+                    value={settings.dataCompleteness}
+                    onValueChange={(value) => {
+                      if (value === "all" || value === "game")
+                        updateAppSettings({
+                          ...settings,
+                          dataCompleteness: value,
+                        })
+                    }}
+                  >
+                    <TabsList aria-labelledby="data-completeness-label">
+                      <TabsTrigger value="all">
+                        {t("settings.dataCompletenessAll")}
+                      </TabsTrigger>
+                      <TabsTrigger value="game">
+                        {t("settings.dataCompletenessGame")}
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
                 </div>
               </section>
               <section className="overflow-hidden rounded-2xl border border-border/60 bg-background/45">
@@ -475,6 +500,7 @@ export function SettingsDialog() {
                   size="sm"
                   onClick={() => {
                     updateAppSettings({
+                      dataCompleteness: defaultAppSettings.dataCompleteness,
                       toolbar: { ...defaultAppSettings.toolbar },
                       shortcuts: {},
                     })

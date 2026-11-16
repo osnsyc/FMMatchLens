@@ -2,6 +2,7 @@ import { useState, type CSSProperties, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
+  SquareLock01Icon,
   UserIcon,
   FootballPitchIcon,
   TShirtIcon,
@@ -12,6 +13,11 @@ import { PitchMarkings } from "@/components/pitch/PitchMarkings"
 import { FootAbilityPair } from "@/components/FootAbility"
 import { PlayerShirt } from "@/components/PlayerShirt"
 import type { MatchKit } from "@/lib/kitRendering"
+import {
+  HoverCard,
+  HoverCardTrigger,
+  HoverCardContent,
+} from "@/components/ui/hover-card"
 import { IconHint } from "@/components/ui/icon-hint"
 import {
   InstructionGrid,
@@ -37,6 +43,7 @@ import type {
   PlayerTacticalAssignment,
   TeamSide,
 } from "@/types/match"
+import { useAppSettings } from "@/lib/appSettings"
 import { decodeFormation } from "@/components/formation/tactics"
 import "./formation-focus.css"
 
@@ -55,8 +62,12 @@ export function FormationFocus({
   >
 }) {
   const { t } = useTranslation()
+  const { dataCompleteness } = useAppSettings()
   const [side, setSide] = useState<TeamSide>("home")
   const [playerId, setPlayerId] = useState<number | null>(null)
+  const instructionsVisible =
+    dataCompleteness === "all" ||
+    match[side].manager?.isHumanControlled === true
   const team = match.tactics?.[side]
   const config = team?.processing
   const selected =
@@ -138,6 +149,7 @@ export function FormationFocus({
         <div className="formation-focus-commands">
           <TacticalSummary
             config={config ?? null}
+            hidden={!instructionsVisible}
             color={match[side].color}
             teamName={match[side].name}
           />
@@ -147,6 +159,7 @@ export function FormationFocus({
                 key={phase}
                 capacity={capacity}
                 mode="instructions"
+                hidden={!instructionsVisible}
                 phase={phase}
                 config={config ?? null}
                 match={match}
@@ -165,10 +178,12 @@ export function FormationFocus({
 
 function TacticalSummary({
   config,
+  hidden,
   color,
   teamName,
 }: {
   config: FocusConfiguration | null
+  hidden: boolean
   color?: string
   teamName: string
 }) {
@@ -190,22 +205,24 @@ function TacticalSummary({
       <p className="formation-focus-summary-team" title={teamName}>
         {teamName}
       </p>
-      <dl>
-        <div>
-          <dt>{t("teamTactics.style")}</dt>
-          <dd title={style}>{style}</dd>
-        </div>
-        <div>
-          <dt>{t("teamTactics.mentality")}</dt>
-          <dd>
-            {config
-              ? t(`teamTactics.mentalities.${config.mentality.value}`, {
-                  defaultValue: t("teamTactics.unknown"),
-                })
-              : t("teamTactics.notRead")}
-          </dd>
-        </div>
-      </dl>
+      {!hidden && (
+        <dl>
+          <div>
+            <dt>{t("teamTactics.style")}</dt>
+            <dd title={style}>{style}</dd>
+          </div>
+          <div>
+            <dt>{t("teamTactics.mentality")}</dt>
+            <dd>
+              {config
+                ? t(`teamTactics.mentalities.${config.mentality.value}`, {
+                    defaultValue: t("teamTactics.unknown"),
+                  })
+                : t("teamTactics.notRead")}
+            </dd>
+          </div>
+        </dl>
+      )}
     </section>
   )
 }
@@ -221,6 +238,7 @@ function instructionVisible(instruction: FocusInstruction) {
 
 function FocusRow({
   mode,
+  hidden = false,
   capacity = 1,
   outfieldKit,
   goalkeeperKit,
@@ -234,6 +252,7 @@ function FocusRow({
   onClear,
 }: {
   mode: "pitch" | "instructions"
+  hidden?: boolean
   capacity?: number
   outfieldKit?: MatchKit
   goalkeeperKit?: MatchKit
@@ -391,31 +410,55 @@ function FocusRow({
           </div>
         </div>
       )}
-      {mode === "instructions" && (
-        <div
-          className="formation-focus-instructions"
-          data-instruction-mode={selected ? "player" : "team"}
-        >
-          {selected && (
-            <p className="formation-focus-note" title={personalNote}>
-              {personalNote}
-            </p>
-          )}
-          <InstructionGrid count={capacity}>
-            {instructions.map((instruction) => (
-              <TacticalInstructionCard
-                key={instruction.key}
-                instruction={instruction}
-              />
-            ))}
-            {!instructions.length && (
-              <p className="self-center text-xs text-muted-foreground">
-                {t(`teamTactics.${readStatus}`)}
+      {mode === "instructions" &&
+        (hidden ? (
+          <div className="formation-focus-instructions flex items-center justify-center text-muted-foreground">
+            <HoverCard>
+              <HoverCardTrigger
+                render={
+                  <span
+                    tabIndex={0}
+                    className="inline-flex"
+                    aria-label={t("settings.instructionsHidden")}
+                  />
+                }
+              >
+                <HugeiconsIcon
+                  icon={SquareLock01Icon}
+                  size={28}
+                  strokeWidth={1.5}
+                />
+              </HoverCardTrigger>
+              <HoverCardContent side="top" className="w-auto max-w-72">
+                {t("settings.instructionsHidden")}
+              </HoverCardContent>
+            </HoverCard>
+          </div>
+        ) : (
+          <div
+            className="formation-focus-instructions"
+            data-instruction-mode={selected ? "player" : "team"}
+          >
+            {selected && (
+              <p className="formation-focus-note" title={personalNote}>
+                {personalNote}
               </p>
             )}
-          </InstructionGrid>
-        </div>
-      )}
+            <InstructionGrid count={capacity}>
+              {instructions.map((instruction) => (
+                <TacticalInstructionCard
+                  key={instruction.key}
+                  instruction={instruction}
+                />
+              ))}
+              {!instructions.length && (
+                <p className="self-center text-xs text-muted-foreground">
+                  {t(`teamTactics.${readStatus}`)}
+                </p>
+              )}
+            </InstructionGrid>
+          </div>
+        ))}
     </article>
   )
 }
@@ -429,7 +472,6 @@ export function FormationPlayerShirt({
   number?: number
   shirtName?: string
 }) {
-  const { t } = useTranslation()
   return (
     <span className="formation-focus-shirt">
       {kit ? (
@@ -441,10 +483,7 @@ export function FormationPlayerShirt({
           numberClassName="text-[9px]"
         />
       ) : (
-        <span
-          className="formation-focus-shirt-fallback"
-          title={t("teamTactics.kitUnavailable")}
-        >
+        <span className="formation-focus-shirt-fallback">
           <HugeiconsIcon icon={TShirtIcon} size={28} />
           <span>{number ?? ""}</span>
         </span>
@@ -561,7 +600,14 @@ export function OppositionStrip({
   available?: boolean
   showSource?: boolean
 }) {
+  const { dataCompleteness } = useAppSettings()
+  const owner = side === "home" ? "away" : "home"
   const row = oppositionRow(match, side, playerId, available)
+  if (
+    dataCompleteness === "game" &&
+    match[owner].manager?.isHumanControlled !== true
+  )
+    return null
   return (
     <span
       className="formation-opposition-strip"
