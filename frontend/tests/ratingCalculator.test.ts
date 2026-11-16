@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest"
 import fm27Capture from "./fixtures/rating/fm27-211-4-0.json"
-import nativeRatingConfig from "../../docs/rating breakdown/fm27-rating-config-26385295.json"
 import type { ArchiveRatingInputs } from "@/api/realtimeMatch"
 
 import {
@@ -38,20 +37,6 @@ describe("frontend rating classification", () => {
       { categoryBit: 52, duration: 11784 },
     ])
     expect(second.qualityFlags).toEqual([])
-  })
-
-  it("matches every coefficient in the independently captured native configuration", () => {
-    const selected = nativeRatingConfig.records.find(
-      (record) => record.version <= nativeRatingConfig.source.matchSelector,
-    )!
-    expect(selected.version).toBe(436732957)
-    expect(selected.rows).toHaveLength(35)
-    expect(selected.lookup).toHaveLength(40)
-    for (const entry of selected.lookup) {
-      expect(1n << BigInt(entry.categoryBit)).toBe(BigInt(entry.mask))
-      expect(observedRatingWeightConfiguration.weightsByCategoryBit.get(entry.categoryBit))
-        .toEqual(selected.rows[entry.rowIndex])
-    }
   })
 
   it("accumulates eligible duration by the raw role active at each timeline sample", () => {

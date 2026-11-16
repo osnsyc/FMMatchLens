@@ -294,7 +294,7 @@ export type RatingClassificationState = {
   qualityFlags: string[]
 }
 
-export function ratingCategoryBitForRoles(inPossessionRoleDuty: bigint, _outOfPossessionRoleDuty: bigint) {
+export function ratingCategoryBitForRoles(inPossessionRoleDuty: bigint) {
   const inRole = inPossessionRoleDuty & ~ratingDutyMask
   return ratingRoleCategoryBits.get(inRole)
 }
@@ -315,7 +315,7 @@ export function deriveRatingClassification(
   if (!previous && totalEligibleDuration > 0) qualityFlags.push("partial_classification_history")
   const delta = Math.max(0, totalEligibleDuration - previousTotal)
   if (delta > 0) {
-    const categoryBit = ratingCategoryBitForRoles(inPossessionRoleDuty, outOfPossessionRoleDuty)
+    const categoryBit = ratingCategoryBitForRoles(inPossessionRoleDuty)
     if (categoryBit == null) {
       qualityFlags.push(
         `unmapped_role_ip_0x${inPossessionRoleDuty.toString(16).toUpperCase()}_oop_0x${outOfPossessionRoleDuty.toString(16).toUpperCase()}`,
