@@ -335,9 +335,9 @@ internal static class Offsets
 
     public static class MatchPlayer
     {
-        public const int OppositionPositionKey = 0xCE0;
-        public const int TacticalRosterSlot = 0x1E27;
-        public const int TacticalFormationSlot = 0x1E51;
+        public const int OppositionPositionKey = 0x1278;
+        public const int TacticalRosterSlot = 0x23C7;
+        public const int TacticalFormationSlot = 0x23F1;
         public const int Person = 0x28;
         // Pointer to an inline FM UTF-8 string instance. The byte length is at
         // +0x0 and zero-terminated text begins at +0x4.
@@ -356,29 +356,29 @@ internal static class Offsets
         public const int RatingContext290 = 0x290;
         public const int RatingContext298 = 0x298;
         public const int MatchTick = 0x2A8;
-        public const int ShirtNumber = 0xC9C;
-        public const int InPossessionPosition = 0xD70;
-        public const int InPossessionRoleDuty = 0xDB0;
-        public const int OutOfPossessionPosition = 0xE00;
-        public const int OutOfPossessionRoleDuty = 0xE40;
-        public const int Stats = 0x1880;
+        public const int ShirtNumber = 0x1234;
+        public const int InPossessionPosition = 0x1308;
+        public const int InPossessionRoleDuty = 0x1348;
+        public const int OutOfPossessionPosition = 0x1398;
+        public const int OutOfPossessionRoleDuty = 0x13D8;
+        public const int Stats = 0x1E20;
         // Match UI inputs, distinct from ActualPlayer profile fields.
-        public const int Condition = 0x1C74; // int32; UI integer percentage = raw / 10000
-        public const int Sharpness = 0xC90; // int16; UI integer percentage = raw / 100 (truncate)
-        public const int Morale = 0xCA3; // int8; UI clamps signed value to 1..20
-        public const int RatingEventsBegin = 0x1AA8;
-        public const int RatingEventsEnd = 0x1AB0;
-        public const int CategoryHistoryBegin = 0x1AC0;
-        public const int CategoryHistoryEnd = 0x1AC8;
-        public const int SpecialW2C = 0x1AED;
-        public const int SpecialW2E = 0x1AEE;
-        public const int SpecialW2D = 0x1AEF;
-        public const int InternalW25 = 0x1BBC;
-        public const int InternalW24 = 0x1C48;
-        public const int RawInternalRating = 0x1D58;
-        public const int SpecialW2F = 0x1E4A;
-        public const int SpecialW30 = 0x1E4B;
-        public const int SpecialW31 = 0x1E4C;
+        public const int Condition = 0x2214; // int32; UI integer percentage = raw / 10000
+        public const int Sharpness = 0x1230; // int16; UI integer percentage = raw / 100 (truncate)
+        public const int Morale = 0x123B; // int8; UI clamps signed value to 1..20
+        public const int RatingEventsBegin = 0x2048;
+        public const int RatingEventsEnd = 0x2050;
+        public const int CategoryHistoryBegin = 0x2060;
+        public const int CategoryHistoryEnd = 0x2068;
+        public const int SpecialW2C = 0x208D;
+        public const int SpecialW2E = 0x208E;
+        public const int SpecialW2D = 0x208F;
+        public const int InternalW25 = 0x215C;
+        public const int InternalW24 = 0x21E8;
+        public const int RawInternalRating = 0x22F8;
+        public const int SpecialW2F = 0x23EA;
+        public const int SpecialW30 = 0x23EB;
+        public const int SpecialW31 = 0x23EC;
     }
 
     public static class RatingContext
@@ -764,11 +764,11 @@ internal static class Offsets
 
         public static class Context
         {
-            public const int ProcessingConfiguration = 0x1818;
-            public const int CommandConfiguration = 0x2768;
-            public const int PersonalOpposition = 0x16F8;
-            public const int PositionOppositionCount = 0x1748;
-            public const int PositionOppositionEntries = 0x174C;
+            public const int ProcessingConfiguration = 0x1820;
+            public const int CommandConfiguration = 0x2770;
+            public const int PersonalOpposition = 0x1700;
+            public const int PositionOppositionCount = 0x1750;
+            public const int PositionOppositionEntries = 0x1754;
         }
 
         public static class Configuration
@@ -862,82 +862,82 @@ internal static class Offsets
         public const int StarterSubstituteFlag = 0x5C;
         public const int DistanceM = 0x68;
         public const int EventTimestamp = 0x78;
-        public const int RatingTimes100 = 0x82;
+        public const int RatingTimes100 = 0x86;
         // public const int TeamSideUnconfirmed = 0x87;
         // 255 health, 13 slight injury, 10 knee injury, 8 5w-6w injury, 11 foot injury
         // public const int InjuryStateOrSeverityCandidate = 0x88;
         // Legacy stats bytes, no longer sampled since archive 2.12. Condition can
         // include an upper-limit correction; sharpness rounds rather than truncates.
         // Retained for research/old archive interpretation; use MatchPlayer inputs.
-        public const int OverallPhysicalCondition = 0x89;
-        public const int MatchSharpness = 0x8A;
-        public const int Goals = 0x8B;
-        public const int GoalsConceded = 0x8C;
-        public const int PenaltyAttempts = 0x8D;
-        public const int Penalties = 0x8E;
-        public const int OwnGoals = 0x8F;
-        public const int Shots = 0x90;
-        public const int ShotsOnTarget = 0x91;
-        public const int BlockedShotsUnconfirmed = 0x92;
-        public const int ClearCutChances = 0x94;
-        public const int HitWoodwork = 0x96;
-        public const int SavesHeld = 0x99;
-        public const int SavesParried = 0x9A;
-        public const int SavesTipped = 0x9B;
-        public const int DefensiveBlocks = 0x9C;
-        public const int PenaltiesFaced = 0x9D;
-        public const int PenaltiesSaved = 0x9E;
-        public const int Assists = 0x9F;
-        public const int ChancesCreated = 0xA0;
-        public const int Dribbles = 0xA1;
-        public const int Fouls = 0xA3;
-        public const int Fouled = 0xA4;
-        public const int Offsides = 0xA5;
-        public const int YellowCards = 0xA6;
-        public const int RedCards = 0xA7;
-        public const int SubbedOffMinute = 0xAA;
-        public const int SubbedOnMinute = 0xAF;
-        public const int Crosses = 0xB5;
-        public const int CrossesCompleted = 0xB6;
-        public const int Passes = 0xBA;
-        public const int PassesCompleted = 0xBB;
-        public const int KeyPasses = 0xBC;
-        public const int OpenPlayKeyPasses = 0xBD;
+        public const int OverallPhysicalCondition = 0x8D;
+        public const int MatchSharpness = 0x8E;
+        public const int Goals = 0x8F;
+        public const int GoalsConceded = 0x90;
+        public const int PenaltyAttempts = 0x91;
+        public const int Penalties = 0x92;
+        public const int OwnGoals = 0x93;
+        public const int Shots = 0x94;
+        public const int ShotsOnTarget = 0x95;
+        public const int BlockedShotsUnconfirmed = 0x96;
+        public const int ClearCutChances = 0x98;
+        public const int HitWoodwork = 0x9A;
+        public const int SavesHeld = 0x9D;
+        public const int SavesParried = 0x9E;
+        public const int SavesTipped = 0x9F;
+        public const int DefensiveBlocks = 0xA0;
+        public const int PenaltiesFaced = 0xA1;
+        public const int PenaltiesSaved = 0xA2;
+        public const int Assists = 0xA3;
+        public const int ChancesCreated = 0xA4;
+        public const int Dribbles = 0xA5;
+        public const int Fouls = 0xA7;
+        public const int Fouled = 0xA8;
+        public const int Offsides = 0xA9;
+        public const int YellowCards = 0xAA;
+        public const int RedCards = 0xAB;
+        public const int SubbedOffMinute = 0xAE;
+        public const int SubbedOnMinute = 0xB3;
+        public const int Crosses = 0xB9;
+        public const int CrossesCompleted = 0xBA;
+        public const int Passes = 0xBE;
+        public const int PassesCompleted = 0xBF;
+        public const int KeyPasses = 0xC0;
+        public const int OpenPlayKeyPasses = 0xC1;
         // FM27 inserts eight bytes after +0xBD; retain candidate semantics
         // for fields whose football meaning was already unconfirmed.
-        public const int TacklesAttempted = 0xC6;
-        public const int TacklesWon = 0xC7;
-        public const int KeyTackles = 0xC8;
-        public const int Aerials = 0xCA;
-        public const int AerialsWon = 0xCB;
-        public const int HeadersLost = 0xCC;
-        public const int Interceptions = 0xCF;
-        public const int ErrorsLeadingToShotOrGoalCandidate = 0xD0;
-        public const int TeamGoalsWhileOnPitch = 0xD1;
-        public const int TeamConcededWhileOnPitch = 0xD2;
-        public const int ThrowIns = 0xD3;
-        public const int Corners = 0xD4;
-        public const int DefensiveFreeKicks = 0xD5;
-        public const int AttackingFreeKicks = 0xD6;
-        public const int PossessionWon = 0xD7;
-        public const int PossessionLost = 0xD8;
-        public const int Clearances = 0xD9;
-        public const int ShotsFaced = 0xDD;
-        public const int CrossAttemptsTypeOne = 0xDF;
-        public const int CrossAttemptsTypeTwo = 0xE0;
-        public const int CrossCompletionsTypeOne = 0xE1;
-        public const int CrossCompletionsTypeTwo = 0xE2;
-        public const int ShortPassesAttemptedCandidate = 0xE4;
-        public const int LongPassesAttemptedCandidate = 0xE6;
-        public const int ShortPassesCompletedCandidate = 0xE8;
-        public const int LongPassesCompletedCandidate = 0xEA;
-        public const int PressesAttempted = 0xEC;
-        public const int PressesWon = 0xED;
-        public const int ProgressivePasses = 0xF1;
-        public const int ShotsOutsideBox = 0xF3;
-        public const int Sprints = 0xF5;
+        public const int TacklesAttempted = 0xCA;
+        public const int TacklesWon = 0xCB;
+        public const int KeyTackles = 0xCC;
+        public const int Aerials = 0xCE;
+        public const int AerialsWon = 0xCF;
+        public const int HeadersLost = 0xD0;
+        public const int Interceptions = 0xD3;
+        public const int ErrorsLeadingToShotOrGoalCandidate = 0xD4;
+        public const int TeamGoalsWhileOnPitch = 0xD5;
+        public const int TeamConcededWhileOnPitch = 0xD6;
+        public const int ThrowIns = 0xD7;
+        public const int Corners = 0xD8;
+        public const int DefensiveFreeKicks = 0xD9;
+        public const int AttackingFreeKicks = 0xDA;
+        public const int PossessionWon = 0xDB;
+        public const int PossessionLost = 0xDC;
+        public const int Clearances = 0xDD;
+        public const int ShotsFaced = 0xE1;
+        public const int CrossAttemptsTypeOne = 0xE3;
+        public const int CrossAttemptsTypeTwo = 0xE4;
+        public const int CrossCompletionsTypeOne = 0xE5;
+        public const int CrossCompletionsTypeTwo = 0xE6;
+        public const int ShortPassesAttemptedCandidate = 0xE8;
+        public const int LongPassesAttemptedCandidate = 0xEA;
+        public const int ShortPassesCompletedCandidate = 0xEC;
+        public const int LongPassesCompletedCandidate = 0xEE;
+        public const int PressesAttempted = 0xF0;
+        public const int PressesWon = 0xF1;
+        public const int ProgressivePasses = 0xF5;
+        public const int ShotsOutsideBox = 0xF7;
+        public const int Sprints = 0xF9;
 
         // Inclusive of the highest-address player stat above (a byte at +0xF5).
-        public const int RatingInputReadableSize = 0xF6;
+        public const int RatingInputReadableSize = 0xFA;
     }
 }
