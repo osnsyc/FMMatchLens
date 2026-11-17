@@ -27,7 +27,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card"
-import { NativeTabs } from "@/components/uitripled/native-tabs-shadcnui"
+import { NativeTabs } from "@/components/ui/tabs"
 import { PitchMarkings } from "@/components/pitch/PitchMarkings"
 import {
   FormationFocus,
@@ -45,7 +45,7 @@ import {
   TimelineItem,
   TimelineSeparator,
   TimelineTime,
-} from "@/components/reui/timeline"
+} from "@/components/ui/timeline"
 import type {
   MatchPlayer,
   MatchSnapshot,
@@ -298,7 +298,7 @@ export const FormationPitch = memo(function FormationPitch({
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
-      <CardHeader className="shrink-0 grid-cols-[1fr_auto] items-center border-b px-4 py-2">
+      <CardHeader className="shrink-0 grid-cols-[1fr_auto] items-center px-4 py-2">
         <CardTitle className="text-sm font-semibold @max-[350px]/card-header:hidden">
           {t("panels.formation")}
         </CardTitle>
@@ -326,7 +326,7 @@ export const FormationPitch = memo(function FormationPitch({
       </CardHeader>
 
       <CardContent
-        className={`${isFocusMode ? "grid grid-cols-2 grid-rows-2 gap-2 p-2" : "flex p-0"} min-h-0 flex-1`}
+        className={`${isFocusMode ? "grid grid-cols-2 grid-rows-2 gap-2 px-3 pb-3 pt-0" : "flex p-0"} min-h-0 flex-1`}
       >
         {visibleViews.map((visibleView) => {
           const { side: visibleSide } = formationSelection(visibleView)
@@ -443,7 +443,7 @@ function FormationViewPane({
       }`}
     >
       {isFocusMode && (
-        <div className="flex h-7 shrink-0 items-center gap-2 border-b bg-muted/20 px-3 text-[11px] font-semibold text-foreground">
+        <div className="flex h-7 shrink-0 items-center gap-2 bg-muted/20 px-3 text-[11px] font-semibold text-foreground">
           <span
             aria-hidden="true"
             className="size-1.5 rounded-full"
@@ -457,7 +457,7 @@ function FormationViewPane({
         {viewHistory.length > 1 && (
           <div
             ref={timelineRef}
-            className={`${isFocusMode ? "w-32" : "w-36 @max-[380px]/formation:hidden"} scrollbar-hidden max-w-[30%] shrink-0 overflow-y-auto border-r bg-muted/15 py-3 pr-2.5 pl-4`}
+            className={`${isFocusMode ? "w-32" : "w-36 @max-[380px]/formation:hidden"} scrollbar-hidden max-w-[30%] shrink-0 overflow-y-auto border-0 bg-transparent pb-3 pt-0 pr-2.5 pl-3`}
           >
             <Timeline
               orientation="vertical"
@@ -556,7 +556,6 @@ function FormationViewPane({
                     />
                     <TimelineContent
                       className="truncate text-[10px] leading-3 whitespace-nowrap"
-                      title={description}
                     >
                       {description}
                     </TimelineContent>
@@ -568,7 +567,7 @@ function FormationViewPane({
         )}
 
         <div
-          className={`${isFocusMode ? "p-2" : "p-3"} flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden`}
+          className={`${isFocusMode ? "p-2" : "px-3 pb-3 pt-0"} flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden`}
         >
           <div
             className="pitch-frame relative h-full max-h-full max-w-full shrink-0"
@@ -583,7 +582,7 @@ function FormationViewPane({
             <div className="player-pitch relative size-full bg-[var(--formation-pitch-surface)]">
               <PitchMarkings
                 dimensions={pitchDimensions}
-                lineClassName="text-border"
+                lineClassName="text-[var(--pitch-line)]"
               />
               <div className="pointer-events-none absolute inset-0">
                 <AnimatePresence custom={resetsToPrevious}>

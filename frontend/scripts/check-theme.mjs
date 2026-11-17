@@ -4,18 +4,9 @@ import { fileURLToPath } from "node:url"
 
 const root = new URL("../", import.meta.url)
 const sourceRoot = fileURLToPath(new URL("../src/", import.meta.url))
-const required = [
-  "surface-page", "surface-panel", "surface-panel-muted", "surface-popover", "surface-input", "surface-overlay",
-  "text-primary", "text-secondary", "text-muted", "text-inverse",
-  "border-subtle", "border-default", "border-strong", "border-focus",
-  "action-primary", "action-primary-hover", "action-on-primary", "action-selected", "action-selected-text",
-  "status-positive", "status-negative", "status-warning", "status-info",
-  "viz-home-fallback", "viz-away-fallback", "viz-series-1", "viz-series-2", "viz-series-3", "viz-series-4", "viz-series-5", "viz-grid", "viz-axis",
-  "formation-pitch-surface", "formation-player-number", "heatmap-pitch-surface", "heatmap-player-number", "tactical-pitch-surface", "pitch-line", "pitch-zone", "pitch-label",
-  "event-important", "event-contrast", "event-marker-foreground", "event-marker-shadow", "event-trajectory", "event-selected", "event-historical",
-  "heatmap-stop-0", "heatmap-stop-1", "heatmap-stop-2", "heatmap-stop-3", "heatmap-stop-4", "heatmap-stop-5",
-  "effect-highlight", "effect-shadow", "effect-panel-glow", "effect-card-glow", "gradient-page", "gradient-control-active",
-]
+const required = JSON.parse(
+  read("src/theme/contract.ts").match(/requiredThemeTokens = (\[[\s\S]*?\]) as const/)[1].replace(/,\s*\]/g, "]")
+)
 const presets = [
   ["fm/light", "src/styles/themes/fm.css", ':root[data-preset="fm"][data-scheme="light"]'],
   ["fm/dark", "src/styles/themes/fm.css", ':root[data-preset="fm"][data-scheme="dark"]'],
@@ -26,13 +17,6 @@ const presets = [
   ["wyscout-inspired", "src/styles/themes/wyscout-inspired.css", ':root[data-preset="wyscout-inspired"]'],
 ]
 const knownPresetIds = new Set(["fm", "opta-inspired", "sofascore-inspired", "wyscout-inspired"])
-const fixedTeamColors = new Map([
-  ["opta-inspired/light", { home: "#6327c6", away: "#dc3a44" }],
-  ["opta-inspired/dark", { home: "#9b73ed", away: "#dc3a44" }],
-  ["sofascore-inspired/light", { home: "#0bb32a", away: "#374df5" }],
-  ["sofascore-inspired/dark", { home: "#0bb32a", away: "#8794f9" }],
-  ["wyscout-inspired", { home: "#e05a35", away: "#26648c" }],
-])
 const failures = []
 
 function read(path) {
@@ -72,22 +56,20 @@ function contrast(left, right) {
 }
 
 for (const [name, path, selector] of presets) {
-  const values = declarations(selectorBlock(read(path), selector))
-  const fixedColors = fixedTeamColors.get(name)
+  const css = read(path)
+  const values = declarations(selectorBlock(css, selector))
+  const preview = declarations(selectorBlock(css, selector.replace(":root", "[data-theme-preview]")))
   for (const token of required) {
     if (!values.has(token)) failures.push(`${name} is missing --${token}`)
+  }
+  for (const token of ["surface-panel", "action-primary", "status-positive", "status-negative"]) {
+    if (!preview.has(token) || preview.get(token) !== values.get(token)) {
+      failures.push(`${name} preview must share --${token} with its root theme`)
+    }
   }
   for (const token of ["formation-pitch-surface", "heatmap-pitch-surface"]) {
     if (values.get(token)?.toLowerCase() !== "transparent") {
       failures.push(`${name} --${token} must remain transparent`)
-    }
-  }
-  if (fixedColors) {
-    for (const [side, expected] of Object.entries(fixedColors)) {
-      const token = `viz-${side}-fallback`
-      if (values.get(token)?.toLowerCase() !== expected) {
-        failures.push(`${name} ${token} must remain fixed at ${expected}`)
-      }
     }
   }
   for (const [foreground, background, minimum] of [
@@ -95,7 +77,8 @@ for (const [name, path, selector] of presets) {
     ["viz-home-fallback", "surface-page", 3],
     ["viz-away-fallback", "surface-page", 3],
   ]) {
-    if (fixedColors && foreground.startsWith("viz-")) continue
+    // Inspired presets intentionally retain their own fixed brand/team colors.
+    if (!name.startsWith("fm/") && foreground.startsWith("viz-")) continue
     const left = rgb(values.get(foreground) ?? "")
     const right = rgb(values.get(background) ?? "")
     if (left && right && contrast(left, right) < minimum) {
@@ -118,13 +101,19 @@ for (const path of files(sourceRoot)) {
     failures.push(`${normalized} references an FM-private token`)
   }
   if ([".ts", ".tsx"].includes(extname(path)) && !normalized.startsWith("theme/presets/")) {
+    // Brand defaults and real kit-number fallbacks are intentionally stable.
     const stripped = contents
+      .replace(normalized === "components/fmmatchlens-logo/FMMatchLensLogo.tsx" ? /"#7c3aed"/g : /$^/g, '""')
+      .replace(normalized === "lib/kitRendering.ts" ? /"#(?:ffffff|111111)"/g : /$^/g, '""')
       .replaceAll('"rgba(0, 0, 0, 0)"', '""')
       .replaceAll('"rgb(0, 0, 0)"', '""')
       .replace(/stroke='#[a-f0-9]+'/gi, "")
     if (/#[0-9a-f]{3,8}\b|\bvec3\s*\(\s*\d/gi.test(stripped)) {
       failures.push(`${normalized} contains a hard-coded color`)
     }
+  }
+  if (/\b(?:bg|text|border|fill|stroke)-(?:white|black)(?:\/\d+)?\b/.test(contents)) {
+    failures.push(`${normalized} contains an unthemed black/white utility`)
   }
   for (const match of contents.matchAll(/data-preset=["']([^"']+)["']/g)) {
     if (!knownPresetIds.has(match[1])) failures.push(`${normalized} uses unknown preset ${match[1]}`)

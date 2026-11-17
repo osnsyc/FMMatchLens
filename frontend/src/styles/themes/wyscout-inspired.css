@@ -1,4 +1,4 @@
-:root[data-preset="wyscout-inspired"] {
+:root[data-preset="wyscout-inspired"], [data-theme-preview][data-preset="wyscout-inspired"] {
   --font-preset-heading: "ABCSocial", "Inter Variable", sans-serif;
   --font-preset-sans: "Inter Variable", sans-serif;
   --surface-page: #f4f6f8;
@@ -61,6 +61,33 @@
   --gradient-page: linear-gradient(145deg, #f4f6f8, #e9eef2 62%, #f8fafb);
   --gradient-control-active: linear-gradient(135deg, #e05a35, #c94a28);
   --radius: 0.25rem;
+  /* Terracotta / amber / teal / blue; jump hues instead of mixing through grey. */
+  --player-status-tier-1: #e05a35;
+  --player-status-tier-2: #cc671b;
+  --player-status-tier-3: #b27600;
+  --player-status-tier-4: #a17b00;
+  --player-status-tier-5: #178879;
+  --player-status-tier-6: #157d96;
+  --player-status-tier-7: #26648c;
+  --player-status-track: color-mix(in srgb, var(--text-primary) 12%, var(--surface-panel));
+  --player-condition-outline: color-mix(in srgb, var(--text-primary) 55%, var(--surface-panel));
+  --player-condition-divider: var(--surface-panel);
+  --surface-tour-overlay: rgb(0 0 0 / 82%);
+  --radius-control: calc(var(--radius) * 0.65);
+  --radius-inset: calc(var(--radius) * 0.45);
+  --radius-stat-bar: calc(var(--radius) * 0.25);
+  --font-preset-data: var(--font-preset-sans);
+  --font-brand-weight: 700;
+  --font-scoreboard: var(--font-preset-heading);
+  --font-pitch-label: var(--font-preset-sans);
+  --slider-thumb-surface: #ffffff;
+  --tooltip-surface: var(--surface-popover);
+  --tooltip-foreground: var(--text-primary);
+  --tooltip-border: var(--border-default);
+  --pitch-line-width: 1.5px;
+  --pitch-control-contour: var(--pitch-line);
+  --pitch-control-contour-opacity: 0.18;
+  --pitch-control-contour-width: 1px;
 }
 
 :root[data-preset="wyscout-inspired"] body {

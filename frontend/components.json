@@ -20,9 +20,5 @@
     "hooks": "@/hooks"
   },
   "menuColor": "default",
-  "menuAccent": "subtle",
-  "registries": {
-    "@uitripled": "https://ui.tripled.work/r/{name}.json",
-    "@reui": "https://reui.io/r/{style}/{name}.json"
-  }
+  "menuAccent": "subtle"
 }

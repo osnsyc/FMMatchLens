@@ -17,6 +17,7 @@ import { RegionOverlayRenderer } from "@/components/tactical/playback/renderer/o
 export type PlaybackOverlayColors = {
   home: number
   away: number
+  fontFamily?: string[]
   foreground: number
   important: number
   negative: number

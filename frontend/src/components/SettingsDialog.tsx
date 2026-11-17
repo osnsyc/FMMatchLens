@@ -11,8 +11,8 @@ import {
   ArrowShrinkIcon,
   CommandIcon,
   PaletteIcon,
-  RefreshIcon,
 } from "@hugeicons/core-free-icons"
+import { HoverCardHint } from "@/components/ui/hover-card"
 import { Button } from "@/components/ui/button"
 import { ThemeSchemeIcon } from "@/components/ThemeToggle"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -151,28 +151,28 @@ export function SettingsDialog() {
         setError(null)
       }}
     >
-      <Dialog.Trigger
-        render={
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8"
-            aria-label={t("settings.title")}
-            title={t("settings.title")}
-          />
-        }
-      >
-        <HugeiconsIcon icon={Settings01Icon} strokeWidth={1.6} />
-      </Dialog.Trigger>
+      <HoverCardHint content={t("settings.title")}>
+        <Dialog.Trigger
+          render={
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-8"
+              aria-label={t("settings.title")}
+            />
+          }
+        >
+          <HugeiconsIcon icon={Settings01Icon} strokeWidth={1.6} />
+        </Dialog.Trigger>
+      </HoverCardHint>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-[120] bg-black/50 backdrop-blur-sm transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none" />
+        <Dialog.Backdrop className="fixed inset-0 z-[120] bg-[var(--surface-overlay)] backdrop-blur-sm transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none" />
         <Dialog.Popup
           data-app-settings-dialog
           className="fixed top-1/2 left-1/2 z-[121] flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-[900px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl border border-border/60 bg-card/95 text-card-foreground shadow-2xl backdrop-blur-xl transition-[opacity,scale] duration-200 ease-out data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0 motion-reduce:transition-none sm:w-[calc(100%-3rem)]"
         >
           <header className="flex shrink-0 items-center justify-between px-6 pt-5 pb-4">
             <Dialog.Title className="flex items-center gap-2 font-heading text-lg font-semibold">
-              <HugeiconsIcon icon={Settings01Icon} size={20} />
               {t("settings.title")}
             </Dialog.Title>
             <Dialog.Close
@@ -327,7 +327,6 @@ export function SettingsDialog() {
                       setError(null)
                     }}
                   >
-                    <HugeiconsIcon icon={RefreshIcon} size={14} />
                     {t("settings.resetShortcuts")}
                   </Button>
                 </div>
@@ -509,7 +508,6 @@ export function SettingsDialog() {
                     setError(null)
                   }}
                 >
-                  <HugeiconsIcon icon={RefreshIcon} size={14} />
                   {t("settings.resetAll")}
                 </Button>
               </div>

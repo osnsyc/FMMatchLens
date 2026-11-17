@@ -1,4 +1,11 @@
 :root[data-color-vision="colorblind"][data-preset] {
+  --player-status-tier-1: #647db4;
+  --player-status-tier-2: #718ab8;
+  --player-status-tier-3: #8298be;
+  --player-status-tier-4: #98a9bc;
+  --player-status-tier-5: #b6b78d;
+  --player-status-tier-6: #d5ca63;
+  --player-status-tier-7: #ffee00;
   --status-positive: #0072b2;
   --status-negative: #d55e00;
   --status-warning: #e69f00;
@@ -41,9 +48,22 @@
 }
 
 :root[data-contrast="high"][data-preset] {
+  --player-status-track: var(--surface-panel-muted);
+  --pitch-control-contour-opacity: 0.65;
   --text-muted: var(--text-secondary);
   --border-subtle: var(--border-strong);
   --border-default: var(--border-strong);
   --effect-panel-glow: transparent;
   --effect-card-glow: transparent;
+}
+
+/* Keep each sequential tier visible against light surfaces. */
+:root[data-color-vision="colorblind"][data-preset][data-scheme="light"] {
+  --player-status-tier-1: #00204c;
+  --player-status-tier-2: #183368;
+  --player-status-tier-3: #31446b;
+  --player-status-tier-4: #505c70;
+  --player-status-tier-5: #6c725b;
+  --player-status-tier-6: #817b36;
+  --player-status-tier-7: #8b8000;
 }

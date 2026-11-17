@@ -3,7 +3,7 @@
  * Colors are mapped from Sofascore's web semantic palette into FMMatchLens's
  * theme token contract. Dark values adapt those semantics for dark surfaces.
  */
-:root[data-preset="sofascore-inspired"][data-scheme="light"] {
+:root[data-preset="sofascore-inspired"][data-scheme="light"], [data-theme-preview][data-preset="sofascore-inspired"][data-scheme="light"] {
   --font-preset-heading: "Inter Variable", Arial, sans-serif;
   --font-preset-sans: "Inter Variable", Arial, sans-serif;
   --font-preset-data: "IBM Plex Mono", monospace;
@@ -77,9 +77,35 @@
   --gradient-page: linear-gradient(145deg, #edf1f6 0%, #ffffff 56%, #e5e9ef 100%);
   --gradient-control-active: linear-gradient(135deg, #374df5, #2c3ec4);
   --radius: 0.5rem;
+  /* Ordered status scale: away blue to home green. */
+  --player-status-tier-1: #374df5;
+  --player-status-tier-2: #405fe3;
+  --player-status-tier-3: #3b6fca;
+  --player-status-tier-4: #287eaa;
+  --player-status-tier-5: #168b82;
+  --player-status-tier-6: #158e55;
+  --player-status-tier-7: #098f22;
+  --player-status-track: color-mix(in srgb, var(--text-primary) 12%, var(--surface-panel));
+  --player-condition-outline: color-mix(in srgb, var(--text-primary) 55%, var(--surface-panel));
+  --player-condition-divider: var(--surface-panel);
+  --surface-tour-overlay: rgb(0 0 0 / 82%);
+  --radius-control: calc(var(--radius) * 0.65);
+  --radius-inset: calc(var(--radius) * 0.45);
+  --radius-stat-bar: calc(var(--radius) * 0.5);
+  --font-brand-weight: 700;
+  --font-scoreboard: var(--font-preset-heading);
+  --font-pitch-label: var(--font-preset-sans);
+  --slider-thumb-surface: #ffffff;
+  --tooltip-surface: var(--surface-popover);
+  --tooltip-foreground: var(--text-primary);
+  --tooltip-border: var(--border-default);
+  --pitch-line-width: 1.5px;
+  --pitch-control-contour: var(--pitch-line);
+  --pitch-control-contour-opacity: 0.18;
+  --pitch-control-contour-width: 1px;
 }
 
-:root[data-preset="sofascore-inspired"][data-scheme="dark"] {
+:root[data-preset="sofascore-inspired"][data-scheme="dark"], [data-theme-preview][data-preset="sofascore-inspired"][data-scheme="dark"] {
   --font-preset-heading: "Inter Variable", Arial, sans-serif;
   --font-preset-sans: "Inter Variable", Arial, sans-serif;
   --font-preset-data: "IBM Plex Mono", monospace;
@@ -153,6 +179,32 @@
   --gradient-page: linear-gradient(145deg, #121212 0%, #18181a 56%, #121212 100%);
   --gradient-control-active: linear-gradient(135deg, #8794f9, #6676f7);
   --radius: 0.5rem;
+  /* Ordered status scale: away blue to home green. */
+  --player-status-tier-1: #8794f9;
+  --player-status-tier-2: #718fee;
+  --player-status-tier-3: #5593df;
+  --player-status-tier-4: #339dc2;
+  --player-status-tier-5: #1caa96;
+  --player-status-tier-6: #16b56a;
+  --player-status-tier-7: #0bb32a;
+  --player-status-track: color-mix(in srgb, var(--text-primary) 12%, var(--surface-panel));
+  --player-condition-outline: color-mix(in srgb, var(--text-primary) 55%, var(--surface-panel));
+  --player-condition-divider: var(--surface-panel);
+  --surface-tour-overlay: rgb(0 0 0 / 82%);
+  --radius-control: calc(var(--radius) * 0.65);
+  --radius-inset: calc(var(--radius) * 0.45);
+  --radius-stat-bar: calc(var(--radius) * 0.5);
+  --font-brand-weight: 700;
+  --font-scoreboard: var(--font-preset-heading);
+  --font-pitch-label: var(--font-preset-sans);
+  --slider-thumb-surface: #ffffff;
+  --tooltip-surface: var(--surface-popover);
+  --tooltip-foreground: var(--text-primary);
+  --tooltip-border: var(--border-default);
+  --pitch-line-width: 1.5px;
+  --pitch-control-contour: var(--pitch-line);
+  --pitch-control-contour-opacity: 0.18;
+  --pitch-control-contour-width: 1px;
 }
 
 :root[data-preset="sofascore-inspired"] body {

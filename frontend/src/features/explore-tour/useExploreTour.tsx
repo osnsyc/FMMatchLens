@@ -177,7 +177,7 @@ export function useExploreTour(adapter: ExploreTourAdapter) {
       textColor: "var(--popover-foreground)",
       arrowColor: "var(--popover)",
       primaryColor: "var(--primary)",
-      overlayColor: "rgba(0, 0, 0, 0.82)",
+      overlayColor: "var(--surface-tour-overlay)",
       spotlightPadding: 8,
       spotlightRadius: 10,
       zIndex: 40,

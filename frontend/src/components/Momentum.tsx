@@ -17,7 +17,7 @@ import { MomentumEventMap } from "@/components/MomentumEventMap"
 import { CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
-import { NativeTabs } from "@/components/uitripled/native-tabs-shadcnui"
+import { NativeTabs } from "@/components/ui/tabs"
 import { samePlayerLabels } from "@/lib/matchRenderEquality"
 import type { MatchSnapshot, TacticalEventPoint, TeamSide, XgTimelinePoint } from "@/types/match"
 import { useTheme } from "@/components/theme-provider"
@@ -107,7 +107,7 @@ export const Momentum = memo(function Momentum({ match, visible = true }: Moment
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
-      <CardHeader className="flex shrink-0 flex-row items-center gap-3 border-b px-4 py-2">
+      <CardHeader className="flex shrink-0 flex-row items-center gap-3 px-4 py-2">
         <CardTitle className="shrink-0 text-sm font-semibold @max-[200px]/card-header:hidden">
           {t("momentum.title")}
         </CardTitle>
@@ -137,7 +137,7 @@ export const Momentum = memo(function Momentum({ match, visible = true }: Moment
             />
           )
         ) : (
-          <ChartContainer config={chartConfig} className="min-h-0 flex-1 px-2 py-2">
+          <ChartContainer config={chartConfig} className="min-h-0 flex-1 px-3 pb-3 pt-0">
             <ComposedChart data={data} margin={{ top: 4, right: 12, bottom: 4, left: 0 }}>
               <XAxis
                 dataKey="minute"
@@ -162,11 +162,11 @@ export const Momentum = memo(function Momentum({ match, visible = true }: Moment
                 <ReferenceLine
                   key={tick}
                   y={tick}
-                  stroke="var(--border)"
+                  stroke="var(--viz-grid)"
                   strokeDasharray="3 3"
                 />
               ))}
-              <ReferenceLine y={0} stroke="var(--border)" strokeWidth={1.2} />
+              <ReferenceLine y={0} stroke="var(--viz-grid)" strokeWidth={1.2} />
               {goalMarkers.map((marker) => {
                 const markerY = marker.team === "home" ? 1.1 : -1.1
                 return (

@@ -31,6 +31,22 @@ const appearance = { presetId: "fm", resolvedScheme: "light", colorVision: "stan
 const away = { backgroundColour: 0xff000088 }
 
 describe("shirt background team colors", () => {
+  it("reads fixed colors from the active CSS palette and invalidates them when only CSS changes", () => {
+    let home = "#6327c6"
+    let away = "#dc3a44"
+    vi.stubGlobal("getComputedStyle", () => ({
+      getPropertyValue: (name: string) => name === "--viz-home-fallback" ? home
+        : name === "--viz-away-fallback" ? away : "#FFFFFF",
+    }))
+    const fixed = { ...appearance, teamColorMode: "fixed" as const }
+    expect(selectTeamDisplayColors({ backgroundColour: 0x112233 }, { backgroundColour: 0xfefefe }, fixed))
+      .toEqual({ home: "#6327C6", away: "#DC3A44" })
+    home = "#9b73ed"
+    away = "#226688"
+    expect(selectTeamDisplayColors(undefined, undefined, fixed))
+      .toEqual({ home: "#9B73ED", away: "#226688" })
+  })
+
   it("selects the same colours live and in 2.9 archives that omit live-only icon colours", () => {
     const saved = { shirtBackgroundColor: 0xffaa0000, backgroundColour: 0xff000000 }
     expect(selectTeamDisplayColors({ ...saved, iconBackgroundColor: 0xff008800 }, away, appearance))

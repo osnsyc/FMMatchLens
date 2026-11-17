@@ -119,7 +119,7 @@ export function useExploreTourLayers({
             `M 0 0 H ${multiSpotlight.viewportWidth} V ${multiSpotlight.viewportHeight} H 0 Z`,
             ...multiSpotlight.rects.map((rect) => roundedRectPath(rect, 10)),
           ].join(" ")}
-          fill="rgba(0, 0, 0, 0.82)"
+          fill="var(--surface-tour-overlay)"
           fillRule="evenodd"
           className="pointer-events-auto"
         />

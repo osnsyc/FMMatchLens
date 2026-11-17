@@ -1,4 +1,5 @@
 import { PreviewCard as PreviewCardPrimitive } from "@base-ui/react/preview-card"
+import { useState, type ReactNode } from "react"
 
 import { cn } from "@/lib/utils"
 
@@ -58,4 +59,36 @@ function HoverCardContent({
   )
 }
 
-export { HoverCard, HoverCardTrigger, HoverCardContent }
+/** A non-button anchor also lets disabled controls expose their hint. */
+function HoverCardHint({
+  content,
+  children,
+}: {
+  content: ReactNode
+  children: ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <HoverCard open={open} onOpenChange={setOpen}>
+      <HoverCardTrigger
+        render={<span className="inline-flex" />}
+        onPointerDownCapture={() => setOpen(false)}
+        onKeyDownCapture={(event) => {
+          if (event.key === "Enter" || event.key === " ") setOpen(false)
+        }}
+      >
+        {children}
+      </HoverCardTrigger>
+      <HoverCardContent
+        side="bottom"
+        sideOffset={6}
+        alignOffset={0}
+        className="w-auto max-w-72 bg-popover px-2.5 py-1.5 text-xs font-medium text-popover-foreground ring-border"
+      >
+        {content}
+      </HoverCardContent>
+    </HoverCard>
+  )
+}
+
+export { HoverCard, HoverCardTrigger, HoverCardContent, HoverCardHint }

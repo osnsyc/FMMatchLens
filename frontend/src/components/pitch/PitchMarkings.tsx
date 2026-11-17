@@ -14,7 +14,7 @@ export function PitchMarkings({
   dimensions,
   orientation = "horizontal",
   className = "pointer-events-none absolute inset-0 size-full overflow-visible",
-  lineClassName = "text-foreground/35",
+  lineClassName = "text-[var(--pitch-line)]",
 }: PitchMarkingsProps) {
   const pitch = buildPitchGeometry(dimensions)
   const vertical = orientation === "vertical"
@@ -31,7 +31,7 @@ export function PitchMarkings({
   const lineProps = {
     fill: "none",
     stroke: "currentColor",
-    strokeWidth: 1.5,
+    strokeWidth: "var(--pitch-line-width)",
     vectorEffect: "non-scaling-stroke" as const,
     className: lineClassName,
   }
@@ -50,7 +50,7 @@ export function PitchMarkings({
           width={pitch.length}
           height={pitch.width}
           {...lineProps}
-          className="text-foreground/40"
+          className={lineClassName}
         />
         <line
           x1={pitch.centreX}
@@ -70,7 +70,7 @@ export function PitchMarkings({
           cy={pitch.centreY}
           r="0.45"
           fill="currentColor"
-          className="text-foreground/40"
+          className={lineClassName}
         />
 
         <path
@@ -95,14 +95,14 @@ export function PitchMarkings({
           cy={pitch.centreY}
           r="0.35"
           fill="currentColor"
-          className="text-foreground/40"
+          className={lineClassName}
         />
         <circle
           cx={rightPenaltyMarkX}
           cy={pitch.centreY}
           r="0.35"
           fill="currentColor"
-          className="text-foreground/40"
+          className={lineClassName}
         />
         <path
           d={`M${pitch.penaltyAreaDepth} ${arcTop}A${pitch.circleRadius} ${pitch.circleRadius} 0 0 1 ${pitch.penaltyAreaDepth} ${arcBottom}`}

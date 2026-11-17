@@ -173,14 +173,8 @@ export function ZonePanel({
           })
           return playerGrid.sampleCount > 0
             ? {
-                x:
-                  selectedTeam === "home"
-                    ? 100 - playerGrid.averageX
-                    : playerGrid.averageX,
-                y:
-                  selectedTeam === "home"
-                    ? 100 - playerGrid.averageY
-                    : playerGrid.averageY,
+                x: playerGrid.averageX,
+                y: playerGrid.averageY,
                 sampleCount: playerGrid.sampleCount,
                 player,
               }
@@ -190,7 +184,7 @@ export function ZonePanel({
 
       return {
         phase,
-        data: prepareHeatmapRenderData(grid, comparableGrids, selectedTeam),
+        data: prepareHeatmapRenderData(grid, comparableGrids),
         labels,
       }
     })
@@ -262,7 +256,7 @@ export function ZonePanel({
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
-      <CardHeader className="shrink-0 grid-cols-[auto_1fr] items-center gap-2 border-b px-3 py-2">
+      <CardHeader className="shrink-0 grid-cols-[auto_1fr] items-center gap-2 px-3 py-2">
         <CardTitle className="min-w-0 text-sm font-semibold">
           <button
             type="button"
@@ -324,7 +318,7 @@ export function ZonePanel({
       <CardContent className="flex min-h-0 flex-1 p-0">
         <div
           ref={pitchHostRef}
-          className={`${isFocusMode ? "grid grid-cols-3 gap-3" : "flex items-center justify-center"} min-h-0 min-w-0 flex-1 overflow-hidden p-3`}
+          className={`${isFocusMode ? "grid grid-cols-3 gap-3" : "flex items-center justify-center"} min-h-0 min-w-0 flex-1 overflow-hidden px-3 pb-3 pt-0`}
         >
           {heatmapViews.map((view) => (
             <div

@@ -8,6 +8,7 @@ import type { TeamSide } from "@/types/match"
 export type MotionRendererAppearance = {
   home: number
   away: number
+  fontFamily?: string[]
   foreground: number
   homeGoalkeeperColor?: number
   awayGoalkeeperColor?: number
@@ -100,7 +101,7 @@ export class MotionRenderer {
       const label = new BitmapText({
         text: player.shirtNumber == null ? "" : String(player.shirtNumber),
         style: {
-          fontFamily: "Arial",
+          fontFamily: this.appearance.fontFamily ?? ["sans-serif"],
           fontSize: 9,
           fontWeight: "bold",
           fill: this.appearance.foreground,
@@ -177,6 +178,7 @@ export class MotionRenderer {
         true
       )
       .fill({ color: teamColor, alpha: 1 })
+    marker.label.style.fontFamily = this.appearance.fontFamily ?? ["sans-serif"]
     marker.label.style.fill = labelColor
   }
 

@@ -1,6 +1,6 @@
 /* FM reference colors live only in this preset definition. */
 :root,
-:root[data-preset="fm"][data-scheme="light"] {
+:root[data-preset="fm"][data-scheme="light"], [data-theme-preview][data-preset="fm"][data-scheme="light"] {
   --ref-fm-midnight: #0a0f1e;
   --ref-fm-purple-700: #6e0fd7;
   --ref-fm-purple-400: #af78ff;
@@ -72,9 +72,37 @@
   --gradient-page: linear-gradient(135deg, var(--ref-fm-midnight), #111128 55%, #180d2c);
   --gradient-control-active: linear-gradient(135deg, rgb(110 15 215 / 62%), rgb(132 35 218 / 48%));
   --radius: 0.7rem;
+  --player-status-tier-1: #fc5354;
+  --player-status-tier-2: #ff704a;
+  --player-status-tier-3: #ff9942;
+  --player-status-tier-4: #f9c54a;
+  --player-status-tier-5: #d3d142;
+  --player-status-tier-6: #99d144;
+  --player-status-tier-7: #00ce63;
+  --player-status-track: color-mix(in srgb, var(--text-primary) 12%, var(--surface-panel));
+  --player-condition-outline: color-mix(in srgb, var(--text-primary) 55%, var(--surface-panel));
+  --player-condition-divider: var(--surface-panel);
+  --surface-tour-overlay: rgb(0 0 0 / 82%);
+  --radius-control: calc(var(--radius) * 0.65);
+  --radius-inset: calc(var(--radius) * 0.45);
+  --radius-stat-bar: var(--radius-control);
+  --font-preset-data: var(--font-preset-sans);
+  --font-brand-weight: 400;
+  --font-scoreboard: "FMUniverse", "Inter Variable", sans-serif;
+  --font-pitch-label: Arial, sans-serif;
+  --slider-thumb-surface: #ffffff;
+  --tooltip-surface: var(--surface-popover);
+  --tooltip-foreground: var(--text-primary);
+  --tooltip-border: var(--border-default);
+  --pitch-line-width: 1.5px;
+  --pitch-control-contour: var(--pitch-line);
+  --pitch-control-contour-opacity: 0.18;
+  --pitch-control-contour-width: 1px;
 }
 
-:root[data-preset="fm"][data-scheme="dark"] {
+:root[data-preset="fm"][data-scheme="dark"], [data-theme-preview][data-preset="fm"][data-scheme="dark"] {
+  --font-preset-heading: "FMUniverse", "Inter Variable", sans-serif;
+  --font-preset-sans: "ABCSocial", "Inter Variable", sans-serif;
   --surface-page: #090d1a;
   --surface-panel: #141426;
   --surface-panel-muted: #211f38;
@@ -135,4 +163,30 @@
   --gradient-page: linear-gradient(135deg, #0a0f1e, #111128 55%, #180d2c);
   --gradient-control-active: linear-gradient(135deg, rgb(110 15 215 / 62%), rgb(132 35 218 / 48%));
   --radius: 0.7rem;
+  --player-status-tier-1: #fc5354;
+  --player-status-tier-2: #ff704a;
+  --player-status-tier-3: #ff9942;
+  --player-status-tier-4: #f9c54a;
+  --player-status-tier-5: #d3d142;
+  --player-status-tier-6: #99d144;
+  --player-status-tier-7: #00ce63;
+  --player-status-track: color-mix(in srgb, var(--text-primary) 12%, var(--surface-panel));
+  --player-condition-outline: color-mix(in srgb, var(--text-primary) 55%, var(--surface-panel));
+  --player-condition-divider: var(--surface-panel);
+  --surface-tour-overlay: rgb(0 0 0 / 82%);
+  --radius-control: calc(var(--radius) * 0.65);
+  --radius-inset: calc(var(--radius) * 0.45);
+  --radius-stat-bar: var(--radius-control);
+  --font-preset-data: var(--font-preset-sans);
+  --font-brand-weight: 400;
+  --font-scoreboard: "FMUniverse", "Inter Variable", sans-serif;
+  --font-pitch-label: Arial, sans-serif;
+  --slider-thumb-surface: #ffffff;
+  --tooltip-surface: var(--surface-popover);
+  --tooltip-foreground: var(--text-primary);
+  --tooltip-border: var(--border-default);
+  --pitch-line-width: 1.5px;
+  --pitch-control-contour: var(--pitch-line);
+  --pitch-control-contour-opacity: 0.18;
+  --pitch-control-contour-width: 1px;
 }

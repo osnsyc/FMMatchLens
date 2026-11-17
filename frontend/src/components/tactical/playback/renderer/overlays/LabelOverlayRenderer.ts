@@ -48,6 +48,7 @@ export class LabelOverlayRenderer {
         .roundRect(-width / 2, -height / 2, width, height, 5)
         .fill({ color: context.colors.neutral, alpha: 0.9 })
         .stroke({ color, width: item.overlay.variant === "event" ? 2 : 1.25 })
+      record.text.style.fontFamily = context.colors.fontFamily ?? ["sans-serif"]
       record.text.style.fill = context.colors.foreground
       record.container.position.set(
         position.x + (item.overlay.offset?.x ?? 0),
@@ -80,7 +81,7 @@ export class LabelOverlayRenderer {
     const text = new BitmapText({
       text: "",
       style: {
-        fontFamily: "Arial",
+        fontFamily: context.colors.fontFamily ?? ["sans-serif"],
         fontSize: 10,
         fontWeight: "bold",
         fill: context.colors.foreground,

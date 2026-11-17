@@ -56,7 +56,8 @@ export type TeamColorAppearance = {
   presetId: string
   resolvedScheme: "light" | "dark"
   colorVision: "standard" | "colorblind"
-  fixedTeamColors?: { home: string; away: string; dark?: { home: string; away: string } }
+  contrast?: "normal" | "high"
+  teamColorMode?: "source" | "fixed"
 }
 
 const displayColorCache = new Map<string, { home: string; away: string }>()
@@ -66,20 +67,21 @@ export function selectTeamDisplayColors(
   awaySource: TeamColorSource | undefined,
   appearance: TeamColorAppearance
 ): { home: string; away: string } {
-  if (appearance.fixedTeamColors) {
-    const colors = appearance.resolvedScheme === "dark"
-      ? appearance.fixedTeamColors.dark ?? appearance.fixedTeamColors
-      : appearance.fixedTeamColors
-    return {
-      home: colors.home,
-      away: colors.away,
-    }
+  if (appearance.teamColorMode === "fixed") {
+    // CSS is the only palette source, including scheme/accessibility overrides.
+    const style = getComputedStyle(document.documentElement)
+    const key = `fixed:${style.getPropertyValue("--viz-home-fallback")}:${style.getPropertyValue("--viz-away-fallback")}`
+    const cached = displayColorCache.get(key)
+    if (cached) return cached
+    const colors = readCurrentColorConfig().fallbacks
+    displayColorCache.set(key, colors)
+    return colors
   }
 
   const sourceKey = [homeSource, awaySource]
     .flatMap((source) => [source?.shirtBackgroundColor ?? source?.iconBackgroundColor, source?.backgroundColour, source?.foregroundColour, source?.outlineColour])
     .join(":")
-  const cacheKey = `${appearance.presetId}:${appearance.resolvedScheme}:${appearance.colorVision}:${sourceKey}`
+  const cacheKey = `${teamColorCacheKey(appearance)}:${sourceKey}`
   const cached = displayColorCache.get(cacheKey)
   if (cached) return cached
 
@@ -102,7 +104,7 @@ export function selectTeamDisplayColors(
 }
 
 export function teamColorCacheKey(appearance: TeamColorAppearance) {
-  return `${appearance.presetId}:${appearance.resolvedScheme}:${appearance.colorVision}`
+  return `${appearance.presetId}:${appearance.resolvedScheme}:${appearance.colorVision}:${appearance.contrast ?? "normal"}`
 }
 
 function readCurrentColorConfig(): TeamColorConfig {

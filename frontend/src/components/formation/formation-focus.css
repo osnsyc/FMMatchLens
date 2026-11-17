@@ -4,7 +4,7 @@
   flex: 1;
   min-height: 0;
   gap: 8px;
-  padding: 8px;
+  padding: 0 12px 12px;
 }
 .formation-focus-pitches,
 .formation-focus-command-panes {
@@ -24,7 +24,7 @@
   min-width: 0;
   min-height: 0;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: calc(var(--radius-inset) * 1.2);
   background: color-mix(in srgb, var(--muted) 15%, transparent);
 }
 .formation-focus-pitch {
@@ -60,7 +60,7 @@
   gap: 1px;
   transform: translate(-50%, -50%);
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: calc(var(--radius-inset) * 0.8);
   outline: none;
 }
 .formation-focus-marker:focus-visible {
@@ -82,7 +82,7 @@
 }
 .formation-focus-shirt {
   display: inline-flex;
-  border-radius: 3px;
+  border-radius: calc(var(--radius-inset) * 0.6);
   filter: url(#fmlens-shirt-outline);
 }
 .formation-focus-shirt-fallback {
@@ -105,7 +105,7 @@
   max-width: 94px;
   align-items: center;
   gap: 3px;
-  border-radius: 2px;
+  border-radius: calc(var(--radius-inset) * 0.4);
   padding: 1px 3px;
   background: color-mix(in srgb, var(--background) 94%, transparent);
   color: var(--foreground);
@@ -141,7 +141,7 @@
 .formation-opposition-source svg[data-active="true"] {
   color: var(--status-positive);
   background: color-mix(in srgb, var(--status-positive) 15%, transparent);
-  border-radius: 2px;
+  border-radius: calc(var(--radius-inset) * 0.4);
   opacity: 1;
 }
 .formation-opposition-strip .tactics-icon {
@@ -192,7 +192,7 @@
   align-items: center;
   gap: 1px;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: calc(var(--radius-inset) * 0.8);
   padding: 3px;
   background: var(--card);
 }
@@ -250,7 +250,7 @@
 }
 .tactics-level-bar > span {
   flex: 1;
-  border-radius: 1px;
+  border-radius: calc(var(--radius-inset) * 0.2);
   background: var(--border);
 }
 .tactics-level-bar > span[data-selected="true"] {
@@ -282,7 +282,7 @@
   gap: 16px;
   padding: 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: calc(var(--radius-inset) * 1.2);
   background: var(--card);
 }
 .formation-focus-summary-team {
@@ -327,7 +327,7 @@
   max-width: calc(100% - 8px);
   flex-direction: column;
   padding: 2px 4px;
-  border-radius: 3px;
+  border-radius: calc(var(--radius-inset) * 0.6);
   background: color-mix(in srgb, var(--background) 85%, transparent);
   font-size: 9px;
   line-height: 12px;
@@ -454,9 +454,12 @@
 }
 .tactical-instruction-choices {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
-  gap: 6px;
-  padding-top: 10px;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(4.5rem, 1fr);
+  grid-template-rows: 3.5rem;
+  width: max-content;
+  gap: 4px;
+  padding-top: 6px;
 }
 .tactical-instruction-choice {
   display: flex;
@@ -466,12 +469,18 @@
   justify-content: center;
   gap: 4px;
   border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 7px 4px;
+  border-radius: calc(var(--radius-inset) * 1);
+  padding: 6px;
   color: var(--muted-foreground);
   font-size: 10px;
   line-height: 14px;
   text-align: center;
+  white-space: nowrap;
+}
+.tactical-instruction-choice > span:not(.tactics-icon) {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .tactical-instruction-choice .tactics-icon {
   width: 32px;

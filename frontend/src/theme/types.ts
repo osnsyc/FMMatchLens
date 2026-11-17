@@ -10,31 +10,21 @@ export type AppearanceSettings = {
   contrast: ContrastMode
 }
 
-export type FixedTeamColors = {
-  mode: "fixed"
-  home: string
-  away: string
-  dark?: { home: string; away: string }
-}
-
 export type ThemePreset = {
   id: string
   labelKey: string
   supportedSchemes: readonly Scheme[]
   defaultScheme: Scheme
-  teamColors?: FixedTeamColors
-  preview: {
-    surface: string
-    primary: string
-    positive: string
-    negative: string
-  }
+  teamColorMode: "source" | "fixed"
 }
 
 export type ResolvedVizTokens = {
   presetId: string
   scheme: Scheme
   colorVision: ColorVisionMode
+  contrast: ContrastMode
+  pitchLabelFont: string
+  pitchControlContour: string
   surfacePage: string
   surfacePanel: string
   textPrimary: string

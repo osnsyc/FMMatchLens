@@ -1,5 +1,6 @@
 import type {
   ColorVisionMode,
+  ContrastMode,
   ResolvedVizTokens,
   Scheme,
 } from "@/theme/types"
@@ -7,12 +8,16 @@ import type {
 export function cssVizTokens(
   presetId: string,
   scheme: Scheme,
-  colorVision: ColorVisionMode
+  colorVision: ColorVisionMode,
+  contrast: ContrastMode = "normal"
 ): ResolvedVizTokens {
   return {
     presetId,
     scheme,
     colorVision,
+    contrast,
+    pitchLabelFont: "font-pitch-label",
+    pitchControlContour: "var(--pitch-control-contour)",
     surfacePage: "var(--surface-page)",
     surfacePanel: "var(--surface-panel)",
     textPrimary: "var(--text-primary)",

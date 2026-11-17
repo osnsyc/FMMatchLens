@@ -5,10 +5,5 @@ export const fmPreset: ThemePreset = {
   labelKey: "appearance.presets.fm",
   supportedSchemes: ["light", "dark"],
   defaultScheme: "dark",
-  preview: {
-    surface: "#141426",
-    primary: "#af78ff",
-    positive: "#34d399",
-    negative: "#ff7188",
-  },
+  teamColorMode: "source",
 }

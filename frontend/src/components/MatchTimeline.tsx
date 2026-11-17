@@ -597,7 +597,7 @@ export function MatchTimeline({
 
         <div
           data-tour="timeline-interaction-region"
-          className="flex h-full min-w-0 flex-1 items-center gap-2 md:col-span-2"
+          className="flex h-full min-w-0 flex-1 items-center gap-2 pr-3 md:col-span-2"
         >
           <div className="flex w-14 shrink-0 items-center justify-center">
             <Button
@@ -663,7 +663,7 @@ export function MatchTimeline({
                     })
                   }
                 }}
-                className="[&_[data-slot=slider-range]]:bg-primary/80 [&_[data-slot=slider-thumb]]:size-5 [&_[data-slot=slider-thumb]]:rounded-full [&_[data-slot=slider-thumb]]:border-2 [&_[data-slot=slider-thumb]]:bg-background [&_[data-slot=slider-track]]:h-2 [&_[data-slot=slider-track]]:rounded-full"
+                className="[&_[data-slot=slider-range]]:rounded-[var(--radius-stat-bar)] [&_[data-slot=slider-range]]:bg-primary/80 [&_[data-slot=slider-thumb]]:size-5 [&_[data-slot=slider-thumb]]:rounded-full [&_[data-slot=slider-thumb]]:border-2 [&_[data-slot=slider-thumb]]:bg-background [&_[data-slot=slider-track]]:h-2 [&_[data-slot=slider-track]]:rounded-[var(--radius-stat-bar)]"
               />
             </div>
 
@@ -806,11 +806,11 @@ const EventRail = memo(
             </TooltipTrigger>
             <TooltipContent className="w-max max-w-none gap-0 px-2.5 py-2">
               <div className="grid grid-cols-[auto_auto] grid-rows-2 items-center gap-x-4 gap-y-1 whitespace-nowrap">
-                <span className="font-semibold text-background tabular-nums">
+                <span className="font-semibold text-[var(--tooltip-foreground)] tabular-nums">
                   {event.minute}&apos;
                 </span>
                 <TimelineEventPeople event={event} row="primary" />
-                <span className="text-[10px] font-medium text-background/65">
+                <span className="text-[10px] font-medium text-[var(--text-secondary)]">
                   {event.label}
                 </span>
                 <TimelineEventPeople event={event} row="secondary" />
@@ -854,7 +854,7 @@ function TimelineEventPeople({
   if (people.length === 0) return <span aria-hidden="true" />
 
   return (
-    <span className="flex items-center gap-1.5 font-medium text-background">
+    <span className="flex items-center gap-1.5 font-medium text-[var(--tooltip-foreground)]">
       <TimelineDetailIcon event={event} row={row} />
       <span>{people.join(" / ")}</span>
     </span>

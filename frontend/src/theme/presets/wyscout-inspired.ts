@@ -5,15 +5,5 @@ export const wyscoutInspiredPreset: ThemePreset = {
   labelKey: "appearance.presets.wyscout",
   supportedSchemes: ["light"],
   defaultScheme: "light",
-  teamColors: {
-    mode: "fixed",
-    home: "#e05a35",
-    away: "#26648c",
-  },
-  preview: {
-    surface: "#ffffff",
-    primary: "#e05a35",
-    positive: "#16705a",
-    negative: "#c63d4f",
-  },
+  teamColorMode: "fixed",
 }

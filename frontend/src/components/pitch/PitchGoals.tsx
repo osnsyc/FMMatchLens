@@ -17,7 +17,7 @@ export function PitchGoals({ dimensions }: PitchGoalsProps) {
 
   return (
     <svg
-      className="pointer-events-none absolute inset-0 size-full overflow-visible text-foreground/35"
+      className="pointer-events-none absolute inset-0 size-full overflow-visible text-[var(--pitch-line)]"
       viewBox={`0 0 ${pitch.length} ${pitch.width}`}
       preserveAspectRatio="none"
       aria-hidden="true"
@@ -25,7 +25,7 @@ export function PitchGoals({ dimensions }: PitchGoalsProps) {
       <g
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="var(--pitch-line-width)"
       >
         <rect
           x={-GOAL_DEPTH}

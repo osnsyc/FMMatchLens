@@ -25,15 +25,15 @@ function playerProfileStatusLevel(status: PlayerProfileStatus, value?: number) {
   )
 }
 
-// Seven shared tiers, sampled from the original sharpness PNG backgrounds.
+// Seven ordered theme tiers shared by condition, sharpness and morale.
 const playerStatusColors = [
-  "#fc5354",
-  "#ff704a",
-  "#ff9942",
-  "#f9c54a",
-  "#d3d142",
-  "#99d144",
-  "#00ce63",
+  "var(--player-status-tier-1)",
+  "var(--player-status-tier-2)",
+  "var(--player-status-tier-3)",
+  "var(--player-status-tier-4)",
+  "var(--player-status-tier-5)",
+  "var(--player-status-tier-6)",
+  "var(--player-status-tier-7)",
 ] as const
 
 // Each status selects from the same palette without changing its own levels.
@@ -97,6 +97,7 @@ export function PlayerProfileStatusIcon({
   const label = `${t(`playerProfile.${labelKeys[status]}`)} ${level}/${status === "condition" ? 5 : status === "sharpness" ? 7 : 20}`
 
   const cutoutId = `${fillClipId}-cutout`
+  const heartClipId = `${fillClipId}-heart`
 
   return (
     <svg
@@ -137,14 +138,19 @@ export function PlayerProfileStatusIcon({
           )}
         </mask>
         {status === "condition" && (
-          <clipPath id={fillClipId}>
-            <rect
-              x="0"
-              y={conditionFillTop[level - 1]}
-              width="32"
-              height="32"
-            />
-          </clipPath>
+          <>
+            <clipPath id={heartClipId}>
+              <path d={conditionHeartPath} />
+            </clipPath>
+            <clipPath id={fillClipId}>
+              <rect
+                x="0"
+                y={conditionFillTop[level - 1]}
+                width="32"
+                height="32"
+              />
+            </clipPath>
+          </>
         )}
       </defs>
       {status === "morale" ? (
@@ -173,11 +179,26 @@ export function PlayerProfileStatusIcon({
         </g>
       ) : (
         <g mask={`url(#${cutoutId})`}>
-          <path d={conditionHeartPath} fill="#696f77" />
+          <path d={conditionHeartPath} fill="var(--player-status-track)" />
           <path
             d={conditionHeartPath}
             fill="currentColor"
             clipPath={`url(#${fillClipId})`}
+          />
+          {level < 5 && (
+            <path
+              d={`M0 ${conditionFillTop[level - 1]}h32`}
+              fill="none"
+              stroke="var(--player-condition-divider)"
+              strokeWidth="1.5"
+              clipPath={`url(#${heartClipId})`}
+            />
+          )}
+          <path
+            d={conditionHeartPath}
+            fill="none"
+            stroke="var(--player-condition-outline)"
+            strokeWidth="0.8"
           />
         </g>
       )}

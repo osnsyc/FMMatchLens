@@ -84,7 +84,7 @@ export function PixiHeatmap({
 
   useEffect(() => {
     rendererRef.current?.updateLut(readHeatmapStops())
-  }, [resolvedScheme, settings.colorVision, settings.presetId])
+  }, [resolvedScheme, settings.colorVision, settings.contrast, settings.presetId])
 
   useEffect(() => {
     rendererRef.current?.updateToneMapping(

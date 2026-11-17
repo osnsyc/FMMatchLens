@@ -8,7 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { NativeTabs } from "@/components/uitripled/native-tabs-shadcnui"
+import { NativeTabs } from "@/components/ui/tabs"
 import { sameTeamStats } from "@/lib/matchRenderEquality"
 import type {
   MatchSnapshot,
@@ -357,10 +357,10 @@ export const MatchStatsPanel = memo(function MatchStatsPanel({
     return (
       <div
         key={row.source}
-        className={compact ? "py-1.5" : "py-2.5"}
+        className={compact ? "py-1" : "py-1.5"}
       >
         <div
-          className={`${compact ? "mb-1.5" : "mb-2"} truncate text-center text-xs leading-none text-muted-foreground`}
+          className={`${compact ? "mb-1" : "mb-1.5"} truncate text-center text-xs leading-none text-muted-foreground`}
         >
           {t(row.label)}
         </div>
@@ -382,11 +382,11 @@ export const MatchStatsPanel = memo(function MatchStatsPanel({
             aria-hidden="true"
           >
             <div
-              className="h-full min-w-0 rounded-full"
+              className="h-full min-w-0 rounded-[var(--radius-stat-bar)]"
               style={{ backgroundColor: homeColor }}
             />
             <div
-              className="h-full min-w-0 rounded-full"
+              className="h-full min-w-0 rounded-[var(--radius-stat-bar)]"
               style={{ backgroundColor: awayColor }}
             />
           </div>
@@ -407,7 +407,7 @@ export const MatchStatsPanel = memo(function MatchStatsPanel({
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
-      <CardHeader className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 border-b px-4 py-2">
+      <CardHeader className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-4 py-2">
         <CardTitle className="whitespace-nowrap text-sm font-semibold @max-[240px]/card-header:hidden">
           {t(
             "panels.matchStats"
@@ -441,7 +441,7 @@ export const MatchStatsPanel = memo(function MatchStatsPanel({
 
       <CardContent className="flex min-h-0 flex-1 flex-col p-0">
         {isFocusMode ? (
-          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-3 px-4 py-3">
+          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-3 px-3 pb-3 pt-0">
             {focusedColumns.map((rows, columnIndex) => (
               <div
                 key={columnIndex}
@@ -457,7 +457,7 @@ export const MatchStatsPanel = memo(function MatchStatsPanel({
           </div>
         ) : (
           <ScrollArea className="scrollbar-hidden min-h-0 flex-1">
-            <div className="px-4 py-3">
+            <div className="px-3 pb-3 pt-0">
               <div>{activeRows.map((row) => renderStatRow(row))}</div>
             </div>
           </ScrollArea>

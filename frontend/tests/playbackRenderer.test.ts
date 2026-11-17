@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-const { renderOverlays, markerFills } = vi.hoisted(() => ({
+const { renderOverlays, markerFills, labelStyles } = vi.hoisted(() => ({
   renderOverlays: vi.fn(),
   markerFills: [] as number[],
+  labelStyles: [] as { fill: number; fontFamily?: string[] }[],
 }))
 
 vi.mock("pixi.js", () => {
@@ -46,6 +47,7 @@ vi.mock("pixi.js", () => {
     constructor(options: { text: string; style: { fill: number } }) {
       this.text = options.text
       this.style = options.style
+      labelStyles.push(this.style)
     }
   }
   return { Container, Graphics, Sprite, BitmapText }
@@ -117,6 +119,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
   renderOverlays.mockClear()
   markerFills.length = 0
+  labelStyles.length = 0
 })
 
 describe("shared motion renderer ownership", () => {
@@ -224,6 +227,32 @@ describe("playback goalkeeper colors", () => {
 })
 
 describe("playback redraw state", () => {
+  it("updates existing player labels and overlays when the theme font changes", () => {
+    const renderer = createRenderer(true, { fontFamily: ["Inter Variable"] })
+    const frame: TacticalPlayback = {
+      ...playback,
+      frames: [{
+        tick: 10,
+        players: [{ playerId: 1, team: "home", x: 50, y: 50, shirtNumber: 9,
+          velocityXPerTick: 0, velocityYPerTick: 0 }],
+      }],
+    }
+    try {
+      renderer.updatePlayback(frame)
+      expect(labelStyles).toHaveLength(1)
+      expect(labelStyles[0].fontFamily).toEqual(["Inter Variable"])
+      renderer.updateAppearance({
+        home: 0, away: 0, foreground: 0, important: 0, negative: 0,
+        neutral: 0, success: 0, fontFamily: ["IBM Plex Mono"],
+      })
+      expect(labelStyles).toHaveLength(1)
+      expect(labelStyles[0].fontFamily).toEqual(["IBM Plex Mono"])
+      expect(renderOverlays.mock.calls.at(-1)?.[4].fontFamily).toEqual(["IBM Plex Mono"])
+    } finally {
+      renderer.destroy()
+    }
+  })
+
   it("keeps the final frame after reduced-motion redraws", () => {
     const renderer = createRenderer(true)
     try {

@@ -17,11 +17,25 @@ export class PitchControlRenderer {
   private height: number
   private home: number
   private away: number
-  constructor(width: number, height: number, home: number, away: number) {
+  private contourColor: number
+  private contourOpacity: number
+  private contourWidth: number
+  constructor(
+    width: number,
+    height: number,
+    home: number,
+    away: number,
+    contourColor: number,
+    contourOpacity: number,
+    contourWidth: number
+  ) {
     this.width = width
     this.height = height
     this.home = home
     this.away = away
+    this.contourColor = contourColor
+    this.contourOpacity = contourOpacity
+    this.contourWidth = contourWidth
     this.container.eventMode = "none"
     this.container.interactiveChildren = false
     this.container.addChild(this.heatmap, this.contour)
@@ -68,7 +82,11 @@ export class PitchControlRenderer {
         .moveTo(from.x * this.width, from.y * this.height)
         .lineTo(to.x * this.width, to.y * this.height)
     }
-    this.contour.stroke({ color: 0xffffff, alpha: 0.18, width: 1 })
+    this.contour.stroke({
+      color: this.contourColor,
+      alpha: this.contourOpacity,
+      width: this.contourWidth,
+    })
     this.drawMask()
   }
   private readonly clip = new Graphics()
@@ -79,7 +97,16 @@ export class PitchControlRenderer {
     }
     this.clip.clear().rect(0, 0, this.width, this.height).fill(0xffffff)
   }
-  updateAppearance(home: number, away: number) {
+  updateAppearance(
+    home: number,
+    away: number,
+    color: number,
+    opacity: number,
+    width: number
+  ) {
+    this.contourColor = color
+    this.contourOpacity = opacity
+    this.contourWidth = width
     this.home = home
     this.away = away
     if (this.frame) this.renderFrame(this.frame)

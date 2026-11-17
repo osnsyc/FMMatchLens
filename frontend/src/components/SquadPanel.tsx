@@ -8,8 +8,6 @@ import { HugeiconsIcon } from "@hugeicons/react"
 
 import { AssistIcon } from "@/components/AssistIcon"
 import { PlayerProfileStatusIcon } from "@/components/PlayerProfileStatusIcon"
-import { PlayerShirt } from "@/components/PlayerShirt"
-import type { MatchKit } from "@/lib/kitRendering"
 import { FootAbilityIcon, displayAttributeValue, footAbilityTier } from "@/components/FootAbility"
 import { Avatar, AvatarBadge, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -29,7 +27,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card"
-import { NativeTabs } from "@/components/uitripled/native-tabs-shadcnui"
+import { NativeTabs } from "@/components/ui/tabs"
 import {
   Tooltip,
   TooltipContent,
@@ -60,8 +58,6 @@ type SquadPanelProps = {
   allPlayers?: MatchPlayer[]
   events: MatchEvent[]
   teamColor?: string
-  outfieldKit?: MatchKit
-  goalkeeperKit?: MatchKit
   pinnedPlayerId?: number
   attackingOpponent?: MatchPlayer
   profilePopupSuppressed?: boolean
@@ -239,8 +235,6 @@ export const SquadPanel = memo(function SquadPanel({
   allPlayers = players,
   events,
   teamColor,
-  outfieldKit,
-  goalkeeperKit,
   pinnedPlayerId,
   attackingOpponent,
   profilePopupSuppressed = false,
@@ -585,7 +579,6 @@ export const SquadPanel = memo(function SquadPanel({
           player={player}
           side={side}
           teamColor={resolvedTeamColor}
-          kit={playerIsGoalkeeper(player) ? goalkeeperKit : outfieldKit}
           panelRef={panelRef}
           pinned={pinnedPlayerId === player.id}
           isPlayerOfMatch={isPlayerOfMatch}
@@ -724,7 +717,6 @@ export const SquadPanel = memo(function SquadPanel({
             relative flex shrink-0
             items-center justify-center
             overflow-hidden
-            border-b
             px-3 py-3
             sm:px-4 sm:py-4
           "
@@ -747,26 +739,6 @@ export const SquadPanel = memo(function SquadPanel({
             }}
           />
 
-          {/* bottom highlight */}
-          <div
-            aria-hidden="true"
-            className="
-              pointer-events-none
-              absolute bottom-0 left-1/2
-              h-px w-1/3
-              -translate-x-1/2
-            "
-            style={{
-              background: `linear-gradient(
-                90deg,
-                transparent,
-                ${resolvedTeamColor},
-                transparent
-              )`,
-              boxShadow: `0 0 8px ${resolvedTeamColor}55`,
-            }}
-          />
-
           <div className="relative z-10 min-w-0 max-w-full text-center">
             {teamUid == null ? (
               <h2 className="truncate text-sm font-semibold leading-7 tracking-[0.01em]" style={{ color: resolvedTeamColor, textShadow: `0 0 12px ${resolvedTeamColor}28` }}>{title}</h2>
@@ -785,7 +757,6 @@ export const SquadPanel = memo(function SquadPanel({
             size="icon"
             className={`absolute z-20 size-7 border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary ${side === "home" ? "right-2" : "left-2"}`}
             aria-label={t("playerData.openTeam", { team: title })}
-            title={t("playerData.open")}
             aria-expanded={isStatsDrawerOpen}
             onClick={openStatsDrawer}
           >
@@ -852,8 +823,6 @@ function sameSquadPanelProps(previous: SquadPanelProps, next: SquadPanelProps) {
     && previous.teamUid === next.teamUid
     && previous.side === next.side
     && previous.teamColor === next.teamColor
-    && previous.outfieldKit === next.outfieldKit
-    && previous.goalkeeperKit === next.goalkeeperKit
     && previous.pinnedPlayerId === next.pinnedPlayerId
     && previous.attackingOpponent === next.attackingOpponent
     && previous.profilePopupSuppressed === next.profilePopupSuppressed
@@ -877,7 +846,6 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   player,
   side,
   teamColor,
-  kit,
   panelRef,
   pinned,
   hoverEnabled,
@@ -889,7 +857,6 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
   player: MatchPlayer
   side: TeamSide
   teamColor: string
-  kit?: MatchKit
   panelRef: React.RefObject<HTMLElement | null>
   pinned: boolean
   isPlayerOfMatch: boolean
@@ -981,7 +948,7 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
         className="max-w-none bg-transparent p-0 text-card-foreground shadow-none [animation:none]"
       >
         <Card className="w-[38rem] max-w-[min(38rem,calc(100vw-2rem))] gap-0 border border-border/80 py-0 shadow-2xl">
-          <CardHeader className="grid h-28 grid-cols-[7rem_minmax(0,1fr)] gap-0 overflow-hidden border-b bg-muted/35 p-0">
+          <CardHeader className="grid h-28 grid-cols-[7rem_minmax(0,1fr)] gap-0 overflow-hidden bg-muted/35 p-0">
             <Avatar className="h-28 w-28 rounded-none after:hidden">
               {player.portraitUrl && <AvatarImage src={player.portraitUrl} alt={player.name} className="rounded-none object-cover" />}
               <AvatarFallback className="rounded-none bg-transparent text-lg font-bold" style={{ color: teamColor }}>{initials(player.name)}</AvatarFallback>
@@ -989,7 +956,6 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
             <div className="grid min-w-0 grid-rows-[auto_1fr]">
               <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_15.5rem] items-center gap-3 px-3 pb-2 pt-3">
                 <div className="flex min-w-0 items-center gap-2">
-                  {kit && <PlayerShirt kit={kit} number={player.shirtNumber} shirtName={player.shirtName} />}
                   <div className="min-w-0">
                     <h3 className="truncate text-lg font-bold" title={player.fullName ?? player.name}>{player.name}</h3>
                     <div className="mt-1 text-xs text-muted-foreground">{familiarPosition(player)}</div>
@@ -1063,7 +1029,6 @@ const PlayerProfileHover = memo(function PlayerProfileHover({
 }, (previous, next) =>
   previous.side === next.side &&
   previous.teamColor === next.teamColor &&
-  previous.kit === next.kit &&
   previous.panelRef === next.panelRef &&
   previous.pinned === next.pinned &&
   // Avatar children can change at full time even when player data is unchanged.
@@ -1204,7 +1169,7 @@ export function PlayerComparisonPopup({
       className="pointer-events-auto absolute left-1/2 top-1/2 z-50 w-[57rem] max-w-[calc(100%-1rem)] -translate-x-1/2 -translate-y-1/2"
     >
       <Card className="w-full gap-0 border border-border/80 py-0 shadow-2xl">
-        <CardHeader className="relative grid h-28 grid-cols-2 gap-0 overflow-hidden border-b bg-muted/35 p-0">
+        <CardHeader className="relative grid h-28 grid-cols-2 gap-0 overflow-hidden bg-muted/35 p-0">
           <ComparisonPlayerHeader player={leftPlayer} color={leftColor} side="left" />
           <ComparisonPlayerHeader player={rightPlayer} color={rightColor} side="right" />
           <ComparisonProfileFacts
@@ -1984,7 +1949,7 @@ function TeamStatsDrawer({
           "--drawer-content-width": `${width}px`,
         } as React.CSSProperties}
       >
-        <DrawerHeader className="relative flex-row items-center gap-3 border-b px-4 py-3">
+        <DrawerHeader className="relative flex-row items-center gap-3 px-4 py-3">
           <div className="min-w-0 flex-1">
             <DrawerTitle className="truncate text-base font-semibold" style={{ color: teamColor }}>{title}</DrawerTitle>
             <div className="flex min-w-0 items-center gap-3">
@@ -2125,18 +2090,7 @@ function PlayerStatsTable({
               {player.shirtNumber ?? "-"}
             </td>
             <td className="sticky left-11 z-20 overflow-hidden border-b border-r bg-card px-2 py-2 font-medium">
-              <HoverCard>
-                <HoverCardTrigger render={<div className="truncate leading-6" />}>
-                  {player.name}
-                </HoverCardTrigger>
-                <HoverCardContent
-                  side="top"
-                  sideOffset={6}
-                  className="w-auto max-w-72 whitespace-nowrap px-2.5 py-1.5 font-medium"
-                >
-                  {player.fullName ?? player.name}
-                </HoverCardContent>
-              </HoverCard>
+              <div className="truncate leading-6">{player.name}</div>
             </td>
             <td className="sticky left-[172px] z-20 overflow-hidden truncate border-b border-r bg-card px-1.5 py-2 text-center">{playerStatPosition(player)}</td>
             {fields.map((field) => {
@@ -2201,7 +2155,7 @@ function SortHeaderButton({
     <button
       type="button"
       disabled={disabled}
-      title={title ?? label}
+      aria-label={title ?? label}
       className={`flex w-full items-center gap-1 px-2 py-2 font-medium transition-colors enabled:hover:bg-muted/60 enabled:hover:text-foreground disabled:cursor-not-allowed disabled:text-muted-foreground/35 ${align === "left" ? "justify-start" : "justify-center"} ${active ? "text-foreground" : "text-muted-foreground"}`}
       onClick={onClick}
     >

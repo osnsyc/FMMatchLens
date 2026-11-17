@@ -166,7 +166,8 @@ export class HeatmapDerivations {
 
   private processFrame(frame: RealtimeFrame) {
     const minute = frameMinute(frame)
-    const nextHalfKey = minute < 45 ? 0 : minute < 90 ? 1 : minute < 105 ? 2 : 3
+    // Stoppage time belongs to its actual period, even after minute 45/90.
+    const nextHalfKey = frame.period
     if (nextHalfKey !== this.halfKey) {
       this.halfKey = nextHalfKey
       this.stores.half.clear()
@@ -185,13 +186,16 @@ export class HeatmapDerivations {
           !Number.isFinite(player.y)
         )
           continue
+        // Home defends -Y in period 1 and +Y in period 2; away is opposite.
+        // Store own goal below and attack upwards for both teams.
+        const direction = (player.team === "home") !== secondHalf ? 1 : -1
         const x = normalize(
-          secondHalf ? -player.x : player.x,
+          direction * player.x,
           -halfWidth,
           halfWidth
         )
         const y = normalize(
-          secondHalf ? player.y : -player.y,
+          -direction * player.y,
           -halfLength,
           halfLength
         )
@@ -334,21 +338,6 @@ export function combineHeatmapGrids(
   }
 }
 
-/** Orient a vertical heatmap towards the opponent's goal without mutating history. */
-export function orientHeatmapGrid(
-  grid: HeatmapGrid,
-  team: TeamSide
-): HeatmapGrid {
-  // Stored heatmaps normalize half changes, with home defending the top goal.
-  if (team === "away") return grid
-  return {
-    ...grid,
-    density: grid.density.slice().reverse(),
-    averageX: 100 - grid.averageX,
-    averageY: 100 - grid.averageY,
-  }
-}
-
 const BLUR_KERNEL_STANDARD_DEVIATION = 1.648
 const COLOR_SCALE_SIGMA_CELLS =
   HEATMAP_BLUR_STEP_RATIO * GRID_WIDTH * BLUR_KERNEL_STANDARD_DEVIATION
@@ -414,8 +403,7 @@ export type HeatmapRenderData = {
 /** Prepare one immutable render snapshot, reusing each blur for scale and pixels. */
 export function prepareHeatmapRenderData(
   grid: HeatmapGrid,
-  comparableGrids: readonly HeatmapGrid[] = [grid],
-  team?: TeamSide
+  comparableGrids: readonly HeatmapGrid[] = [grid]
 ): HeatmapRenderData {
   const blurredByGrid = new Map<HeatmapGrid, Float64Array>()
   const scratch = new Float64Array(grid.width * grid.height)
@@ -429,8 +417,7 @@ export function prepareHeatmapRenderData(
     density: blurred
       ? normalizeHeatmapDensity(
           blurred,
-          grid.sampleCount * bounds.blurredP99CellShare,
-          team === "home"
+          grid.sampleCount * bounds.blurredP99CellShare
         )
       : new Float32Array(grid.width * grid.height),
   }
@@ -450,13 +437,12 @@ export function getHeatmapDisplayDensity(
 
 function normalizeHeatmapDensity(
   blurred: Float64Array,
-  divisor: number,
-  rotate = false
+  divisor: number
 ) {
   const density = new Float32Array(blurred.length)
   if (divisor > 0) {
     for (let index = 0; index < blurred.length; index += 1) {
-      density[rotate ? blurred.length - 1 - index : index] = Math.max(
+      density[index] = Math.max(
         0,
         Math.min(1, blurred[index] / divisor)
       )

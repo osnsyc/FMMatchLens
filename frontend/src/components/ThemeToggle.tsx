@@ -9,6 +9,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { useTheme } from "@/components/theme-provider"
+import { HoverCardHint } from "@/components/ui/hover-card"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -54,135 +55,153 @@ export function ThemeToggle() {
   useEffect(() => {
     const close = () => setMenuOpen(false)
     window.addEventListener(exploreTourCloseOverlaysEventName, close)
-    return () => window.removeEventListener(exploreTourCloseOverlaysEventName, close)
+    return () =>
+      window.removeEventListener(exploreTourCloseOverlaysEventName, close)
   }, [])
 
   return (
     <div className="inline-flex items-center gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        className="size-8 active:translate-y-px"
-        disabled={schemeLocked}
-        onClick={toggleScheme}
-        aria-label={`${t("appearance.scheme.label")}: ${currentSchemeLabel}`}
+      <HoverCardHint
+        content={`${t("appearance.scheme.label")}: ${currentSchemeLabel}`}
       >
-        <ThemeSchemeIcon />
-      </Button>
-      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              data-tour="theme-settings"
-              type="button"
-              variant="outline"
-              size="icon"
-              className="size-8 active:translate-y-px"
-              aria-label={t("appearance.open")}
-              title={t("appearance.open")}
-            />
-          }
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="size-8 active:translate-y-px"
+          disabled={schemeLocked}
+          onClick={toggleScheme}
+          aria-label={`${t("appearance.scheme.label")}: ${currentSchemeLabel}`}
         >
-          <HugeiconsIcon icon={PaletteIcon} strokeWidth={1.8} />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          data-tour="theme-popover"
-          align="end"
-          className="z-[110] w-80 p-2"
-        >
-          <div className="px-1.5 py-1 text-xs font-semibold text-foreground">
-            {t("appearance.title")}
-          </div>
-          <DropdownMenuGroup aria-label={t("appearance.preset")}>
-            <DropdownMenuLabel>{t("appearance.preset")}</DropdownMenuLabel>
-            <DropdownMenuRadioGroup
-              value={settings.presetId}
-              onValueChange={(value) => {
-                setPreset(value)
-                emitExploreTourInteraction({ id: "theme-preset-change", value })
-              }}
-            >
-              {themePresets.map((candidate) => (
-                <DropdownMenuRadioItem
-                  data-tour="theme-preset-option"
-                  key={candidate.id}
-                  value={candidate.id}
-                  closeOnClick={false}
-                  className="mb-1 min-h-14 items-start border border-transparent py-2 focus:border-border"
-                >
-                  <span
-                    className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border"
-                    style={{ background: candidate.preview.surface }}
-                    aria-hidden="true"
+          <ThemeSchemeIcon />
+        </Button>
+      </HoverCardHint>
+      <HoverCardHint content={t("appearance.open")}>
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                data-tour="theme-settings"
+                type="button"
+                variant="outline"
+                size="icon"
+                className="size-8 active:translate-y-px"
+                aria-label={t("appearance.open")}
+              />
+            }
+          >
+            <HugeiconsIcon icon={PaletteIcon} strokeWidth={1.8} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            data-tour="theme-popover"
+            align="end"
+            className="z-[110] w-80 p-2"
+          >
+            <div className="px-1.5 py-1 text-xs font-semibold text-foreground">
+              {t("appearance.title")}
+            </div>
+            <DropdownMenuGroup aria-label={t("appearance.preset")}>
+              <DropdownMenuLabel>{t("appearance.preset")}</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={settings.presetId}
+                onValueChange={(value) => {
+                  setPreset(value)
+                  emitExploreTourInteraction({
+                    id: "theme-preset-change",
+                    value,
+                  })
+                }}
+              >
+                {themePresets.map((candidate) => (
+                  <DropdownMenuRadioItem
+                    data-tour="theme-preset-option"
+                    key={candidate.id}
+                    value={candidate.id}
+                    closeOnClick={false}
+                    className="mb-1 min-h-14 items-start border border-transparent py-2 focus:border-border"
                   >
                     <span
-                      className="size-3 rounded-full"
-                      style={{ background: candidate.preview.primary }}
-                    />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block font-semibold">
-                      {t(candidate.labelKey)}
-                    </span>
-                    <span className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+                      data-theme-preview
+                      data-preset={candidate.id}
+                      data-scheme={candidate.defaultScheme}
+                      className="contents"
+                    >
                       <span
-                        className="size-2 rounded-full"
-                        style={{ background: candidate.preview.positive }}
-                      />
-                      <span
-                        className="size-2 rounded-full"
-                        style={{ background: candidate.preview.negative }}
-                      />
-                      {candidate.supportedSchemes
-                        .map((scheme) => t(`appearance.scheme.${scheme}`))
-                        .join(" / ")}
-                      {settings.presetId === candidate.id && (
-                        <span aria-hidden="true">✓</span>
-                      )}
+                        className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border"
+                        style={{ background: "var(--surface-panel)" }}
+                        aria-hidden="true"
+                      >
+                        <span
+                          className="size-3 rounded-full"
+                          style={{ background: "var(--action-primary)" }}
+                        />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block font-semibold">
+                          {t(candidate.labelKey)}
+                        </span>
+                        <span className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <span
+                            className="size-2 rounded-full"
+                            style={{ background: "var(--status-positive)" }}
+                          />
+                          <span
+                            className="size-2 rounded-full"
+                            style={{ background: "var(--status-negative)" }}
+                          />
+                          {candidate.supportedSchemes
+                            .map((scheme) => t(`appearance.scheme.${scheme}`))
+                            .join(" / ")}
+                          {settings.presetId === candidate.id && (
+                            <span aria-hidden="true">✓</span>
+                          )}
+                        </span>
+                      </span>
                     </span>
-                  </span>
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <ChoiceGroup
-            icon={<HugeiconsIcon icon={Sun03Icon} strokeWidth={2} />}
-            label={t("appearance.scheme.label")}
-            value={settings.schemePreference}
-            values={["system", "light", "dark"]}
-            translationPrefix="appearance.scheme"
-            disabled={schemeLocked}
-            onChange={(value) => setSchemePreference(value as SchemePreference)}
-          />
-          <DropdownMenuSeparator />
-          <ChoiceGroup
-            icon={<HugeiconsIcon icon={EyeIcon} strokeWidth={2} />}
-            label={t("appearance.colorVision.label")}
-            value={settings.colorVision}
-            values={["standard", "colorblind"]}
-            translationPrefix="appearance.colorVision"
-            onChange={(value) => setColorVision(value as ColorVisionMode)}
-          />
-          <DropdownMenuSeparator />
-          <ChoiceGroup
-            icon={<HugeiconsIcon icon={ContrastIcon} strokeWidth={2} />}
-            label={t("appearance.contrast.label")}
-            value={settings.contrast}
-            values={["normal", "high"]}
-            translationPrefix="appearance.contrast"
-            onChange={(value) => setContrast(value as ContrastMode)}
-          />
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={resetAppearance}
-            className="justify-center py-1.5"
-          >
-            {t("appearance.reset")}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <ChoiceGroup
+              icon={<HugeiconsIcon icon={Sun03Icon} strokeWidth={2} />}
+              label={t("appearance.scheme.label")}
+              value={settings.schemePreference}
+              values={["system", "light", "dark"]}
+              translationPrefix="appearance.scheme"
+              disabled={schemeLocked}
+              onChange={(value) =>
+                setSchemePreference(value as SchemePreference)
+              }
+            />
+            <DropdownMenuSeparator />
+            <ChoiceGroup
+              icon={<HugeiconsIcon icon={EyeIcon} strokeWidth={2} />}
+              label={t("appearance.colorVision.label")}
+              value={settings.colorVision}
+              values={["standard", "colorblind"]}
+              translationPrefix="appearance.colorVision"
+              onChange={(value) => setColorVision(value as ColorVisionMode)}
+            />
+            <DropdownMenuSeparator />
+            <ChoiceGroup
+              icon={<HugeiconsIcon icon={ContrastIcon} strokeWidth={2} />}
+              label={t("appearance.contrast.label")}
+              value={settings.contrast}
+              values={["normal", "high"]}
+              translationPrefix="appearance.contrast"
+              onChange={(value) => setContrast(value as ContrastMode)}
+            />
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={resetAppearance}
+              className="justify-center py-1.5"
+            >
+              {t("appearance.reset")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </HoverCardHint>
     </div>
   )
 }

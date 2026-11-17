@@ -153,6 +153,7 @@ function AnimatedDashboardCard({
       className={`${active ? "" : "hidden"} min-h-0 min-w-0 overflow-hidden`}
     >
       <Card
+        data-dashboard-card
         data-tactical-board={tacticalBoard || undefined}
         className="h-full min-h-0 min-w-0 overflow-hidden p-0"
       >
@@ -424,7 +425,8 @@ export function App() {
         presetId: settings.presetId,
         resolvedScheme,
         colorVision: settings.colorVision,
-        fixedTeamColors: preset.teamColors,
+        contrast: settings.contrast,
+        teamColorMode: preset.teamColorMode,
       }
     )
     const homeColor = displayColors.home
@@ -450,6 +452,7 @@ export function App() {
     sourceMatch,
     resolvedScheme,
     settings.colorVision,
+    settings.contrast,
     settings.presetId,
     preset,
   ])
@@ -886,8 +889,6 @@ export function App() {
                   allPlayers={match.players}
                   events={match.events}
                   teamColor={match.home.color}
-                  outfieldKit={kits[0]}
-                  goalkeeperKit={kits[1]}
                   pinnedPlayerId={pinnedHomePlayer?.id}
                   attackingOpponent={
                     pinnedPlayers.attackingSide === "away"
@@ -1067,8 +1068,6 @@ export function App() {
                   allPlayers={match.players}
                   events={match.events}
                   teamColor={match.away.color}
-                  outfieldKit={kits[2]}
-                  goalkeeperKit={kits[3]}
                   pinnedPlayerId={pinnedAwayPlayer?.id}
                   attackingOpponent={
                     pinnedPlayers.attackingSide === "home"

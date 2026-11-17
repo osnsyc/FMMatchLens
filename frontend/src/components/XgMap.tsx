@@ -37,7 +37,7 @@ export const XgMap = memo(function XgMap({
   )
 
   return (
-    <div className="xg-map-viewport relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-2">
+    <div className="xg-map-viewport relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-3 pb-3 pt-0">
       <div
         className="xg-map-pitch pitch-frame relative shrink-0 text-[var(--pitch-line)]"
         style={

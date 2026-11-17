@@ -16,7 +16,6 @@ type MomentumEventMapProps = {
 
 export function MomentumEventMap({ events, home, away, pitchDimensions }: MomentumEventMapProps) {
   const { t } = useTranslation()
-  const titleId = useId()
   const descriptionId = useId()
   const data = useMemo(() => buildMomentumEventMap(events), [events])
   const laneShares = useMemo(() => calculateMomentumLaneShares(data), [data])
@@ -30,16 +29,15 @@ export function MomentumEventMap({ events, home, away, pitchDimensions }: Moment
   }
 
   return (
-    <div className="flex min-h-0 flex-1 px-3 py-2">
+    <div className="flex min-h-0 flex-1 px-3 pb-3 pt-0">
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className="min-h-0 w-full flex-1"
         preserveAspectRatio="xMidYMid meet"
         role="img"
-        aria-labelledby={titleId}
+        aria-label={t("momentum.eventMap")}
         aria-describedby={descriptionId}
       >
-        <title id={titleId}>{t("momentum.eventMap")}</title>
         <desc id={descriptionId}>{t("momentum.eventMapDescription")}</desc>
         <rect width={width} height={height} fill="var(--tactical-pitch-surface)" />
         {data.cells.map((cell) => (
@@ -69,13 +67,6 @@ export function MomentumEventMap({ events, home, away, pitchDimensions }: Moment
               strokeLinejoin="round"
               paintOrder="stroke fill"
             >
-              <title>{t("momentum.eventMapCell", {
-                team: teams[cell.team].name,
-                row: cell.row + 1,
-                column: cell.column + 1,
-                count: cell.count,
-                percentage,
-              })}</title>
               <text x={x} y={y - 3} textAnchor="middle" fill="var(--text-primary)" fontSize={20} fontWeight={600} className="tabular-nums">
                 {cell.count}
               </text>
@@ -94,7 +85,6 @@ export function MomentumEventMap({ events, home, away, pitchDimensions }: Moment
             const tip = x + direction * 110
             return (
               <g key={`attack-focus-${team}-${lane.row}`}>
-                <title>{`${teams[team].name} · ${t("dataMap.attackFocus")} · ${lane.percentage}%`}</title>
                 <path
                   d={`M ${x - direction * 110} ${y} H ${x - direction * 28} M ${x + direction * 28} ${y} H ${tip} M ${tip - direction * 8} ${y - 6} L ${tip} ${y} L ${tip - direction * 8} ${y + 6}`}
                   fill="none"

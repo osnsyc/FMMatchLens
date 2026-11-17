@@ -94,6 +94,7 @@ export type HeatmapQuery = {
 export type HeatmapGrid = {
   width: 40
   height: 60
+  /** Team-relative display coordinates: own goal below, attack upwards. */
   density: Float32Array
   sampleCount: number
   averageX: number

@@ -67,6 +67,7 @@
 @theme inline {
   --font-heading: var(--font-preset-heading);
   --font-sans: var(--font-preset-sans);
+  --font-mono: var(--font-preset-data);
 
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -309,6 +310,10 @@
     letter-spacing: -0.01em;
   }
 
+  [data-dashboard-card] [data-slot="card-title"]::before {
+    display: none;
+  }
+
   [data-slot="card-title"]::before {
     content: "";
 
@@ -350,6 +355,12 @@
       0 0 24px rgb(from var(--action-primary) r g b / 10%);
   }
 
+  [data-slot="tooltip-content"] {
+    background: var(--tooltip-surface);
+    color: var(--tooltip-foreground);
+    border-color: var(--tooltip-border);
+  }
+
   /* =========================================================
    FM26 Tabs / NativeTabs / Menubar
    ========================================================= */
@@ -370,7 +381,7 @@
     padding: 2px;
 
     border: 1px solid var(--control-border);
-    border-radius: calc(var(--radius) * 0.65);
+    border-radius: var(--radius-control);
 
     background:
       linear-gradient(180deg,
@@ -447,39 +458,6 @@
   }
 
 
-  /*
- * Small FM26 highlight line at the bottom of active tab.
- */
-  [data-slot="tabs-trigger"][data-state="active"]::after,
-  [data-slot="tabs-trigger"][data-active]::after,
-  [role="tab"][data-state="active"]::after,
-  [role="tab"][aria-selected="true"]::after {
-    content: "";
-
-    position: absolute;
-
-    left: 28%;
-    right: 28%;
-    bottom: -1px;
-
-    height: 1px;
-
-    border-radius: 999px;
-
-    background:
-      linear-gradient(90deg,
-        transparent,
-        var(--viz-series-3),
-        var(--action-primary),
-        transparent);
-
-    box-shadow:
-      0 0 5px rgb(from var(--viz-series-3) r g b / 35%);
-
-    pointer-events: none;
-  }
-
-
   /* Keyboard focus */
   [data-slot="tabs-trigger"]:focus-visible,
   [role="tab"]:focus-visible {
@@ -517,7 +495,7 @@
     padding: 2px;
 
     border: 1px solid var(--control-border);
-    border-radius: calc(var(--radius) * 0.65);
+    border-radius: var(--radius-control);
 
     background: var(--popover);
 
@@ -679,7 +657,7 @@
     margin: 0;
 
     border: 1px solid transparent;
-    border-radius: calc(var(--radius) * 0.45);
+    border-radius: var(--radius-inset);
 
     color: var(--muted-foreground);
 
@@ -789,8 +767,7 @@
     background: rgb(from var(--action-primary) r g b / 10%);
   }
 
-  /* Tactical pitch uses both container axes, so changing a panel split never
-     lets the fixed 148:100 canvas overflow behind the card clipping boundary. */
+  /* Fit the actual pitch dimensions to both axes of the available viewport. */
   .tactical-pitch-viewport {
     container-type: size;
   }
@@ -830,14 +807,27 @@
     width: 100%;
     max-width: 100%;
     aspect-ratio: var(--pitch-aspect-ratio, 1.5441);
-    --pitch-frame-aspect: var(--pitch-aspect-ratio, 1.5441);
   }
 
   @supports (width: 1cqw) {
     .tactical-pitch {
-      width: min(100cqw, calc(100cqh * var(--pitch-aspect-ratio, 1.5441)));
-      height: min(100cqh, calc(100cqw / var(--pitch-aspect-ratio, 1.5441)));
+      /* Reserve the renderer overscan once, then fit the inner pitch on both axes. */
+      --pitch-gutter: var(--tactical-pitch-gutter, 16px);
+      box-sizing: border-box;
+      aspect-ratio: auto;
+      padding: var(--pitch-gutter);
+      width: min(100cqw, calc(max(0px, 100cqh - 2 * var(--pitch-gutter)) * var(--pitch-aspect-ratio, 1.5441) + 2 * var(--pitch-gutter)));
+      height: min(100cqh, calc(max(0px, 100cqw - 2 * var(--pitch-gutter)) / var(--pitch-aspect-ratio, 1.5441) + 2 * var(--pitch-gutter)));
     }
+  }
+
+  .tactical-header-controls [data-slot="menubar-trigger"] {
+    box-shadow: none;
+  }
+
+  .tactical-header-controls [data-slot="menubar-trigger"]:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
   }
 
   /* =======================================================
@@ -996,9 +986,9 @@
     cursor: pointer;
   }
 
-  .font-fm-universe {
-    font-family: "FMUniverse", var(--font-sans);
-    font-weight: 400;
+  .font-scoreboard {
+    font-family: var(--font-scoreboard);
+    font-weight: 700;
   }
 
   .xg-map-viewport {

@@ -5,16 +5,5 @@ export const optaInspiredPreset: ThemePreset = {
   labelKey: "appearance.presets.opta",
   supportedSchemes: ["light", "dark"],
   defaultScheme: "dark",
-  teamColors: {
-    mode: "fixed",
-    home: "#6327c6",
-    away: "#dc3a44",
-    dark: { home: "#9b73ed", away: "#dc3a44" },
-  },
-  preview: {
-    surface: "#1d0a30",
-    primary: "#fd4890",
-    positive: "#38d6a3",
-    negative: "#ff6b7a",
-  },
+  teamColorMode: "fixed",
 }

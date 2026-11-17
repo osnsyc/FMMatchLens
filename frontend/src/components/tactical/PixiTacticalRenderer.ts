@@ -1,3 +1,5 @@
+import { readThemeFont } from "@/theme/readThemeFont"
+import { readThemeLength } from "@/theme/readThemeLength"
 import { TacticalRenderScheduler } from "@/components/tactical/shared/runtime/tacticalRenderScheduler"
 import type { TacticalMotionFrame } from "@/components/tactical/shared/core/types"
 import { PitchControlRenderer } from "@/components/tactical/shared/renderer/PitchControlRenderer"
@@ -49,6 +51,10 @@ export type TacticalHit = {
 }
 
 type ResolvedAppearance = {
+  fontFamily: string[]
+  contourColor: number
+  contourOpacity: number
+  contourWidth: number
   homeColor: number
   awayColor: number
   background: number
@@ -175,7 +181,10 @@ export class PixiTacticalRenderer {
       width,
       height,
       this.resolvedAppearance.homeColor,
-      this.resolvedAppearance.awayColor
+      this.resolvedAppearance.awayColor,
+      this.resolvedAppearance.contourColor,
+      this.resolvedAppearance.contourOpacity,
+      this.resolvedAppearance.contourWidth
     )
     this.motionRenderer = new MotionRenderer(
       width,
@@ -327,7 +336,10 @@ export class PixiTacticalRenderer {
     this.motionRenderer.updateAppearance(this.playbackAppearance())
     this.pitchControlRenderer.updateAppearance(
       this.resolvedAppearance.homeColor,
-      this.resolvedAppearance.awayColor
+      this.resolvedAppearance.awayColor,
+      this.resolvedAppearance.contourColor,
+      this.resolvedAppearance.contourOpacity,
+      this.resolvedAppearance.contourWidth
     )
     this.renderOnce()
   }
@@ -608,7 +620,7 @@ export class PixiTacticalRenderer {
       record.label = new BitmapText({
         text: value,
         style: {
-          fontFamily: "Arial",
+          fontFamily: this.resolvedAppearance.fontFamily,
           fontSize,
           fontWeight: "bold",
           fill: color,
@@ -618,6 +630,7 @@ export class PixiTacticalRenderer {
       record.label.anchor.set(0.5)
       record.container.addChild(record.label)
     } else {
+      record.label.style.fontFamily = this.resolvedAppearance.fontFamily
       if (record.labelValue !== value) record.label.text = value
       if (record.labelColor !== color) record.label.style.fill = color
       if (record.labelFontSize !== fontSize)
@@ -919,7 +932,15 @@ export class PixiTacticalRenderer {
   private resolveAppearance(
     appearance: TacticalAppearance
   ): ResolvedAppearance {
+    const style = getComputedStyle(document.documentElement)
     return {
+      fontFamily: readThemeFont(appearance.tokens.pitchLabelFont),
+      contourColor: this.resolveCssColor(
+        appearance.tokens.pitchControlContour,
+        0xffffff
+      ),
+      contourOpacity: Number(style.getPropertyValue("--pitch-control-contour-opacity")),
+      contourWidth: readThemeLength("pitch-control-contour-width", 1),
       homeColor: this.resolveCssColor(appearance.homeColor, 0x0072b2),
       awayColor: this.resolveCssColor(appearance.awayColor, 0xd55e00),
       background: this.resolveCssColor(
@@ -941,6 +962,7 @@ export class PixiTacticalRenderer {
 
   private playbackAppearance() {
     return {
+      fontFamily: this.resolvedAppearance.fontFamily,
       home: this.resolvedAppearance.homeColor,
       away: this.resolvedAppearance.awayColor,
       homeGoalkeeperColor: this.appearance.homeGoalkeeperColor,

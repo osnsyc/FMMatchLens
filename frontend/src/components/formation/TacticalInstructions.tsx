@@ -59,15 +59,10 @@ export function TacticalInstructionCard({
       <HoverCardContent
         side="top"
         sideOffset={8}
-        className="tactical-instruction-preview w-96 max-w-[calc(100vw-2rem)] border border-border bg-popover p-3 text-popover-foreground shadow-lg ring-0"
+        className="tactical-instruction-preview w-max max-w-[calc(100vw-2rem)] overflow-x-auto border border-border bg-popover p-2 text-popover-foreground shadow-lg ring-0"
       >
         <div className="flex flex-col items-center gap-1 text-center">
-          <span className="font-semibold">{t(instruction.groupKey)}</span>
-          {instruction.state !== "defaultInstruction" && (
-            <span className="text-[10px] text-muted-foreground">
-              {t(`teamTactics.${instruction.state}`)}
-            </span>
-          )}
+          <span className="whitespace-nowrap font-semibold">{t(instruction.groupKey)}</span>
         </div>
         <div className="tactical-instruction-choices">
           {instruction.choices.map((choice, index) => (
@@ -78,11 +73,6 @@ export function TacticalInstructionCard({
             >
               <TacticalIcon name={choice.icon} />
               <span className="font-medium">{t(choice.labelKey)}</span>
-              {choice.policy !== undefined && (
-                <span className="text-[9px] opacity-70">
-                  {t(`teamTactics.policyStates.${choice.policy}`)}
-                </span>
-              )}
             </div>
           ))}
         </div>

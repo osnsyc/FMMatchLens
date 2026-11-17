@@ -9,6 +9,7 @@ import {
   useLiveTacticalMotion,
 } from "@/components/tactical/live/hooks/useLiveTacticalMotion"
 import { useEffect, useRef, useState } from "react"
+import { loadThemeFont } from "@/theme/readThemeFont"
 
 import {
   PixiTacticalRenderer,
@@ -147,6 +148,8 @@ export function PixiTactical({
     void (async () => {
       let renderer: PixiTacticalRenderer | undefined
       try {
+        await loadThemeFont(latestRef.current.appearance.tokens.pitchLabelFont)
+        if (disposed) return
         renderer = await PixiTacticalRenderer.create(
           host,
           fieldWidth,
@@ -209,7 +212,13 @@ export function PixiTactical({
   }, [players])
 
   useEffect(() => {
-    rendererRef.current?.updateAppearance(appearance)
+    let disposed = false
+    void loadThemeFont(appearance.tokens.pitchLabelFont).then(() => {
+      if (!disposed) rendererRef.current?.updateAppearance(appearance)
+    })
+    return () => {
+      disposed = true
+    }
   }, [appearance])
 
   useEffect(() => {

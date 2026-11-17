@@ -9,7 +9,7 @@ import {
   parseAppearance,
 } from "../../src/theme/storage"
 import type { ThemePreset } from "../../src/theme/types"
-import { selectTeamDisplayColors, teamColorCacheKey } from "../../src/lib/teamColors"
+import { teamColorCacheKey } from "../../src/lib/teamColors"
 
 const fm = getThemePreset("fm")
 const opta = getThemePreset("opta-inspired")
@@ -77,66 +77,33 @@ describe("theme registry", () => {
     expect(getThemePreset("opta-inspired").supportedSchemes).toEqual(["light", "dark"])
     expect(getThemePreset("sofascore-inspired").supportedSchemes).toEqual(["light", "dark"])
     expect(getThemePreset("sofascore-inspired").defaultScheme).toBe("light")
-    expect(getThemePreset("sofascore-inspired").teamColors).toEqual({
-      mode: "fixed",
-      home: "#0bb32a",
-      away: "#374df5",
-      dark: { home: "#0bb32a", away: "#8794f9" },
-    })
+
     expect(getThemePreset("wyscout-inspired").supportedSchemes).toEqual(["light"])
-    expect(getThemePreset("opta-inspired").teamColors).toEqual({
-      mode: "fixed",
-      home: "#6327c6",
-      away: "#dc3a44",
-      dark: { home: "#9b73ed", away: "#dc3a44" },
-    })
-    expect(getThemePreset("wyscout-inspired").teamColors).toEqual({
-      mode: "fixed",
-      home: "#e05a35",
-      away: "#26648c",
-    })
+    expect(fm.teamColorMode).toBe("source")
+    for (const preset of [opta, sofascore, wyscout]) expect(preset.teamColorMode).toBe("fixed")
+
   })
 
   it("rejects duplicate ids", () => {
     const preset: ThemePreset = {
       ...fm,
-      preview: { ...fm.preview },
     }
     expect(() => createThemeRegistry([preset, preset])).toThrow(/Duplicate/)
   })
 })
 
 describe("team color cache", () => {
-  it.each([
-    ["light", "#6327c6"],
-    ["dark", "#9b73ed"],
-  ] as const)("uses Opta's %s palette", (resolvedScheme, home) => {
-    expect(selectTeamDisplayColors(undefined, undefined, {
-      presetId: opta.id,
-      resolvedScheme,
-      colorVision: "standard",
-      fixedTeamColors: opta.teamColors,
-    })).toEqual({ home, away: "#dc3a44" })
-  })
-
-  it("uses preset-fixed colors instead of club metadata", () => {
-    expect(selectTeamDisplayColors(
-      { backgroundColour: 0x112233 },
-      { backgroundColour: 0xfefefe },
-      {
-        presetId: "opta-inspired",
-        resolvedScheme: "light",
-        colorVision: "standard",
-        fixedTeamColors: { home: "#6327c6", away: "#dc3a44" },
-      }
-    )).toEqual({ home: "#6327c6", away: "#dc3a44" })
-  })
-
-  it("keys derived colors by preset, resolved scheme and color vision", () => {
+  it("keys derived colors by every appearance dimension", () => {
     expect(teamColorCacheKey({
       presetId: "opta-inspired",
       resolvedScheme: "dark",
       colorVision: "colorblind",
-    })).toBe("opta-inspired:dark:colorblind")
+    })).toBe("opta-inspired:dark:colorblind:normal")
+    expect(teamColorCacheKey({
+      presetId: "opta-inspired",
+      resolvedScheme: "dark",
+      colorVision: "colorblind",
+      contrast: "high",
+    })).toBe("opta-inspired:dark:colorblind:high")
   })
 })

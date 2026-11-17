@@ -98,7 +98,7 @@ export function FormationFocus({
       data-side={side}
       data-player-mode={!!selected}
     >
-      <CardHeader className="shrink-0 grid-cols-[1fr_auto] items-center border-b px-4 py-2">
+      <CardHeader className="shrink-0 grid-cols-[1fr_auto] items-center px-4 py-2">
         <CardTitle className="flex min-w-0 items-center gap-2 text-sm font-semibold">
           {t("panels.formation")}
           {selected && (
@@ -345,7 +345,7 @@ function FocusRow({
               <PitchMarkings
                 dimensions={match.pitchDimensions}
                 orientation="vertical"
-                lineClassName="text-border"
+                lineClassName="text-[var(--pitch-line)]"
               />
               {positions.map((position, index) => {
                 const point = points[index]

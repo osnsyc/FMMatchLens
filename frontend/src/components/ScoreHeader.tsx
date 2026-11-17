@@ -37,7 +37,7 @@ export function ScoreHeader({
         <div className="flex min-w-0 items-center gap-2.5 justify-self-start">
           <BrandIcon className="size-9 shrink-0 text-primary" />
           <div className="flex min-w-0 items-baseline gap-1.5">
-            <span className="font-fm-universe truncate text-lg tracking-tight">
+            <span className="font-scoreboard truncate text-lg tracking-tight" style={{ fontWeight: "var(--font-brand-weight)" }}>
               FMMatchLens
             </span>
             <span className="shrink-0 text-[9px] font-medium text-muted-foreground tabular-nums">
@@ -142,7 +142,7 @@ function TeamName({
 }) {
   const label = (
     <span
-      className="font-fm-universe block w-full truncate text-base leading-10"
+      className="font-scoreboard font-bold block w-full truncate text-base leading-10"
       style={{ color, textAlign: align }}
       title={name}
     >

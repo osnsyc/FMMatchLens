@@ -6,6 +6,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react"
 import { motion } from "framer-motion"
 import { useTranslation } from "react-i18next"
+import { Pie, PieChart, ResponsiveContainer } from "recharts"
 
 import { getHeatmap, prepareHeatmapRenderData } from "@/api/heatmap"
 import {
@@ -336,8 +337,8 @@ function PlayerHeatmap({
       phase: "all",
       range: "full",
     })
-    return { grid, renderData: prepareHeatmapRenderData(grid, [grid], player.team) }
-  }, [heatmaps, player.id, player.team])
+    return { grid, renderData: prepareHeatmapRenderData(grid) }
+  }, [heatmaps, player.id])
 
   useEffect(() => {
     const host = hostRef.current
@@ -575,13 +576,11 @@ function MovementAnalysisCard({
   const { t } = useTranslation()
   const total = movement.zoneSamples.reduce((sum, samples) => sum + samples, 0)
   const shares = movement.zoneSamples.map((samples) => total > 0 ? samples / total * 100 : 0)
-  const colors = ["var(--viz-series-1)", "var(--viz-series-2)", "var(--viz-series-3)", "var(--viz-series-4)"]
-  let accumulatedShare = 0
-  const segments = shares.map((share, index) => {
-    const offset = accumulatedShare
-    accumulatedShare += share
-    return { color: colors[index], offset, share }
-  })
+  const colors = [7, 5, 3, 1].map((tier) => `var(--player-status-tier-${tier})`)
+  const segments = movement.zoneSamples
+    .map((value, index) => ({ value, fill: colors[index] }))
+    .filter((segment) => segment.value > 0)
+  const chartData = total > 0 ? segments : [{ value: 1, fill: "var(--muted)" }]
 
   return (
     <section className="flex shrink-0 flex-col overflow-hidden rounded-md border border-border/70 bg-muted/10 p-2">
@@ -600,30 +599,24 @@ function MovementAnalysisCard({
             aria-label={t("playerDetails.movement.distribution")}
             className="relative aspect-square h-4/5 shrink-0"
           >
-            <svg className="size-full -rotate-90" viewBox="0 0 36 36" aria-hidden="true">
-              <circle
-                cx="18"
-                cy="18"
-                r="14"
-                fill="none"
-                stroke="var(--muted)"
-                strokeWidth="8"
-              />
-              {total > 0 && segments.map((segment, index) => (
-                <circle
-                  key={index}
-                  cx="18"
-                  cy="18"
-                  r="14"
-                  pathLength="100"
-                  fill="none"
-                  stroke={segment.color}
-                  strokeWidth="8"
-                  strokeDasharray={`${segment.share} ${100 - segment.share}`}
-                  strokeDashoffset={-segment.offset}
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+              <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }} accessibilityLayer={false}>
+                <Pie
+                  data={chartData}
+                  dataKey="value"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius="56%"
+                  outerRadius="100%"
+                  startAngle={90}
+                  endAngle={-270}
+                  paddingAngle={2.4}
+                  minAngle={1}
+                  stroke="none"
+                  isAnimationActive={false}
                 />
-              ))}
-            </svg>
+              </PieChart>
+            </ResponsiveContainer>
             <span className="absolute inset-[29%] flex items-center justify-center rounded-full bg-card text-[8px] font-semibold text-muted-foreground ring-1 ring-border/40">
               {t("playerDetails.movement.speed")}
             </span>
