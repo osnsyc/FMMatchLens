@@ -12,6 +12,10 @@ internal static class GamePluginBuildCatalog
     private static readonly GamePluginBuild[] SupportedBuilds =
     [
         new(
+            "steam-26620374",
+            "d12202dd01c3911d4c4e55e778f37b2251ffb10f9cf8cecc3b9ec08ece622c6b",
+            0x47B46F0),
+        new(
             "steam-26577676",
             "8c6971ce0b1c8afe6529ea3f46205a5175aea988a97d7421a980da42e23fe340",
             0x4764AC0),
