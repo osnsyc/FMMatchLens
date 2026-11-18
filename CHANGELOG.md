@@ -3,6 +3,26 @@
 
 This file records the project's important changes. Version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [0.7.4] - 2026-11-18
+
+### Added
+
+- Added a global settings dialog and player-of-the-match display.
+- Added live condition, sharpness, and morale icons, with archive format 2.12 and read compatibility with formats 2.1–2.11.
+- Added pass-map position modes, full-time pass-map and lineup overviews, and game-aware tactical information visibility.
+
+### Changed
+
+- Unified theme configuration and refreshed dashboard visuals, chart styling, and tactical board presentation.
+- Unified heatmap rendering and reused grid-space blur results to reduce rendering work.
+- Improved FM27 rating breakdown calculations and updated the observed rating weights.
+
+### Fixed
+
+- Updated native memory offsets, player sharpness, rating inputs, and the verified match-hook fingerprint and RVA for FM27 27.1.0 (Steam build `26620374`); also registered Steam build `26577676`.
+- Distinguished interrupted match capture in the API and improved hook installation diagnostics, stopping retries after installation failures.
+- Corrected heatmap orientation.
+
 ## [0.7.3] - 2026-11-11
 
 ### Fixed
