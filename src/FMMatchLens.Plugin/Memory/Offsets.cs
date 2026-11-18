@@ -364,8 +364,8 @@ internal static class Offsets
         public const int Stats = 0x1E20;
         // Match UI inputs, distinct from ActualPlayer profile fields.
         public const int Condition = 0x2214; // int32; UI integer percentage = raw / 10000
-        public const int Sharpness = 0x1230; // int16; UI integer percentage = raw / 100 (truncate)
-        public const int Morale = 0x123B; // int8; UI clamps signed value to 1..20
+        public const int Sharpness = 0x1228; // int16; verified UI Sharpness getter, raw / 100 (truncate)
+        public const int Morale = 0x123B; // int8; verified UI getter clamps signed value to 1..20
         public const int RatingEventsBegin = 0x2048;
         public const int RatingEventsEnd = 0x2050;
         public const int CategoryHistoryBegin = 0x2060;
@@ -389,7 +389,7 @@ internal static class Offsets
         public const int EventAdjustmentCandidate = 0x122;
         public const int SpecialCondition = 0x729;
         public const int EventCounterCandidate = 0x72A;
-        public const int MatchBackgroundInput = 0x34C4;
+        public const int MatchBackgroundInput = 0x34CC;
     }
 
     public static class RatingEvent
@@ -937,7 +937,7 @@ internal static class Offsets
         public const int ShotsOutsideBox = 0xF7;
         public const int Sprints = 0xF9;
 
-        // Inclusive of the highest-address player stat above (a byte at +0xF5).
+        // Inclusive of the highest-address player stat above (a byte at +0xF9).
         public const int RatingInputReadableSize = 0xFA;
     }
 }
