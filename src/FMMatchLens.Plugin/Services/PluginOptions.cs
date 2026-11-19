@@ -15,11 +15,7 @@ internal sealed class PluginOptions
         GraphicsPath = config.Bind(
             "Graphics",
             "GraphicsPath",
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                "Sports Interactive",
-                "Football Manager 26",
-                "graphics"),
+            DefaultGraphicsPath(),
             "Root directory containing Football Manager graphics packs and their config.xml files.");
 
         ArchiveCompression = config.Bind(
@@ -46,6 +42,21 @@ internal sealed class PluginOptions
             8,
             "Bounded archive writer queue capacity. A sustained overflow stops the current archive explicitly.");
     }
+
+    // macOS keeps FM user data under ~/Library/Application Support rather than Documents.
+    private static string DefaultGraphicsPath() => OperatingSystem.IsMacOS()
+        ? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            "Library",
+            "Application Support",
+            "Sports Interactive",
+            "Football Manager 27",
+            "graphics")
+        : Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            "Sports Interactive",
+            "Football Manager 26",
+            "graphics");
 
     public ConfigEntry<string> LogMode { get; }
 

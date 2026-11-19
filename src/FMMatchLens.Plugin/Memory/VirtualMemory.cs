@@ -53,20 +53,33 @@ internal static class VirtualMemory
         if (scope is not null && scope.TryFind(start, out var cached))
             return cached.Readable && end <= cached.End;
 
+        if (!TryQueryRegion(address, out var regionStart, out var regionEnd, out var readable))
+            return false;
+        if (regionEnd < regionStart || start < regionStart || start >= regionEnd)
+            return false;
+        scope?.Remember(new QueriedRegion(regionStart, regionEnd, readable));
+        return readable && end <= regionEnd;
+    }
+
+    private static bool TryQueryRegion(nint address, out ulong regionStart, out ulong regionEnd, out bool readable)
+    {
+        if (MacNative.IsMacOS)
+            return MacNative.TryQueryRegion(address, out regionStart, out regionEnd, out readable);
+
+        regionStart = 0;
+        regionEnd = 0;
+        readable = false;
         var queryResult = VirtualQuery(address, out var info, (nuint)Marshal.SizeOf<MemoryBasicInformation>());
         if (queryResult == 0)
         {
             return false;
         }
 
-        var regionStart = (ulong)info.BaseAddress;
-        var regionEnd = regionStart + (ulong)info.RegionSize;
-        var readable = info.State == MemCommit &&
-                       (info.Protect & (PageNoAccess | PageGuard)) == 0;
-        if (regionEnd < regionStart || start < regionStart || start >= regionEnd)
-            return false;
-        scope?.Remember(new QueriedRegion(regionStart, regionEnd, readable));
-        return readable && end <= regionEnd;
+        regionStart = (ulong)info.BaseAddress;
+        regionEnd = regionStart + (ulong)info.RegionSize;
+        readable = info.State == MemCommit &&
+                   (info.Protect & (PageNoAccess | PageGuard)) == 0;
+        return true;
     }
 
     internal readonly record struct QueriedRegion(ulong Start, ulong End, bool Readable);
