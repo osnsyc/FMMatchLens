@@ -12,6 +12,10 @@ internal static class GamePluginBuildCatalog
     private static readonly GamePluginBuild[] SupportedBuilds =
     [
         new(
+            "xgp-27.1.0-1117",
+            "e499d2bddbe90568eae0b86fa39f64ec0b13f96ae5ddd0c94ffb7fc0ba861920",
+            0x043831C0),
+        new(
             "steam-26620374",
             "d12202dd01c3911d4c4e55e778f37b2251ffb10f9cf8cecc3b9ec08ece622c6b",
             0x47B46F0),
@@ -87,48 +91,53 @@ internal static class GamePluginBuildCatalog
         // Scan the loaded executable sections, not on-disk bytes or data tables.
         // Overlap chunks so a signature crossing a read boundary is still found.
         var buffer = new byte[1024 * 1024];
-        var matchRva = -1;
-        foreach (var section in image.PEHeaders.SectionHeaders)
+        foreach (var signature in GameMatchTickSignature.All)
         {
-            if ((section.SectionCharacteristics & SectionCharacteristics.MemExecute) == 0)
-                continue;
-            var start = section.VirtualAddress;
-            var size = section.VirtualSize;
-            if (start < 0 || size < 0 || (long)start + size > header.SizeOfImage)
+            var matchRva = -1;
+            foreach (var section in image.PEHeaders.SectionHeaders)
             {
-                failure = "invalid executable section bounds";
+                if ((section.SectionCharacteristics & SectionCharacteristics.MemExecute) == 0)
+                    continue;
+                var start = section.VirtualAddress;
+                var size = section.VirtualSize;
+                if (start < 0 || size < 0 || (long)start + size > header.SizeOfImage)
+                {
+                    failure = "invalid executable section bounds";
+                    return false;
+                }
+
+                for (var offset = 0; size - offset >= signature.Length;)
+                {
+                    var count = Math.Min(buffer.Length, size - offset);
+                    if (!ReadProcessMemory(GetCurrentProcess(), moduleHandle + start + offset,
+                            buffer, (nuint)count, out var read) || read != (nuint)count)
+                    {
+                        failure = "unable to read an executable section for AOB scanning";
+                        return false;
+                    }
+
+                    if (!signature.Scan(buffer.AsSpan(0, count), start + offset, ref matchRva))
+                    {
+                        failure = "GAME_MATCH entry AOB matched multiple addresses";
+                        return false;
+                    }
+                    offset += count - signature.Length + 1;
+                }
+            }
+
+            if (matchRva < 0) continue;
+            if (!IsFunctionEntry(moduleHandle, matchRva))
+            {
+                failure = $"AOB match RVA 0x{matchRva:X} is not a function entry";
                 return false;
             }
 
-            for (var offset = 0; size - offset >= GameMatchTickSignature.Length;)
-            {
-                var count = Math.Min(buffer.Length, size - offset);
-                if (!ReadProcessMemory(GetCurrentProcess(), moduleHandle + start + offset,
-                        buffer, (nuint)count, out var read) || read != (nuint)count)
-                {
-                    failure = "unable to read an executable section for AOB scanning";
-                    return false;
-                }
-
-                if (!GameMatchTickSignature.Scan(buffer.AsSpan(0, count), start + offset, ref matchRva))
-                {
-                    failure = "GAME_MATCH entry AOB matched multiple addresses";
-                    return false;
-                }
-                offset += count - GameMatchTickSignature.Length + 1;
-            }
+            build = new GamePluginBuild($"AOB fallback ({signature.Name})", sha256, matchRva);
+            failure = string.Empty;
+            return true;
         }
 
-        if (matchRva < 0) return false;
-        if (!IsFunctionEntry(moduleHandle, matchRva))
-        {
-            failure = $"AOB match RVA 0x{matchRva:X} is not a function entry";
-            return false;
-        }
-
-        build = new GamePluginBuild("AOB fallback", sha256, matchRva);
-        failure = string.Empty;
-        return true;
+        return false;
     }
 
     // A game update can move the hook target. Detouring an address inside a
