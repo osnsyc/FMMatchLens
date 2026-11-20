@@ -42,6 +42,7 @@ export class PitchControlRenderer {
     this.container.visible = false
   }
   setEnabled(enabled: boolean) {
+    if (this.enabled === enabled) return
     this.enabled = enabled
     if (enabled && this.frame) this.renderFrame(this.frame)
     else this.container.visible = false

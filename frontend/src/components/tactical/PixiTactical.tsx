@@ -29,6 +29,7 @@ import type {
 
 type PixiTacticalProps = {
   pitchControlEnabled?: boolean
+  convexHullEnabled?: boolean
   liveMode?: boolean
   isPanelActive?: boolean
   liveMotionSource?: LiveMotionSource
@@ -48,6 +49,7 @@ type PixiTacticalProps = {
 
 export function PixiTactical({
   pitchControlEnabled = false,
+  convexHullEnabled = false,
   liveMode = false,
   isPanelActive = true,
   liveMotionSource,
@@ -84,6 +86,9 @@ export function PixiTactical({
   useEffect(() => {
     renderer?.setPitchControlEnabled(pitchControlEnabled)
   }, [renderer, pitchControlEnabled])
+  useEffect(() => {
+    renderer?.setConvexHullEnabled(convexHullEnabled)
+  }, [renderer, convexHullEnabled])
   const hostRef = useRef<HTMLDivElement | null>(null)
   const rendererRef = useRef<PixiTacticalRenderer | null>(null)
   const latestRef = useRef({

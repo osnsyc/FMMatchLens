@@ -142,6 +142,7 @@ export const TacticalBoard = memo(function TacticalBoard({
   const motionAvailable = isLiveSource || replayMotionSource != null
   const liveMode = mode === "liveMotion" && motionAvailable
   const [pitchControlEnabled, setPitchControlEnabled] = useState(false)
+  const [convexHullEnabled, setConvexHullEnabled] = useState(false)
   const [showNumbers, setShowNumbers] = useState(true)
   const [selectedShotId, setSelectedShotId] = useState<string | null>(null)
   const [selectedMetrics, setSelectedMetrics] = useStoredPreference(
@@ -381,6 +382,18 @@ export const TacticalBoard = memo(function TacticalBoard({
           </Button>
         )}
         {liveMode && (
+          <Button
+            type="button"
+            variant="control"
+            size="sm"
+            aria-pressed={convexHullEnabled}
+            className="shrink-0 px-1.5 text-[10px]"
+            onClick={() => setConvexHullEnabled((current) => !current)}
+          >
+            {t("dataMap.convexHull.label")}
+          </Button>
+        )}
+        {liveMode && (
           <div className="flex shrink-0 items-center gap-2">
             <span role="status" className="text-[10px] text-muted-foreground">
               {t(`dataMap.liveMotion.status.${liveStatus}`)}
@@ -579,6 +592,7 @@ export const TacticalBoard = memo(function TacticalBoard({
                 <PixiTactical
                   liveMode={liveMode}
                   pitchControlEnabled={pitchControlEnabled}
+                  convexHullEnabled={convexHullEnabled}
                   liveMotionSource={liveMotionSource}
                   replayMotionSource={replayMotionSource}
                   isPanelActive={isPanelActive}

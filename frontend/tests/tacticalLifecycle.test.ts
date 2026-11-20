@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import { Container, Graphics, Sprite, Texture } from "pixi.js"
 import { MotionRenderer } from "@/components/tactical/shared/renderer/MotionRenderer"
 import { PixiTacticalRenderer } from "@/components/tactical/PixiTacticalRenderer"
+import type { TacticalPlayback } from "@/components/tactical/playback/core/types"
 
 function motionRenderer() {
   return new MotionRenderer(100, 100, Texture.EMPTY, {
@@ -135,6 +136,93 @@ describe("motion renderer resource lifecycle with real Pixi objects", () => {
     } finally {
       renderer.destroy()
     }
+  })
+})
+
+describe("parallel live overlays", () => {
+  it("keeps independent toggles and shares live, playback, suspension and cleanup behavior", () => {
+    const layer = () => ({
+      setEnabled: vi.fn(),
+      renderFrame: vi.fn(),
+      clear: vi.fn(),
+    })
+    const pitchControl = layer()
+    const convexHull = layer()
+    const playback = {
+      active: false,
+      updatePlayback: (value: TacticalPlayback | null) => {
+        playback.active = value != null
+        return true
+      },
+    }
+    // Exercise compositor lifecycle methods without a GPU or live source.
+    const renderer: PixiTacticalRenderer = Object.assign(
+      Object.create(PixiTacticalRenderer.prototype),
+      {
+        liveMode: false,
+        panelActive: true,
+        pitchControlEnabled: false,
+        convexHullEnabled: false,
+        pitchControlRenderer: pitchControl,
+        convexHullRenderer: convexHull,
+        playbackRenderer: playback,
+        motionRenderer: {
+          container: { visible: false },
+          clear: vi.fn(),
+          renderFrame: vi.fn(),
+        },
+        markerReveals: new Map(),
+        scheduler: {
+          removeTask: vi.fn(),
+          suspend: vi.fn(),
+          invalidate: vi.fn(),
+        },
+        setBaseLayersVisible: vi.fn(),
+        scheduleAnimationFrame: vi.fn(),
+      }
+    )
+    const expectEnabled = (pitch: boolean, hull: boolean) => {
+      expect(pitchControl.setEnabled).toHaveBeenLastCalledWith(pitch)
+      expect(convexHull.setEnabled).toHaveBeenLastCalledWith(hull)
+    }
+    renderer.setPitchControlEnabled(true)
+    renderer.setConvexHullEnabled(true)
+    expectEnabled(false, false)
+    renderer.setLiveMode(true)
+    expectEnabled(true, true)
+    renderer.setPitchControlEnabled(false)
+    expectEnabled(false, true)
+    renderer.setPitchControlEnabled(true)
+    renderer.updatePlayback({
+      id: "test",
+      team: "home",
+      range: { startTick: 0, endTick: 0 },
+      frames: [{ tick: 0, players: [] }],
+      overlays: [],
+    })
+    expectEnabled(false, false)
+    renderer.setConvexHullEnabled(false)
+    renderer.setConvexHullEnabled(true)
+    expectEnabled(false, false)
+    renderer.updatePlayback(null)
+    expectEnabled(true, true)
+    const frame = { tick: 1, players: [] }
+    renderer.renderMotionFrame(frame)
+    expect(pitchControl.renderFrame).toHaveBeenLastCalledWith(frame)
+    expect(convexHull.renderFrame).toHaveBeenLastCalledWith(frame)
+    renderer.clearLiveOverlays()
+    expect(pitchControl.clear).toHaveBeenCalledTimes(1)
+    expect(convexHull.clear).toHaveBeenCalledTimes(1)
+    renderer.setPanelActive(false)
+    expectEnabled(false, false)
+    expect(pitchControl.clear).toHaveBeenCalledTimes(2)
+    expect(convexHull.clear).toHaveBeenCalledTimes(2)
+    renderer.setPanelActive(true)
+    expectEnabled(true, true)
+    renderer.setLiveMode(false)
+    expectEnabled(false, false)
+    expect(pitchControl.clear).toHaveBeenCalledTimes(3)
+    expect(convexHull.clear).toHaveBeenCalledTimes(3)
   })
 })
 

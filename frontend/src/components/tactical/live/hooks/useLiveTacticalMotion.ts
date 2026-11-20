@@ -63,7 +63,7 @@ export function useLiveTacticalMotion(
           next === "disconnected" ||
           next === "buffering"
         )
-          renderer.clearPitchControl()
+          renderer.clearLiveOverlays()
         status = next
         notify.current?.(next)
       }

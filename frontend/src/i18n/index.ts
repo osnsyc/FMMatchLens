@@ -825,6 +825,9 @@ const resources = {
         pitchControl: {
           label: "空间控制",
         },
+        convexHull: {
+          label: "阵型凸包",
+        },
         liveMotion: {
           enable: "实时",
           backToEvents: "事件",
@@ -1751,6 +1754,9 @@ const resources = {
       dataMap: {
         pitchControl: {
           label: "Pitch Control",
+        },
+        convexHull: {
+          label: "Convex Hull",
         },
         liveMotion: {
           enable: "Live",
