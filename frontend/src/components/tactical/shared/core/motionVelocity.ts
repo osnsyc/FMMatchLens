@@ -8,8 +8,10 @@ export function motionVelocity(
   current: Observation,
   position: Position,
   neighbor?: Observation,
-  otherPosition?: Position
+  otherPosition?: Position,
+  rotateForDisplay = false
 ) {
+  const direction = rotateForDisplay ? -1 : 1
   if (
     speed != null &&
     Number.isFinite(speed) &&
@@ -20,7 +22,10 @@ export function motionVelocity(
     angle <= 360
   ) {
     const radians = (angle * Math.PI) / 180
-    return { x: speed * Math.cos(radians), y: speed * Math.sin(radians) }
+    return {
+      x: direction * speed * Math.cos(radians),
+      y: direction * speed * Math.sin(radians),
+    }
   }
   if (
     !neighbor ||
@@ -36,6 +41,6 @@ export function motionVelocity(
   const x = (position.y - otherPosition.y) / (ticks * 0.25)
   const y = (position.x - otherPosition.x) / (ticks * 0.25)
   return Number.isFinite(x) && Number.isFinite(y) && Math.hypot(x, y) < 13
-    ? { x, y }
+    ? { x: direction * x, y: direction * y }
     : undefined
 }

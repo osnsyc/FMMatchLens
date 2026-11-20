@@ -196,12 +196,12 @@ describe("live motion clock and bounded session", () => {
       x: 50,
       y: 50,
       shirtNumber: 7,
-      angleDegrees: 359.5,
+      angleDegrees: 179.5,
     })
     expect(frame.ball).toEqual({
-      x: 75,
-      y: 75,
-      positionMeters: { x: 78.75, y: 51 },
+      x: 25,
+      y: 25,
+      positionMeters: { x: 26.25, y: 17 },
       zCentimeters: 250,
     })
   })

@@ -6,6 +6,7 @@ import type {
 } from "@/api/replay/replayMotionSource"
 import {
   projectPositionToTacticalBoard,
+  needsMotionDisplayRotation,
   projectPositionToPitchMeters,
   validPitchHalf,
 } from "@/components/tactical/shared/core/frameProjector"
@@ -84,8 +85,9 @@ export class ArchiveMotionSession {
     const halfWidth = validPitchHalf(raw.halfPitchWidth),
       halfLength = validPitchHalf(raw.halfPitchLength)
     if (!halfWidth || !halfLength) return undefined
+    const rotate = needsMotionDisplayRotation(raw.period)
     const project = (x: number, y: number) =>
-      projectPositionToTacticalBoard(x, y, false, halfWidth, halfLength)
+      projectPositionToTacticalBoard(x, y, rotate, halfWidth, halfLength)
     const frame: TacticalMotionFrame = {
       tick: raw.tick,
       pitchDimensions: { length: halfLength * 2, width: halfWidth * 2 },
@@ -105,12 +107,12 @@ export class ArchiveMotionSession {
             positionMeters: projectPositionToPitchMeters(
               p.x,
               p.y,
-              false,
+              rotate,
               halfWidth,
               halfLength
             ),
             angleDegrees: Number.isFinite(p.angleDegrees)
-              ? (p.angleDegrees! + 90) % 360
+              ? (p.angleDegrees! + 90 + (rotate ? 180 : 0)) % 360
               : undefined,
             velocity: motionVelocity(
               p.speedCentimetersPerSecond == null
@@ -122,7 +124,8 @@ export class ArchiveMotionSession {
               neighbor,
               neighbor?.players.find(
                 (other) => other.playerId === p.playerId && other.isOnPitch
-              )
+              ),
+              rotate
             ),
             velocityXPerTick: 0,
             velocityYPerTick: 0,
@@ -138,7 +141,7 @@ export class ArchiveMotionSession {
             positionMeters: projectPositionToPitchMeters(
               raw.ballXCentimeters / 100,
               raw.ballYCentimeters / 100,
-              false,
+              rotate,
               halfWidth,
               halfLength
             ),

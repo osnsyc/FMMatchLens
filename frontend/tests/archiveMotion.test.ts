@@ -44,8 +44,8 @@ describe("archive motion driven by the timeline cursor", () => {
       const result = session.sample(cursor, details)
       expect(result.status).toBe("playing")
       expect(result.frame?.tick).toBeCloseTo(speed / 2)
-      expect(result.frame?.players[0].x).toBeCloseTo(50 + speed / 2)
-      expect(result.frame?.ball?.x).toBeCloseTo(50 + speed / 2)
+      expect(result.frame?.players[0].x).toBeCloseTo(50 - speed / 2)
+      expect(result.frame?.ball?.x).toBeCloseTo(50 - speed / 2)
     }
   )
   it("preserves fractional position through pause, resume and a speed change", () => {
@@ -80,7 +80,7 @@ describe("archive motion driven by the timeline cursor", () => {
     const end = source.advance(1000, 20)
     expect(end.position).toBe(2)
     expect(end.playing).toBe(false)
-    expect(session.sample(end, details).frame?.ball?.x).toBe(70)
+    expect(session.sample(end, details).frame?.ball?.x).toBe(30)
   })
   it("keeps repeated raw tick coordinates and interpolates only the moving interval", () => {
     const frames = [frame(0, 20), frame(1, 20), frame(2, 20), frame(3, 23)]
@@ -91,7 +91,7 @@ describe("archive motion driven by the timeline cursor", () => {
         { frames, position, playing: true },
         details
       ).frame!
-      const expected = position <= 2 ? 70 : 50 + 20 + (position - 2) * 3
+      const expected = position <= 2 ? 30 : 50 - 20 - (position - 2) * 3
       expect(result.players[0].x).toBeCloseTo(expected)
       expect(result.ball?.x).toBeCloseTo(expected)
     }
@@ -115,7 +115,7 @@ describe("archive motion driven by the timeline cursor", () => {
       expect(
         session.sample({ frames, position: 1, playing: false }, details).frame
           ?.players[0].x
-      ).toBe(80)
+      ).toBe(boundary === "period" ? 80 : 20)
     }
   )
   it("caches only two projected frames and releases them on source reset", () => {

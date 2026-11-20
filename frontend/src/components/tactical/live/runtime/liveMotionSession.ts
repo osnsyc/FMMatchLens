@@ -2,6 +2,7 @@ import type { MotionSample, LiveMotionStatus } from "@/api/liveMotionSource"
 import { continuity } from "@/components/tactical/live/core/continuity"
 import {
   projectPositionToTacticalBoard,
+  needsMotionDisplayRotation,
   projectPositionToPitchMeters,
   validPitchHalf,
 } from "@/components/tactical/shared/core/frameProjector"
@@ -143,11 +144,12 @@ export class LiveMotionSession {
     const project = (s: MotionSample) => {
       let frame = this.projections.get(s)
       if (!frame) {
+        const rotate = needsMotionDisplayRotation(s.period)
         const position = (x: number, y: number) =>
           projectPositionToTacticalBoard(
             x,
             y,
-            false,
+            rotate,
             s.halfPitchWidth,
             s.halfPitchLength
           )
@@ -165,12 +167,14 @@ export class LiveMotionSession {
             positionMeters: projectPositionToPitchMeters(
               p.x,
               p.y,
-              false,
+              rotate,
               s.halfPitchWidth,
               s.halfPitchLength
             ),
             angleDegrees:
-              p.angleDegrees == null ? undefined : (p.angleDegrees + 90) % 360,
+              p.angleDegrees == null
+                ? undefined
+                : (p.angleDegrees + 90 + (rotate ? 180 : 0)) % 360,
             velocity: motionVelocity(
               p.speed,
               p.angleDegrees,
@@ -179,7 +183,8 @@ export class LiveMotionSession {
               this.buffer.samples[this.buffer.samples.indexOf(s) - 1],
               this.buffer.samples[
                 this.buffer.samples.indexOf(s) - 1
-              ]?.players.find((other) => other.playerId === p.playerId)
+              ]?.players.find((other) => other.playerId === p.playerId),
+              rotate
             ),
             velocityXPerTick: 0,
             velocityYPerTick: 0,
@@ -190,7 +195,7 @@ export class LiveMotionSession {
                 positionMeters: projectPositionToPitchMeters(
                   s.ball.x,
                   s.ball.y,
-                  false,
+                  rotate,
                   s.halfPitchWidth,
                   s.halfPitchLength
                 ),

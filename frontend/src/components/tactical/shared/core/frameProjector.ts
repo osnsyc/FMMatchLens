@@ -1,3 +1,8 @@
+/** Keep home attacking left-to-right across normal and extra-time halves. */
+export function needsMotionDisplayRotation(period: number) {
+  return period < 2 || period === 3
+}
+
 /** Physical coordinates must remain unclipped for distance-based analysis. */
 export function projectPositionToPitchMeters(
   rawLateralX: number,
