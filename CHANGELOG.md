@@ -3,6 +3,24 @@
 
 This file records the project's important changes. Version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] - 2026-11-20
+
+### Added
+
+- Added post-match report preview and PNG export, combining lineups, substitutes, passing networks, match statistics, key events, momentum and xG charts, and player-of-the-match details.
+- Added an optional Tactical Board convex-hull overlay with outfield-player coverage outlines and area labels for live matches and archive animation.
+- Added the verified match-hook fingerprint, RVA, and AOB signature for the FM27 27.1.0 Xbox Game Pass build dated 2026-11-17.
+- Added macOS platform groundwork for native memory-region queries, loaded game-plugin image discovery, and default graphics paths; full macOS capture support is not yet available.
+
+### Changed
+
+- Scaled Tactical Board player markers and the ball with pitch height, within size bounds.
+- Retained `.fmlens` archive format 2.12 and read compatibility with formats 2.1–2.12.
+
+### Fixed
+
+- Kept the home team attacking left-to-right in Tactical Board animation across halves.
+
 ## [0.7.4] - 2026-11-18
 
 ### Added
