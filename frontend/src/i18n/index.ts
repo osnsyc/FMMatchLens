@@ -21,6 +21,22 @@ const getInitialLanguage = (): SupportedLanguage => {
 const resources = {
   "zh-CN": {
     translation: {
+      report: {
+        preparingData: "正在同步全场比赛数据…",
+        momentumMap: "事件地图",
+        poweredBy: "Powered by",
+        imageSize: "{{width}} × {{height}} PNG",
+        groups: { Overview: "概览", Attack: "进攻", Defence: "防守" },
+        competition: "赛事",
+        score: "比赛比分",
+        teamUid: "球队 UID", manager: "主教练", managerUid: "主教练 UID",
+        control: "控制方式", human: "玩家", ai: "AI", unknown: "未知",
+        events: "比赛关键事件", noEvents: "暂无比赛事件", substitutes: "{{team}} 替补球员",
+        pom: "全场最佳球员", noPom: "当前比赛未提供全场最佳球员数据",
+        title: "赛后报告", open: "导出赛后报告截图", requiresFullTime: "比赛结束后可导出赛后报告",
+        export: "导出 PNG",
+        preparing: "正在准备图表…", exporting: "正在导出…", error: "报告生成或导出失败，请关闭报告后重新打开并重试。",
+      },
       settings: {
         title: "设置",
         description: "配置界面语言、工具栏和快捷键。更改自动保存。",
@@ -922,6 +938,22 @@ const resources = {
   },
   en: {
     translation: {
+      report: {
+        preparingData: "Synchronizing full-match data…",
+        momentumMap: "Momentum Map",
+        poweredBy: "Powered by",
+        imageSize: "{{width}} × {{height}} PNG",
+        groups: { Overview: "Overview", Attack: "Attack", Defence: "Defence" },
+        competition: "Competition",
+        score: "Match score",
+        teamUid: "Team UID", manager: "Manager", managerUid: "Manager UID",
+        control: "Control", human: "Human", ai: "AI", unknown: "Unknown",
+        events: "Match events", noEvents: "No match events", substitutes: "{{team}} substitutes",
+        pom: "Player of the Match", noPom: "Player of the Match data is unavailable",
+        title: "Match Report", open: "Export match report screenshot", requiresFullTime: "Match reports are available after full time",
+        export: "Export PNG",
+        preparing: "Preparing charts…", exporting: "Exporting…", error: "Report generation or export failed. Close and reopen the report, then try again.",
+      },
       settings: {
         title: "Settings",
         description: "Configure language, toolbar and shortcuts. Changes are saved automatically.",

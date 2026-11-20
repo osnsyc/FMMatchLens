@@ -11,6 +11,7 @@ import {
   ArrowShrinkIcon,
   CommandIcon,
   PaletteIcon,
+  Analytics01Icon,
 } from "@hugeicons/core-free-icons"
 import { HoverCardHint } from "@/components/ui/hover-card"
 import { Button } from "@/components/ui/button"
@@ -112,6 +113,7 @@ export function SettingsDialog() {
     }
   }, [editing])
   const labels = {
+    report: t("report.title"),
     tour: t("exploreTour.start"),
     fullscreen: t("shortcuts.fullscreen"),
     shortcuts: t("shortcuts.title"),
@@ -272,6 +274,8 @@ export function SettingsDialog() {
                     className="flex min-h-7 items-center justify-center gap-1 overflow-x-auto"
                     aria-label={t("settings.toolbarPreview")}
                   >
+                    {settings.toolbar.report &&
+                      previewIcon(Analytics01Icon, labels.report)}
                     {settings.toolbar.tour &&
                       previewIcon(BinocularsIcon, labels.tour)}
                     {settings.toolbar.fullscreen &&

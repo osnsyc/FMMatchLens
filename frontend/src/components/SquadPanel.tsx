@@ -3,10 +3,11 @@ import { playerStatPosition } from "@/lib/playerStatPosition"
 import { playerStatGroups, type PlayerMetric, type StatGroupId } from "@/lib/playerStatMetrics"
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowDataTransferHorizontalIcon, FootballIcon, Pin02Icon, SidebarLeft01Icon, StarIcon } from "@hugeicons/core-free-icons"
+import { Pin02Icon, SidebarLeft01Icon, StarIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
-import { AssistIcon } from "@/components/AssistIcon"
+import { StatusGlyph } from "@/components/PlayerMatchStatus"
+import { getPlayerMatchStatuses, type PlayerStatus } from "@/lib/playerMatchStatus"
 import { PlayerProfileStatusIcon } from "@/components/PlayerProfileStatusIcon"
 import { FootAbilityIcon, displayAttributeValue, footAbilityTier } from "@/components/FootAbility"
 import { Avatar, AvatarBadge, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -69,25 +70,6 @@ type SquadPanelProps = {
   tacticalSelectionActive?: boolean
   tacticalSelectedPlayerIds?: ReadonlySet<number>
   onTacticalPlayerToggle?: (playerId: number) => void
-}
-
-type StatusIcon =
-  | "goal"
-  | "own-goal"
-  | "assist"
-  | "sub-on"
-  | "sub-off"
-  | "yellow-card"
-  | "red-card"
-
-type PlayerStatus = {
-  key: string
-  label: string
-  marker: string
-  icon?: StatusIcon
-  minutes?: number[]
-  count?: number
-  className?: string
 }
 
 const emptyPlayerIdSet: ReadonlySet<number> = new Set()
@@ -325,156 +307,12 @@ export const SquadPanel = memo(function SquadPanel({
       : new Set<number>(),
   }), [attackingOpponent, players])
 
-  const minutesFor = (
-    player: MatchPlayer,
-    type: MatchEvent["type"]
-  ) =>
-    events
-      .filter(
-        (event) =>
-        event.playerId === player.id &&
-        event.type === type
-      )
-      .map((event) => event.minute)
-
-  const statusesFor = (
-    player: MatchPlayer
-  ) => {
-    const statuses: PlayerStatus[] = []
-
-    if (
-      player.status
-        ?.ownGoals
-    ) {
-      statuses.push({
-        key: "own-goal",
-        label: t(
-          "squad.ownGoal"
-        ),
-        marker: "",
-        icon: "own-goal",
-        className:
-          "text-status-negative",
-        minutes: minutesFor(
-          player,
-          "own_goal"
-        ),
-        count:
-          player.status
-            .ownGoals,
-      })
-    }
-
-    if (
-      player.status
-        ?.subbedOnMinute
-    ) {
-      statuses.push({
-        key: "on",
-        label: t(
-          "squad.subbedOn"
-        ),
-        marker: "",
-        icon: "sub-on",
-        className:
-          "text-status-positive",
-        minutes: [player.status.subbedOnMinute],
-      })
-    }
-
-    if (
-      player.status
-        ?.subbedOffMinute
-    ) {
-      statuses.push({
-        key: "off",
-        label: t(
-          "squad.subbedOff"
-        ),
-        marker: "",
-        icon: "sub-off",
-        className:
-          "text-status-negative",
-        minutes: [player.status.subbedOffMinute],
-      })
-    }
-
-    if (
-      player.stats.goals
-    ) {
-      statuses.push({
-        key: "goal",
-        label: t(
-          "squad.goal"
-        ),
-        marker: "",
-        icon: "goal",
-        className:
-          "text-foreground",
-        minutes: minutesFor(
-          player,
-          "goal"
-        ),
-        count:
-          player.stats.goals,
-      })
-    }
-
-    if (
-      player.stats.assists
-    ) {
-      statuses.push({
-        key: "assist",
-        label: t(
-          "squad.assist"
-        ),
-        marker: "",
-        icon: "assist",
-        className:
-          "text-primary",
-        minutes: minutesFor(
-          player,
-          "assist_candidate"
-        ),
-        count:
-          player.stats.assists,
-      })
-    }
-
-    const yellowCardMinutes = minutesFor(player, "yellow_card")
-    if (yellowCardMinutes.length > 0) {
-      statuses.push({
-        key: "yellow-card",
-        label: t("squad.yellowCard"),
-        marker: "",
-        icon: "yellow-card",
-        className: "text-status-warning",
-        minutes: yellowCardMinutes,
-        count: yellowCardMinutes.length,
-      })
-    }
-
-    const redCardMinutes = minutesFor(player, "red_card")
-    if (redCardMinutes.length > 0) {
-      statuses.push({
-        key: "red-card",
-        label: t("squad.redCard"),
-        marker: "",
-        icon: "red-card",
-        className: "text-status-negative",
-        minutes: redCardMinutes,
-        count: redCardMinutes.length,
-      })
-    }
-
-    return statuses
-  }
 
   const renderPlayer = (
     player: MatchPlayer
   ) => {
     const statuses =
-      statusesFor(player)
+      getPlayerMatchStatuses(player, events, t)
     const displayName = player.name
     const isPlayerOfMatch = pomUid != null && pomUid > 0 && player.uid === pomUid
     const positionLabel = squadRole(player)
@@ -2167,37 +2005,6 @@ function SortHeaderButton({
   )
 }
 
-function StatusGlyph({
-  status,
-}: {
-  status: {
-    marker: string
-    icon?: StatusIcon
-    className?: string
-  }
-}) {
-  if (status.icon) {
-    return (
-      <EventIcon
-        icon={
-          status.icon
-        }
-        className={
-          status.className
-        }
-      />
-    )
-  }
-
-  return (
-    <span
-      className={`inline-block shrink-0 ${status.className ?? ""}`}
-    >
-      {status.marker}
-    </span>
-  )
-}
-
 function PlayerStatusStrip({ statuses }: { statuses: PlayerStatus[] }) {
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const trackRef = useRef<HTMLDivElement | null>(null)
@@ -2261,69 +2068,5 @@ function PlayerStatusStrip({ statuses }: { statuses: PlayerStatus[] }) {
         ))}
       </div>
     </div>
-  )
-}
-
-function EventIcon({
-  icon,
-  className,
-}: {
-  icon: StatusIcon
-  className?: string
-}) {
-  if (icon === "yellow-card" || icon === "red-card") {
-    return (
-      <span
-        aria-hidden="true"
-        className={`match-card-icon ${
-          icon === "red-card"
-            ? "match-card-icon--red"
-            : "match-card-icon--yellow"
-        } ${className ?? ""}`}
-      />
-    )
-  }
-
-  if (icon === "goal") {
-    return (
-      <img
-        src="./goal.svg"
-        alt=""
-        aria-hidden="true"
-        className={`size-3.5 shrink-0 ${
-          className ?? ""
-        }`}
-      />
-    )
-  }
-
-  if (icon === "own-goal") {
-    return (
-      <HugeiconsIcon
-        icon={FootballIcon}
-        stroke="currentColor"
-        strokeWidth={1.5}
-        aria-hidden="true"
-        className={`size-3.5 shrink-0 ${className ?? ""}`}
-      />
-    )
-  }
-
-  if (icon !== "assist") {
-    return (
-      <HugeiconsIcon
-        icon={ArrowDataTransferHorizontalIcon}
-        strokeWidth={3}
-        aria-hidden="true"
-        className={`size-3.5 shrink-0 ${icon === "sub-off" ? "rotate-180" : ""} ${className ?? ""}`}
-      />
-    )
-  }
-
-  return (
-    <AssistIcon
-      aria-hidden="true"
-      className={`size-3.5 shrink-0 ${className ?? ""}`}
-    />
   )
 }

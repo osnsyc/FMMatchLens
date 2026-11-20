@@ -7,6 +7,7 @@ import {
 } from "@/lib/appShortcuts"
 
 export const toolbarItems = [
+  "report",
   "tour",
   "fullscreen",
   "shortcuts",
@@ -22,6 +23,7 @@ export type AppSettings = {
 export const defaultAppSettings: AppSettings = {
   dataCompleteness: "game",
   toolbar: {
+    report: true,
     tour: true,
     fullscreen: true,
     shortcuts: true,

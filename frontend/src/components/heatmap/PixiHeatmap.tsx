@@ -14,6 +14,7 @@ type PixiHeatmapProps = {
   width: number
   height: number
   toneMapping?: Partial<HeatmapToneMapping>
+  exportMode?: boolean
 }
 
 export function PixiHeatmap({
@@ -21,7 +22,26 @@ export function PixiHeatmap({
   width,
   height,
   toneMapping,
+  exportMode = false,
 }: PixiHeatmapProps) {
+  return exportMode ? (
+    <ReportHeatmap
+      data={data}
+      width={width}
+      height={height}
+      toneMapping={toneMapping}
+    />
+  ) : (
+    <LiveHeatmap
+      data={data}
+      width={width}
+      height={height}
+      toneMapping={toneMapping}
+    />
+  )
+}
+
+function LiveHeatmap({ data, width, height, toneMapping }: PixiHeatmapProps) {
   const { settings, resolvedScheme } = useTheme()
   const hostRef = useRef<HTMLDivElement | null>(null)
   const rendererRef = useRef<PixiHeatmapRenderer | null>(null)
@@ -84,7 +104,12 @@ export function PixiHeatmap({
 
   useEffect(() => {
     rendererRef.current?.updateLut(readHeatmapStops())
-  }, [resolvedScheme, settings.colorVision, settings.contrast, settings.presetId])
+  }, [
+    resolvedScheme,
+    settings.colorVision,
+    settings.contrast,
+    settings.presetId,
+  ])
 
   useEffect(() => {
     rendererRef.current?.updateToneMapping(
@@ -97,6 +122,70 @@ export function PixiHeatmap({
   }, [height, width])
 
   return <div ref={hostRef} className="size-full" />
+}
+
+function ReportHeatmap({ data, width, height, toneMapping }: PixiHeatmapProps) {
+  const hostRef = useRef<HTMLDivElement>(null)
+  const { settings, resolvedScheme } = useTheme()
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    let disposed = false
+    let renderer: PixiHeatmapRenderer | undefined
+    let image: HTMLImageElement | undefined
+    const releaseRenderer = () => {
+      renderer?.destroy()
+      renderer = undefined
+    }
+    host.dataset.reportHeatmap = "loading"
+    host.replaceChildren()
+    void (async () => {
+      try {
+        renderer = await PixiHeatmapRenderer.create(host, width, height)
+        if (disposed) return
+        renderer.updateLut(readHeatmapStops())
+        renderer.updateToneMapping(toneMapping ?? DEFAULT_HEATMAP_TONE_MAPPING)
+        renderer.update(data)
+        const url = await renderer.capturePngDataUrl()
+        releaseRenderer()
+        if (disposed) return
+        image = new Image()
+        image.src = url
+        image.alt = ""
+        image.className = "block size-full"
+        await image.decode()
+        if (disposed) return
+        host.replaceChildren(image)
+        host.dataset.reportHeatmap = "ready"
+      } catch (error) {
+        if (!disposed) {
+          host.dataset.reportHeatmap = "error"
+          console.error("Failed to capture report heatmap", error)
+        }
+      } finally {
+        releaseRenderer()
+      }
+    })()
+    return () => {
+      disposed = true
+      releaseRenderer()
+      image?.removeAttribute("src")
+      image = undefined
+      host.replaceChildren()
+    }
+  }, [
+    data,
+    width,
+    height,
+    toneMapping,
+    resolvedScheme,
+    settings.colorVision,
+    settings.contrast,
+    settings.presetId,
+  ])
+  return (
+    <div ref={hostRef} data-report-heatmap="loading" className="size-full" />
+  )
 }
 
 function readHeatmapStops() {

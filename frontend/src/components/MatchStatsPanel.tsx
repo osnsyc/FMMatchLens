@@ -1,6 +1,8 @@
 import { memo, type CSSProperties } from "react"
 import { useTranslation } from "react-i18next"
 import { useStoredChoice } from "@/hooks/useStoredPreference"
+import { Analytics01Icon, AdventureIcon, ShieldCogIcon } from "@hugeicons/core-free-icons"
+import { HugeiconsIcon } from "@hugeicons/react"
 
 import {
   CardContent,
@@ -17,6 +19,7 @@ import type {
 } from "@/types/match"
 
 type MatchStatsPanelProps = {
+  exportMode?: boolean
   match: MatchSnapshot
   isFocusMode: boolean
 }
@@ -73,6 +76,12 @@ const allRows: StatRow[] = [
   { label: "stats.yellowCards", source: "yellowCards", lowerIsBetter: true },
   { label: "stats.redCards", source: "redCards", lowerIsBetter: true },
 ]
+
+const reportGroups = [
+  { label: "Overview", icon: Analytics01Icon, sources: ["possession", "xg", "shots", "shotsOnTarget", "clearCutChances"] },
+  { label: "Attack", icon: AdventureIcon, sources: ["passes", "passAccuracy", "progressivePasses", "finalThirdPasses", "crosses", "crossAccuracy", "corners", "offsides"] },
+  { label: "Defence", icon: ShieldCogIcon, sources: ["tacklesAttempted", "tackleSuccess", "aerials", "aerialSuccess", "fouls", "yellowCards", "redCards"] },
+].map(group => ({ ...group, rows: group.sources.map(source => allRows.find(row => row.source === source)!) }))
 
 const attackRows: StatRow[] = [
   { label: "stats.expectedGoals", source: "xg", precision: 2 },
@@ -169,6 +178,7 @@ function opposite(
 }
 
 export const MatchStatsPanel = memo(function MatchStatsPanel({
+  exportMode = false,
   match,
   isFocusMode,
 }: MatchStatsPanelProps) {
@@ -357,7 +367,8 @@ export const MatchStatsPanel = memo(function MatchStatsPanel({
     return (
       <div
         key={row.source}
-        className={compact ? "py-1" : "py-1.5"}
+        data-report-stat={exportMode ? row.source : undefined}
+        className={exportMode ? "report-stat-row" : compact ? "py-1" : "py-1.5"}
       >
         <div
           className={`${compact ? "mb-1" : "mb-1.5"} truncate text-center text-xs leading-none text-muted-foreground`}
@@ -407,7 +418,7 @@ export const MatchStatsPanel = memo(function MatchStatsPanel({
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
-      <CardHeader className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-4 py-2">
+      {!exportMode && <CardHeader className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-4 py-2">
         <CardTitle className="whitespace-nowrap text-sm font-semibold @max-[240px]/card-header:hidden">
           {t(
             "panels.matchStats"
@@ -437,10 +448,19 @@ export const MatchStatsPanel = memo(function MatchStatsPanel({
             })
           )}
         />
-      </CardHeader>
+      </CardHeader>}
 
       <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-        {isFocusMode ? (
+        {exportMode ? (
+          <div className="report-stat-rows px-3 py-2">
+            {reportGroups.map(group => (
+              <section key={group.label} className="report-stat-group" style={{ flexGrow: group.rows.length }} data-report-stat-group={group.label}>
+                <h3 className="report-stat-group-title"><span className="report-stat-group-leading"><HugeiconsIcon icon={group.icon} size={24} /></span><span>{t(`report.groups.${group.label}`)}</span><span className="report-stat-group-trailing" aria-hidden /></h3>
+                <div className="report-stat-group-rows">{group.rows.map(row => renderStatRow(row))}</div>
+              </section>
+            ))}
+          </div>
+        ) : isFocusMode ? (
           <div className="grid min-h-0 min-w-0 flex-1 grid-cols-3 px-3 pb-3 pt-0">
             {focusedColumns.map((rows, columnIndex) => (
               <div
@@ -468,7 +488,7 @@ export const MatchStatsPanel = memo(function MatchStatsPanel({
 }, sameMatchStatsPanelProps)
 
 function sameMatchStatsPanelProps(previous: MatchStatsPanelProps, next: MatchStatsPanelProps) {
-  return previous.isFocusMode === next.isFocusMode
+  return previous.exportMode === next.exportMode && previous.isFocusMode === next.isFocusMode
     && previous.match.home.color === next.match.home.color
     && previous.match.away.color === next.match.away.color
     && sameTeamStats(previous.match.home.stats, next.match.home.stats)

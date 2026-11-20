@@ -10,6 +10,8 @@
   "include": [
     "../src/vite-env.d.ts",
     "replay/**/*.ts",
+    "report/**/*.ts",
+    "report/**/*.tsx",
     "vitest.benchmark.config.ts"
   ]
 }

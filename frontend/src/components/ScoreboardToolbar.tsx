@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react"
+import { lazy, Suspense, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   ArrowShrinkIcon,
   CommandIcon,
   BinocularsIcon,
   FullScreenIcon,
+  Analytics01Icon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
@@ -30,18 +31,35 @@ import { changeLanguage, type SupportedLanguage } from "@/i18n"
 import { SettingsDialog } from "@/components/SettingsDialog"
 import { useAppSettings } from "@/lib/appSettings"
 import { appShortcuts } from "@/lib/appShortcuts"
+import type { MatchSnapshot } from "@/types/match"
+import type { MatchReportContext } from "@/features/match-report/reportTypes"
+
+const MatchReportDialog = lazy(() =>
+  import("@/features/match-report/MatchReportDialog").then((module) => ({
+    default: module.MatchReportDialog,
+  }))
+)
 
 export function ScoreboardToolbar({
+  match,
+  getReportContext,
   onStartExploreTour,
   showExploreTourHint,
   exploreTourActive,
 }: {
+  match: MatchSnapshot
+  getReportContext?: () => MatchReportContext
   onStartExploreTour: () => void
   showExploreTourHint: boolean
   exploreTourActive: boolean
 }) {
   const { t, i18n } = useTranslation()
+  const [reportMatch, setReportMatch] = useState<{
+    match: MatchSnapshot
+    context?: MatchReportContext
+  } | null>(null)
   const settings = useAppSettings()
+  const canReport = Boolean(match.isFullTime && match.reportDataReady !== false)
   const currentLanguage: SupportedLanguage =
     i18n.language === "en" ? "en" : "zh-CN"
   const [isFullscreen, setIsFullscreen] = useState(
@@ -78,6 +96,36 @@ export function ScoreboardToolbar({
 
   return (
     <div className="flex min-w-0 items-center justify-end gap-2 justify-self-end">
+      {settings.toolbar.report && (
+        <HoverCardHint
+          content={t(
+            !match.isFullTime ? "report.requiresFullTime" : canReport ? "report.open" : "report.preparingData"
+          )}
+        >
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="size-8 active:translate-y-px"
+            disabled={!canReport}
+            aria-label={t("report.open")}
+            onClick={() => {
+              if (canReport) setReportMatch({ match, context: getReportContext?.() })
+            }}
+          >
+            <HugeiconsIcon icon={Analytics01Icon} strokeWidth={1.7} />
+          </Button>
+        </HoverCardHint>
+      )}
+      {reportMatch && (
+        <Suspense fallback={null}>
+          <MatchReportDialog
+            match={reportMatch.match}
+            context={reportMatch.context}
+            onClose={() => setReportMatch(null)}
+          />
+        </Suspense>
+      )}
       {settings.toolbar.tour && (
         <HoverCardHint content={t("exploreTour.start")}>
           <Button

@@ -22,6 +22,7 @@ describe("app settings", () => {
 
   it("defaults only the language toolbar control to hidden", () => {
     expect(defaultAppSettings.toolbar).toEqual({
+      report: true,
       tour: true,
       fullscreen: true,
       shortcuts: true,
@@ -32,7 +33,7 @@ describe("app settings", () => {
 
   it("preserves disabled controls, cleared bindings and valid key swaps", () => {
     const saved = parseAppSettings({
-      toolbar: { tour: false },
+      toolbar: { tour: false, report: false },
       shortcuts: {
         tactical: "H",
         heatmap: "T",
@@ -42,6 +43,7 @@ describe("app settings", () => {
       },
     })
     expect(saved.toolbar.tour).toBe(false)
+    expect(saved.toolbar.report).toBe(false)
     expect(saved.shortcuts).toEqual({ tactical: "H", heatmap: "T", zen: "" })
   })
 

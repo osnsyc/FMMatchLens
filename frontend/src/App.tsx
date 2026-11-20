@@ -858,6 +858,15 @@ export function App() {
               <Card className="h-full min-h-0 border-transparent bg-transparent p-0 shadow-none">
                 <ScoreHeader
                   match={match}
+                  getReportContext={() => ({
+                    movementFrames: tacticalReplayFrames,
+                    pomMovement: !isReplayMode && match.pomUid
+                      ? (() => {
+                          const player = match.players.find((candidate) => candidate.uid === match.pomUid)
+                          return player ? liveMotionSource.getPlayerMovement(player.id) : undefined
+                        })()
+                      : undefined,
+                  })}
                   onStartExploreTour={exploreTour.start}
                   showExploreTourHint={exploreTour.showHint}
                   exploreTourActive={exploreTour.active}

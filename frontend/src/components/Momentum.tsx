@@ -21,8 +21,11 @@ import { NativeTabs } from "@/components/ui/tabs"
 import { samePlayerLabels } from "@/lib/matchRenderEquality"
 import type { MatchSnapshot, TacticalEventPoint, TeamSide, XgTimelinePoint } from "@/types/match"
 import { useTheme } from "@/components/theme-provider"
+import { goalIconUrl } from "@/lib/goalIcon"
+import { ReportGoalMarker } from "@/features/match-report/ReportGoalMarker"
 
 type MomentumProps = {
+  reportMode?: boolean
   match: MatchSnapshot
   visible?: boolean
 }
@@ -61,15 +64,16 @@ const eventWeights: Partial<Record<TacticalEventPoint["metricId"], number>> = {
 
 const momentumYTicks = [-1, -0.5, 0, 0.5, 1]
 
-export const Momentum = memo(function Momentum({ match, visible = true }: MomentumProps) {
+export const Momentum = memo(function Momentum({ match, visible = true, reportMode = false }: MomentumProps) {
   const { t } = useTranslation()
   const { settings } = useTheme()
   const colorblind = settings.colorVision === "colorblind"
-  const [mode, setMode] = useStoredChoice<MomentumMode>(
+  const [storedMode, setMode] = useStoredChoice<MomentumMode>(
     "momentum.mode",
     "line",
     ["line", "bars", "eventMap"],
   )
+  const mode = reportMode ? "bars" : storedMode
   const homeColor = match.home.color ?? "var(--team-home-fallback)"
   const awayColor = match.away.color ?? "var(--team-away-fallback)"
   const nativeBarPoints = useMemo(() => buildNativeMomentum(match.momentum), [match.momentum])
@@ -137,7 +141,7 @@ export const Momentum = memo(function Momentum({ match, visible = true }: Moment
             />
           )
         ) : (
-          <ChartContainer config={chartConfig} className="min-h-0 flex-1 px-3 pb-3 pt-0">
+          <ChartContainer config={chartConfig} className={`min-h-0 flex-1 pb-3 pt-0 ${reportMode ? "px-6" : "px-3"}`}>
             <ComposedChart data={data} margin={{ top: 4, right: 12, bottom: 4, left: 0 }}>
               <XAxis
                 dataKey="minute"
@@ -245,6 +249,7 @@ export const Momentum = memo(function Momentum({ match, visible = true }: Moment
                     <Label
                       content={(
                         <GoalMarkerLabel
+                          reportMode={reportMode}
                           color={color}
                           title={marker.title}
                           side={isHome ? "top" : "bottom"}
@@ -416,7 +421,7 @@ function buildGoalMarkers(
 function sameMomentumProps(previous: MomentumProps, next: MomentumProps) {
   const left = previous.match
   const right = next.match
-  return previous.visible === next.visible
+  return previous.reportMode === next.reportMode && previous.visible === next.visible
     && left.home.name === right.home.name
     && left.home.color === right.home.color
     && left.away.name === right.away.name
@@ -433,11 +438,13 @@ function sameMomentumProps(previous: MomentumProps, next: MomentumProps) {
 }
 
 function GoalMarkerLabel({
+  reportMode = false,
   color,
   title,
   side,
   viewBox,
 }: {
+  reportMode?: boolean
   color: string
   title: string
   side: "top" | "bottom"
@@ -447,6 +454,7 @@ function GoalMarkerLabel({
     ? viewBox as { x?: number; y?: number }
     : null
   if (point?.x == null || point.y == null) return null
+  if (reportMode) return <ReportGoalMarker x={point.x - 8} y={point.y - 8} size={16} color={color} title={title} />
 
   return (
     <foreignObject
@@ -467,7 +475,7 @@ function GoalMarkerLabel({
             />
           )}
         >
-          <img src="./goal.svg" alt="" aria-hidden="true" className="size-3" />
+          <img src={goalIconUrl} alt="" aria-hidden="true" className="size-3" />
         </HoverCardTrigger>
         <HoverCardContent
           side={side}

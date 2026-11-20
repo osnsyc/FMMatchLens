@@ -115,6 +115,32 @@ export class PixiHeatmapRenderer {
     this.renderOnce()
   }
 
+  async capturePngDataUrl() {
+    this.renderOnce()
+    const { pixels, width, height } = this.renderer.extract.pixels({
+      target: this.stage,
+      frame: this.renderer.screen,
+      resolution: 2,
+    })
+    // Pixi's WebGL extraction returns premultiplied RGB. ImageData/PNG expects
+    // straight RGB; copying the bytes directly darkens translucent heatmap edges.
+    for (let index = 0; index < pixels.length; index += 4) {
+      const alpha = pixels[index + 3]
+      if (alpha === 0) continue
+      for (let channel = 0; channel < 3; channel += 1)
+        pixels[index + channel] = Math.min(255, Math.round(pixels[index + channel] * 255 / alpha))
+    }
+    const canvas = document.createElement("canvas")
+    canvas.width = width
+    canvas.height = height
+    const context = canvas.getContext("2d")
+    if (!context) throw new Error("Heatmap PNG canvas is unavailable")
+    const image = context.createImageData(width, height)
+    image.data.set(pixels)
+    context.putImageData(image, 0, 0)
+    return canvas.toDataURL("image/png")
+  }
+
   destroy() {
     this.stage.removeChild(this.densitySprite)
     this.densitySprite.filters = null

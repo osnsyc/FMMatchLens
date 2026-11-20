@@ -454,7 +454,10 @@ export type TeamThemeColors = {
 }
 
 export type MatchSnapshot = {
+  competition?: { uid?: number; name?: string; logoUrl?: string }
   isFullTime?: boolean
+  /** Live history and final metadata have been synchronized for report export. */
+  reportDataReady?: boolean
   pomUid?: number
   tactics?: import("@/components/formation/tactics").DecodedTacticalSnapshot
   matchId?: string

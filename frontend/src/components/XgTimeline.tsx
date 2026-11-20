@@ -35,8 +35,11 @@ import type {
   XgTimelinePoint,
 } from "@/types/match"
 import { useTheme } from "@/components/theme-provider"
+import { goalIconUrl } from "@/lib/goalIcon"
+import { ReportGoalMarker } from "@/features/match-report/ReportGoalMarker"
 
 type XgTimelineProps = {
+  reportMode?: boolean
   match: MatchSnapshot
 }
 
@@ -52,6 +55,7 @@ type GoalMarker = {
 }
 
 export const XgTimeline = memo(function XgTimeline({
+  reportMode = false,
   match,
 }: XgTimelineProps) {
   const { t } = useTranslation()
@@ -131,7 +135,7 @@ export const XgTimeline = memo(function XgTimeline({
           <XgMap match={match} homeColor={homeColor} awayColor={awayColor} />
         ) : (
         <div className="relative flex min-h-0 flex-1">
-          <div className="pointer-events-none absolute top-2 left-10 z-10 flex items-center gap-2">
+          <div className={`xg-score-summary pointer-events-none absolute top-2 z-10 flex items-center gap-2 ${reportMode ? "left-[52px]" : "left-10"}`}>
             <span
               className="text-sm leading-none font-semibold tabular-nums"
               style={{ color: homeColor }}
@@ -148,7 +152,7 @@ export const XgTimeline = memo(function XgTimeline({
           </div>
           <ChartContainer
             config={chartConfig}
-            className="min-h-0 flex-1 px-3 pb-3 pt-0"
+            className={`min-h-0 flex-1 pb-3 pt-0 ${reportMode ? "px-6" : "px-3"}`}
           >
             <ComposedChart
             data={timeline}
@@ -245,6 +249,7 @@ export const XgTimeline = memo(function XgTimeline({
                   <Label
                     content={
                       <GoalMarkerLabel
+                        reportMode={reportMode}
                         color={
                           marker.team ===
                           "home"
@@ -313,10 +318,12 @@ function formatTooltipMinute(minute: number) {
 }
 
 function GoalMarkerLabel({
+  reportMode = false,
   color,
   title,
   viewBox,
 }: {
+  reportMode?: boolean
   color: string
   title: string
   viewBox?: unknown
@@ -339,6 +346,7 @@ function GoalMarkerLabel({
     return null
   }
 
+  if (reportMode) return <ReportGoalMarker x={point.x - 7} y={point.y - 17} size={14} color={color} title={title} />
   return (
     <foreignObject
       x={point.x - 7}
@@ -359,7 +367,7 @@ function GoalMarkerLabel({
           )}
         >
           <img
-            src="./goal.svg"
+            src={goalIconUrl}
             alt=""
             aria-hidden="true"
             className="size-2.5"
@@ -462,7 +470,7 @@ function buildGoalMarkers(
 function sameXgTimelineProps(previous: XgTimelineProps, next: XgTimelineProps) {
   const left = previous.match
   const right = next.match
-  return left.home.name === right.home.name
+  return previous.reportMode === next.reportMode && left.home.name === right.home.name
     && left.home.color === right.home.color
     && left.home.stats.xg === right.home.stats.xg
     && left.away.name === right.away.name

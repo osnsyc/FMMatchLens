@@ -30,7 +30,7 @@ export function PlayerShirt({ kit, number, shirtName, className, numberClassName
   )
 }
 
-export function MatchKitSymbols({ kits }: { kits: readonly (MatchKit | undefined)[] }) {
+export function MatchKitSymbols({ kits, resourceUrl = (resource: string) => `${import.meta.env.BASE_URL}${resource}` }: { kits: readonly (MatchKit | undefined)[]; resourceUrl?: (resource: string) => string }) {
   return (
     <svg aria-hidden="true" width="0" height="0" className="absolute overflow-hidden">
       <defs>
@@ -47,8 +47,8 @@ export function MatchKitSymbols({ kits }: { kits: readonly (MatchKit | undefined
             </filter>
             <symbol id={kit.id} viewBox="0 0 64 64">
               <g filter={`url(#${kit.id}-colour)`}>
-                <image href={`${import.meta.env.BASE_URL}${kit.resource}`} width="64" height="64" />
-                {kit.squareResource && <image href={`${import.meta.env.BASE_URL}${kit.squareResource}`} width="64" height="64" />}
+                <image href={resourceUrl(kit.resource)} width="64" height="64" />
+                {kit.squareResource && <image href={resourceUrl(kit.squareResource)} width="64" height="64" />}
               </g>
             </symbol>
           </g>

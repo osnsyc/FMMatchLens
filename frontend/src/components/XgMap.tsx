@@ -48,7 +48,7 @@ export const XgMap = memo(function XgMap({
       >
         <div className="relative size-full overflow-hidden bg-[var(--tactical-pitch-surface)]">
           <PitchMarkings dimensions={dimensions} />
-          <div className="pointer-events-none absolute top-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2">
+          <div className="xg-score-summary pointer-events-none absolute top-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2">
             <span
               className="text-sm leading-none font-semibold tabular-nums"
               style={{ color: homeColor }}
