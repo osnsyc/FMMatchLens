@@ -9,7 +9,7 @@ internal sealed class WindowsNativeDetour : NativeDetourHandle
 
     private WindowsNativeDetour(INativeDetour detour) => _detour = detour;
 
-    public static NativeDetourHandle Create<T>(nint original, T target) where T : Delegate =>
+    public static NativeDetourHandle CreateDetour<T>(nint original, T target) where T : Delegate =>
         new WindowsNativeDetour(INativeDetour.Create(original, target));
 
     public override nint OriginalMethodPtr => _detour.OriginalMethodPtr;

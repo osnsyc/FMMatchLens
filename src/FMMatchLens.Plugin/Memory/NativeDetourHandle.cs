@@ -24,9 +24,9 @@ internal abstract class NativeDetourHandle : IDisposable
     // references it cannot load on macOS, where it does not exist.
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static NativeDetourHandle CreateWindows<T>(nint original, T target) where T : Delegate =>
-        WindowsNativeDetour.Create(original, target);
+        WindowsNativeDetour.CreateDetour(original, target);
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static NativeDetourHandle CreateMac<T>(nint original, T target) where T : Delegate =>
-        MacNativeDetour.Create(original, target);
+        MacNativeDetour.CreateDetour(original, target);
 }

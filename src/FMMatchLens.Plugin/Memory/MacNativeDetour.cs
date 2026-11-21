@@ -40,7 +40,7 @@ internal sealed class MacNativeDetour : NativeDetourHandle
     public override nint DetourMethodPtr { get; }
     public override nint TrampolinePtr => _trampoline;
 
-    public static NativeDetourHandle Create<T>(nint original, T target) where T : Delegate
+    public static NativeDetourHandle CreateDetour<T>(nint original, T target) where T : Delegate
     {
         if (original == 0) throw new ArgumentException("Target address is zero.", nameof(original));
         if (target is null) throw new ArgumentNullException(nameof(target));
