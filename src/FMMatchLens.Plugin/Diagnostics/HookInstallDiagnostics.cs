@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using BepInEx;
+using FMMatchLens.Plugin.Memory;
 
 namespace FMMatchLens.Plugin.Diagnostics;
 
@@ -28,6 +29,12 @@ internal static class HookInstallDiagnostics
 
     public static void ValidateEntry(nint address)
     {
+        if (MacNative.IsMacOS)
+        {
+            MacHookResolver.ValidateEntry(address);
+            return;
+        }
+
         const int length = 16;
         if (address == 0 || VirtualQuery(address, out var region, (nuint)Marshal.SizeOf<MemoryRegion>()) == 0)
             throw new InvalidOperationException("Hook entry is not mapped.");

@@ -74,7 +74,7 @@ internal sealed class GameMatchTickHook : IDisposable
     private readonly ConcurrentQueue<PendingDiagnosticMessage> _pendingDiagnosticMessages = new();
     private Timer? _diagnosticsTimer;
     private Timer? _tickDrainTimer;
-    private INativeDetour? _detour;
+    private NativeDetourHandle? _detour;
     private MatchUpdateDelegate? _original;
     private nint _targetAddress;
     private long _callCount;
@@ -139,7 +139,7 @@ internal sealed class GameMatchTickHook : IDisposable
             return false;
         }
 
-        var moduleBase = GetModuleHandle("game_plugin.dll");
+        var moduleBase = MacNative.IsMacOS ? MacHookResolver.FindGamePlugin() : GetModuleHandle("game_plugin.dll");
         if (moduleBase == default)
         {
             // Mod-heavy startup has no fixed deadline. While the module is absent,
@@ -215,7 +215,7 @@ internal sealed class GameMatchTickHook : IDisposable
             // undo-call-redo on every Original invocation, which races when
             // MatchUpdate is called concurrently by simulation threads.
             stage = "detour_create";
-            _detour = INativeDetour.Create(_targetAddress, _hookDelegate);
+            _detour = NativeDetourHandle.Create(_targetAddress, _hookDelegate);
             LogStage("detour_created");
             HookInstallDiagnostics.ValidateEntry(_detour.OriginalMethodPtr);
             PluginLogger.Info($"Hook diagnostic: resolved_target={FormatPointer(_detour.OriginalMethodPtr)}, detour={FormatPointer(_detour.DetourMethodPtr)}.");
