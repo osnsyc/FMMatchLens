@@ -77,6 +77,8 @@ internal static class GamePluginBuildCatalog
         nint moduleHandle, string modulePath, string sha256,
         out GamePluginBuild build, out string failure)
     {
+        if (MacNative.IsMacOS) return MacHookResolver.TryResolveAob(moduleHandle, sha256, out build, out failure);
+
         build = default;
         failure = "GAME_MATCH entry AOB was not found";
         using var stream = File.Open(modulePath, FileMode.Open, FileAccess.Read,
@@ -145,6 +147,8 @@ internal static class GamePluginBuildCatalog
     // point recorded in the module's unwind table.
     internal static bool IsFunctionEntry(nint moduleHandle, int rva)
     {
+        if (MacNative.IsMacOS) return MacNative.IsFunctionEntry(moduleHandle, rva);
+
         var address = (ulong)(moduleHandle + rva);
         var functionEntry = RtlLookupFunctionEntry(address, out var imageBase, default);
         if (functionEntry == default || imageBase != (ulong)moduleHandle)
@@ -158,6 +162,8 @@ internal static class GamePluginBuildCatalog
 
     private static string GetModulePath(nint moduleHandle)
     {
+        if (MacNative.IsMacOS) return MacNative.GetImagePath(moduleHandle);
+
         var buffer = new StringBuilder(MaximumWindowsPathLength);
         var length = GetModuleFileName(moduleHandle, buffer, buffer.Capacity);
         if (length == 0)

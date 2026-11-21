@@ -37,6 +37,11 @@ internal sealed class GameMatchTickSignature
             new GameMatchTickSignature("XGP", XgpPattern),
         });
 
+    // macOS on Apple Silicon (arm64 game_plugin); scanned instead of the list above
+    // there, by MacHookResolver. See MacHookResolver for the instructions it matches.
+    internal static GameMatchTickSignature MacArm64 { get; } =
+        new("macOS arm64", MacHookResolver.MatchTickPatternArm64);
+
     private readonly byte?[] Bytes;
 
     private GameMatchTickSignature(string name, string pattern)
