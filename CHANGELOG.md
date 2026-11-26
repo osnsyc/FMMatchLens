@@ -3,6 +3,16 @@
 
 This file records the project's important changes. Version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Resolve player portraits, club badges, and competition logos on demand through the game's local resource index.
+
+### Removed
+
+- Removed the `Graphics.GraphicsPath` setting, plugin-side graphics XML scanning, and graphics index cache generation. Existing directory settings and `graphics-index-cache.json` files are no longer used.
+
 ## [0.8.0] - 2026-11-20
 
 ### Added

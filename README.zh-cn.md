@@ -191,7 +191,6 @@ Football Manager 2026/
 | 游戏能启动，但日志中完全没有 `FMMatchLens` | DLL 是否位于准确路径；BepInEx 是否为 IL2CPP x64 版本；压缩包是否已解除锁定 |
 | `/api/health` 无法打开 | 游戏是否仍在运行；日志中是否出现插件加载失败或端口 `16726` 被占用 |
 | 健康检查正常，但面板没有实时数据 | 是否已经进入实际比赛；FM 与 FMMatchLens 版本是否兼容；日志中是否有 Hook 相关警告 |
-| 球员头像或队徽不显示 | 检查 `Graphics.GraphicsPath` 是否指向正确的图形包根目录；比赛数据本身仍可正常使用 |
 
 ## 插件配置
 
@@ -207,9 +206,6 @@ Football Manager 2026/
 [Logging]
 Mode = release
 
-[Graphics]
-GraphicsPath = C:\Users\<你的用户名>\Documents\Sports Interactive\Football Manager 26\graphics
-
 [Archive]
 Compression = Fast
 ChunkTicks = 2400
@@ -220,7 +216,6 @@ QueueCapacity = 8
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `Logging.Mode` | `release` | `release` 仅输出关键状态、警告和错误；`debug` 额外输出 Hook 与帧诊断信息。 |
-| `Graphics.GraphicsPath` | FM26 用户图形目录 | 图形包与 `config.xml` 所在的根目录，用于加载头像和队徽；不使用自定义图形包时可保持默认值。 |
 | `Archive.Compression` | `Fast` | `Fast` 使用独立的 zlib 封装 Deflate 块；`None` 禁用数据块压缩。 |
 | `Archive.ChunkTicks` | `2400` | 单个可独立恢复数据块的最大 Tick 数。按默认每秒约 4 个 Tick 计算，约对应比赛内 10 分钟。达到此数量或达到 `MaxChunkLatencyMs` 时，哪个条件先满足就先提交。 |
 | `Archive.MaxChunkLatencyMs` | `60000` | 未达到 Tick 上限时，提交部分数据块的最大等待时间（毫秒）。默认 60 秒主要用于应对暂停或 Tick 产生异常缓慢的情况；正常比赛中通常会先达到 `ChunkTicks`。 |
@@ -230,13 +225,7 @@ QueueCapacity = 8
 
 按照默认值和每秒约 4 个 Tick 计算，2400 个 Tick 需要约 600 个现实秒，也就是比赛内约 10 分钟。如果游戏大约以 5 倍速度运行，同样的比赛内 10 分钟可能只经过约 2 个现实分钟。`MaxChunkLatencyMs = 60000` 并不意味着正常比赛每分钟必然写一次；只要 Tick 正常产生，通常会先达到 2400 个 Tick。60 秒主要是当比赛暂停或 Tick 频率明显降低时，对未满数据块的最长等待时间。
 
-修改后保存文件并重新启动游戏。`GraphicsPath` 可以填写绝对路径，例如：
-
-```ini
-GraphicsPath = D:\FM Graphics
-```
-
-路径两端不需要添加引号。存档、图形索引缓存等运行数据保存在：
+修改后保存文件并重新启动游戏。比赛存档及其他运行数据保存在：
 
 ```text
 <游戏根目录>/BepInEx/plugins/FMMatchLens/data/
@@ -267,6 +256,7 @@ $pluginLib = Join-Path $PWD "src\FMMatchLens.Plugin\lib"
 $pluginReferences = @(
   "BepInEx.Core.dll",
   "BepInEx.Unity.IL2CPP.dll",
+  "Il2CppInterop.Runtime.dll",
   "MonoMod.Backports.dll",
   "MonoMod.RuntimeDetour.dll",
   "MonoMod.Utils.dll"

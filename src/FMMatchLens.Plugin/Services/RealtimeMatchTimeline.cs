@@ -15,7 +15,7 @@ internal sealed class RealtimeMatchTimeline
     private const long MetadataRefreshIntervalMilliseconds = 1_000;
     private readonly object _gate = new();
     private readonly MatchArchiveStore _archives;
-    private readonly GraphicsAssetIndex _graphicsAssets;
+    private readonly GameGraphicsResolver _graphicsAssets;
     private readonly List<RealtimeTickFrame[]> _chunks = new();
     private readonly MomentumEventReconciler _momentumEventReconciler = new(PluginLogger.Warning);
     private int _lastChunkCount;
@@ -36,7 +36,7 @@ internal sealed class RealtimeMatchTimeline
     private bool _pomRecorded;
     private long _lastMetadataRefreshTimestamp;
 
-    public RealtimeMatchTimeline(MatchArchiveStore archives, GraphicsAssetIndex graphicsAssets)
+    public RealtimeMatchTimeline(MatchArchiveStore archives, GameGraphicsResolver graphicsAssets)
     {
         _archives = archives;
         _graphicsAssets = graphicsAssets;
@@ -276,6 +276,8 @@ internal sealed class RealtimeMatchTimeline
         {
             if (_status == "live" && sourceMatchAddress == _sourceMatchAddress)
             {
+                // Include any completed lookups before sealing the archive.
+                RefreshAssetPaths();
                 _status = "ended";
                 if (_matchId is not null)
                 {
@@ -290,6 +292,7 @@ internal sealed class RealtimeMatchTimeline
         lock (_gate)
         {
             if (_status != "live" || sourceMatchAddress != _sourceMatchAddress) return;
+            RefreshAssetPaths();
             if (_matchId is not null) _archives.CloseIncomplete(_matchId);
             _sourceMatchAddress = default;
             _status = "interrupted";
@@ -559,11 +562,25 @@ internal sealed class RealtimeMatchTimeline
                    !player.DisplayName.StartsWith("Player ", StringComparison.Ordinal));
     }
 
+    // Resolution is queued when metadata arrives on the native hook. The Unity pump
+    // fills paths later and persists a metadata update, even while the match is paused.
+    public void RefreshAssetPaths()
+    {
+        lock (_gate)
+        {
+            if (_metadata is null || _status != "live") return;
+            var candidate = AddAssetPaths(_metadata);
+            if (MetadataContentEquals(_metadata, candidate)) return;
+            _metadata = candidate;
+            _archives.WriteMetadata(candidate);
+        }
+    }
+
     private RealtimeMatchMetadata AddAssetPaths(RealtimeMatchMetadata metadata)
     {
         var players = metadata.Players.Select(player => player with
         {
-            PortraitPath = player.PortraitPath ?? ResolveAssetPath("person", player.Uid, "portrait")
+            PortraitPath = ResolveAssetPath("person", player.Uid, "portrait") ?? player.PortraitPath
         }).ToArray();
         return metadata with
         {
@@ -573,7 +590,7 @@ internal sealed class RealtimeMatchTimeline
             Competition = metadata.Competition is { } competition
                 ? competition with
                 {
-                    LogoPath = competition.LogoPath ?? ResolveAssetPath("comp", competition.Uid, "logo")
+                    LogoPath = ResolveAssetPath("comp", competition.Uid, "logo") ?? competition.LogoPath
                 }
                 : null
         };
@@ -581,7 +598,7 @@ internal sealed class RealtimeMatchTimeline
 
     private RealtimeTeamMetadata AddTeamAssetPath(RealtimeTeamMetadata team) => team with
     {
-        LogoPath = team.LogoPath ?? ResolveAssetPath("club", team.ClubUid, "logo")
+        LogoPath = ResolveAssetPath("club", team.ClubUid, "logo") ?? team.LogoPath
     };
 
     private string? ResolveAssetPath(string entityType, uint? uid, string imageType) =>

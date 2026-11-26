@@ -9,9 +9,16 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <Deterministic>true</Deterministic>
+    <BepInExReferenceDirectory Condition="'$(BepInExReferenceDirectory)' == ''">lib</BepInExReferenceDirectory>
+    <GameInteropDirectory Condition="'$(GameInteropDirectory)' == ''">$(BepInExReferenceDirectory)/../interop</GameInteropDirectory>
   </PropertyGroup>
 
   <ItemGroup>
+    <Reference Include="$(BepInExReferenceDirectory)/Il2CppInterop.Runtime.dll" Private="false" />
+    <Reference Include="$(GameInteropDirectory)/Il2Cppmscorlib.dll" Private="false" Condition="Exists('$(GameInteropDirectory)/Il2Cppmscorlib.dll')" />
+    <Reference Include="$(GameInteropDirectory)/UnityEngine.CoreModule.dll" Private="false" Aliases="unity" Condition="Exists('$(GameInteropDirectory)/UnityEngine.CoreModule.dll')" />
+    <!-- CI uses a compile-time Unity contract; never ship it with the plugin. -->
+    <ProjectReference Include="../../.github/references/UnityEngine.CoreModule/UnityEngine.CoreModule.csproj" Private="false" Aliases="unity" Condition="!Exists('$(GameInteropDirectory)/UnityEngine.CoreModule.dll')" />
     <!--
       BepInEx/IL2CPP references are intentionally local file references.
       Copy the required DLLs from the target BepInEx installation into ./lib
