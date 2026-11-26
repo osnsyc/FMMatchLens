@@ -8,12 +8,6 @@
 ## debug: includes detailed hook and frame diagnostics
 Mode = release
 
-[Graphics]
-
-## Root directory of Football Manager graphics packs and config.xml files.
-## Replace <username> with your Windows account name.
-GraphicsPath = C:\Users\<username>\Documents\Sports Interactive\Football Manager 26\graphics
-
 [Archive]
 
 ## None or Fast (independent zlib-wrapped Deflate chunks).

@@ -20,7 +20,7 @@ internal sealed class LocalApiServer : IDisposable
 
     private readonly RealtimeMatchTimeline _timeline;
     private readonly MatchArchiveStore _archives;
-    private readonly GraphicsAssetIndex _graphicsAssets;
+    private readonly GameGraphicsResolver _graphicsAssets;
     private readonly WebSocketHub _webSockets = new();
     private HttpListener? _listener;
     private CancellationTokenSource? _cancellation;
@@ -32,7 +32,7 @@ internal sealed class LocalApiServer : IDisposable
     public LocalApiServer(
         RealtimeMatchTimeline timeline,
         MatchArchiveStore archives,
-        GraphicsAssetIndex graphicsAssets)
+        GameGraphicsResolver graphicsAssets)
     {
         _timeline = timeline;
         _archives = archives;
@@ -254,7 +254,8 @@ internal sealed class LocalApiServer : IDisposable
 
         var entityType = Uri.UnescapeDataString(segments[2]);
         var imageType = string.Join('/', segments.Skip(4).Select(Uri.UnescapeDataString));
-        if (!_graphicsAssets.TryResolve(entityType, uid, imageType, out var assetPath))
+        var assetPath = await _graphicsAssets.ResolveAsync(entityType, uid, imageType, cancellationToken).ConfigureAwait(false);
+        if (assetPath is null)
         {
             context.Response.StatusCode = 404;
             await WriteTextAsync(context.Response, "Asset not found", cancellationToken).ConfigureAwait(false);
@@ -279,7 +280,7 @@ internal sealed class LocalApiServer : IDisposable
             ".bmp" => "image/bmp",
             _ => "application/octet-stream"
         };
-        response.Headers["Cache-Control"] = "public, max-age=86400";
+        response.Headers["Cache-Control"] = "no-cache";
         response.ContentLength64 = stream.Length;
         await stream.CopyToAsync(response.OutputStream, cancellationToken).ConfigureAwait(false);
         response.Close();

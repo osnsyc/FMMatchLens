@@ -1,3 +1,4 @@
+extern alias unity;
 using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
@@ -14,7 +15,8 @@ public sealed class Plugin : BasePlugin
     private LocalApiServer? _apiServer;
     private GameMatchTickHook? _gameMatchTickHook;
     private MatchArchiveStore? _archiveStore;
-    private GraphicsAssetIndex? _graphicsAssets;
+    private GameGraphicsResolver? _graphicsAssets;
+    private GraphicsPump? _graphicsPump;
     private Timer? _hookRetryTimer;
     private int _isInstallingHook;
 
@@ -40,11 +42,17 @@ public sealed class Plugin : BasePlugin
         var archiveOptions = options.GetArchiveWriteOptions();
         _archiveStore = new MatchArchiveStore(Path.Combine(dataPath, "matches"), archiveOptions);
         PluginLogger.Info($"Archive writer compression: {archiveOptions.Compression}, chunk ticks: {archiveOptions.ChunkTicks}.");
-        _graphicsAssets = new GraphicsAssetIndex(
-            options.GraphicsPath.Value,
-            Path.Combine(dataPath, "graphics-index-cache.json"));
-        _graphicsAssets.Build();
+        _graphicsAssets = new GameGraphicsResolver(GameGraphicsLookup.Resolve);
         var realtimeTimeline = new RealtimeMatchTimeline(_archiveStore, _graphicsAssets);
+        long nextGraphicsRefresh = 0;
+        GraphicsPump.Step = () =>
+        {
+            _graphicsAssets.Pump();
+            if (Environment.TickCount64 < nextGraphicsRefresh) return;
+            nextGraphicsRefresh = Environment.TickCount64 + 500;
+            realtimeTimeline.RefreshAssetPaths();
+        };
+        _graphicsPump = AddComponent<GraphicsPump>();
 
         _apiServer = new LocalApiServer(realtimeTimeline, _archiveStore, _graphicsAssets);
 
@@ -69,6 +77,10 @@ public sealed class Plugin : BasePlugin
         _hookRetryTimer?.Dispose();
         _hookRetryTimer = null;
         _gameMatchTickHook?.Stop();
+        GraphicsPump.Step = null;
+        if (_graphicsPump is not null) unity::UnityEngine.Object.Destroy(_graphicsPump);
+        _graphicsPump = null;
+        _graphicsAssets?.Dispose();
         _apiServer?.Stop();
         _archiveStore?.Dispose();
         PluginLogger.Info($"{ProjectMetadata.Name} stopped.");
